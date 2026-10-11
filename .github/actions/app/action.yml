@@ -1,0 +1,51 @@
+# The app made ready and its Python suites run, on the machine the job is
+# on: what the app's checks (checks.yml) and the release's builds
+# (release.yml) both start with. The job checks out first, with the whole
+# history: the version comes from the release tag, and a shallow clone has
+# no tags and would build a 0.0.0.
+
+name: The app, built and tested
+description: Builds the interface, installs the app and runs every Python suite.
+
+inputs:
+  also:
+    description: More pip packages to install beside the app (the release's builds need pyinstaller)
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: "22"
+        cache: npm
+        cache-dependency-path: ui/package-lock.json
+
+    # The app serves its built interface, and --selftest checks it finds it.
+    - name: Build the interface
+      shell: bash
+      working-directory: ui
+      run: |
+        npm ci
+        npm run build
+
+    - uses: actions/setup-python@v7
+      with:
+        python-version: "3.12"
+        cache: pip
+
+    # `pip install -e .` rather than requirements.txt on purpose: it reads
+    # the same list through pyproject.toml, and it means every run also
+    # checks that the package metadata still installs.
+    - name: Install
+      shell: bash
+      env:
+        ALSO: ${{ inputs.also }}
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e . $ALSO
+
+    - name: Run every suite
+      shell: bash
+      run: python tests/run_all.py

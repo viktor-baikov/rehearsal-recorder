@@ -15,9 +15,9 @@ import { loadPieces } from "./pieces"
 // however many frames of the app it shows. Built here and not on Vercel, it
 // loads Vercel's scripts from /_vercel/insights/ and /_vercel/speed-insights/,
 // which a deployment serves once the project has each switched on and Vercel
-// has made the deployment through its own build step (see site.yml). A pull
-// request's preview loads the same page, and only reha.stream's visitors are
-// counted.
+// has made the deployment through its own build step (see
+// .github/actions/site). A pull request's preview loads the same page, and
+// only reha.stream's visitors are counted.
 inject({ beforeSend: onlyOnSite })
 injectSpeedInsights({ beforeSend: onlyOnSite })
 

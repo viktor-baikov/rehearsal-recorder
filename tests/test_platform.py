@@ -521,7 +521,7 @@ def main():
     ok("while the zips keep the names older copies ask for",
        set(updates.ASSETS.values())
        == {"RehearsalRecorder-macos.zip", "RehearsalRecorder-windows.zip"}
-       and "RehearsalRecorder-${{ matrix.label }}.zip" in release)
+       and all(name in release for name in updates.ASSETS.values()))
     ok("and the Mac asks for the microphone by the app's name",
        'f"{APP_NAME} records your band' in spec.split('"NSMicrophoneUsageDescription"')[1])
 
