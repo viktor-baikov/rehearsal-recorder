@@ -666,6 +666,23 @@ test("with no Trash on the machine it moved to the _deleted folder", async ({ pa
   await expect(said(page, "“Pałyn 2” moved to the _deleted folder.")).toHaveCount(1)
 })
 
+test("on Windows an Undo too late says the Recycle Bin", async ({ page }) => {
+  const overview = await tuesday(page, WINDOWS)
+  await deleteTake(overview, 2, "Pałyn 2")
+  const offer = said(page, "“Pałyn 2” went to the Recycle Bin.")
+  await expect(offer).toHaveCount(1)
+  // Python sent it on meanwhile and has not said so yet: its Undo finds it gone.
+  await page.evaluate(() => {
+    const held = (window as unknown as { __UNDOABLE__: Record<string, unknown> }).__UNDOABLE__
+    for (const token of Object.keys(held)) delete held[token]
+  })
+  await offer.getByRole("button", { name: "Undo" }).click()
+  const late = said(page, "It has already gone to the Recycle Bin.")
+  await expect(late).toHaveCount(1)
+  await expect(late.getByRole("button", { name: "Undo" })).toHaveCount(0)
+  await expect(row(overview, 2)).toHaveCount(0)
+})
+
 test("deleting a rehearsal asks nothing, and Undo lists it again", async ({ page }) => {
   const list = await (async () => {
     await openApp(page)

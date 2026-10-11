@@ -222,6 +222,20 @@ def trash_kind():
     return "folder"
 
 
+def trash_name(kind=None):
+    """
+    Where deleting goes, in this system's words: "the Trash", "the Recycle
+    Bin" on Windows, or "the _deleted folder" where neither can be reached.
+    The interface says the same (ui/src/lib/deletion.ts trashName), and
+    Python's own sentences about removals take it from here, so none of them
+    sends the person to look in a Trash their take is not in. `kind` is a
+    trash_kind() asked already, so that a sentence says one thing throughout.
+    """
+    if (kind or trash_kind()) == "folder":
+        return f"the {FALLBACK_TRASH} folder"
+    return "the Recycle Bin" if WINDOWS else "the Trash"
+
+
 def unique_path(path):
     """`name`, `name (2)`, `name (3)` — never overwrites what is there."""
     path = Path(path)

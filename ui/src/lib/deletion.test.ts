@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { croppedText, setDeletionKind, trashName, wentTo } from "@/lib/deletion"
+import { croppedText, goneText, setDeletionKind, trashName, wentTo } from "@/lib/deletion"
 import { setSystem } from "@/lib/platform"
 
 beforeEach(() => setDeletionKind({ kind: "system", folder: "_deleted" }))
@@ -54,6 +54,23 @@ describe("croppedText", () => {
     expect(croppedText("Palyn 3")).toBe(
       "“Palyn 3” is cropped. The uncut take moved to the _deleted folder.",
     )
+  })
+})
+
+describe("goneText", () => {
+  it("says an Undo too late found it gone to the Trash on a Mac", () => {
+    setSystem("mac")
+    expect(goneText()).toBe("It has already gone to the Trash.")
+  })
+
+  it("says the Recycle Bin on Windows", () => {
+    setSystem("windows")
+    expect(goneText()).toBe("It has already gone to the Recycle Bin.")
+  })
+
+  it("says the folder where there is no Trash", () => {
+    setDeletionKind({ kind: "folder", folder: "_deleted" })
+    expect(goneText()).toBe("It has already moved to the _deleted folder.")
   })
 })
 

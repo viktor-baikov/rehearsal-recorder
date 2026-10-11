@@ -9770,6 +9770,19 @@ def main():
     def numbers71(folder):
         return [t["take_number"] for t in u.get_rehearsal(str(folder))["takes"]]
 
+    import rehearsal_recorder.platform_support as ps71
+
+    def gone71():
+        """What an Undo too late answers: that it has gone, in the words of
+        the system (spec P2), which CI runs on all three of; with
+        send2trash installed each has its own bin."""
+        where = "the Recycle Bin" if ps71.WINDOWS else "the Trash"
+        return {"ok": False, "gone": True, "error": f"It has already gone to {where}."}
+
+    # What an Undo answers once what went is back where it was, by an Undo
+    # or by an end: not that it has gone to the Trash.
+    BACK71 = {"ok": False, "back": True, "error": "It is back where it was."}
+
     def listed71():
         return {r["folder"] for r in u.list_rehearsals()}
 
@@ -9824,11 +9837,11 @@ def main():
     ok("and only now is its copy taken out of the cloud", not mix1.exists() and mix1 in sent71)
 
     ok("n. Undo of a take that has gone to the Trash says so",
-       u.undo_trash(gone1.get("undo")) == {"ok": False, "error": "It has already gone to the Trash."})
+       u.undo_trash(gone1.get("undo")) == gone71())
     ok("as does Undo of a token there never was, or one that is no token at all",
-       u.undo_trash("0123abcd") == {"ok": False, "error": "It has already gone to the Trash."}
-       and u.undo_trash("../" + token2) == {"ok": False, "error": "It has already gone to the Trash."}
-       and u.undo_trash(None) == {"ok": False, "error": "It has already gone to the Trash."})
+       u.undo_trash("0123abcd") == gone71()
+       and u.undo_trash("../" + token2) == gone71()
+       and u.undo_trash(None) == gone71())
     ok("and its notice ending again has nothing left to do",
        u.end_trash(gone1.get("undo")) == {"ok": True} and entries71() == [token2])
 
@@ -10577,7 +10590,7 @@ def main():
     vanished_answer = q72.undo_trash(gone72)
     holding71.put_back = real_put_back72
     ok("m. an entry gone from under an Undo says, plainly, that it has gone to the Trash",
-       vanished_answer == {"ok": False, "error": "It has already gone to the Trash."})
+       vanished_answer == gone71())
     q72.undo_trash(gone72)
 
     print("  a record that cannot be read")
@@ -10654,6 +10667,8 @@ def main():
        ended_b.get("ok") is True and (bare72 / "f.wav").is_file()
        and (bare72 / "f.wav").read_bytes() == b"bare"
        and bare_token not in entries71(rec72) and sent71[mark72:] == [])
+    ok("and an Undo of it then says it is back where it was, not that it has gone",
+       s72.undo_trash(bare_token) == BACK71)
 
     print("  what stays, said at start")
     # A second record that cannot be read; a discard the Trash will refuse;
@@ -10864,8 +10879,8 @@ def main():
     ok("its entry is gone", token1 not in entries71(rec_c))
     ok("the player let go of the cropped take before its files moved",
        cr.player_state().get("open") is not True)
-    ok("and an Undo done once is done: another says so",
-       cr.undo_trash(token1) == {"ok": False, "error": "It has already gone to the Trash."})
+    ok("and an Undo done once is done: another says the take is back where it was",
+       cr.undo_trash(token1) == BACK71)
 
     print("  a take in the cloud")
     dir2 = take_c(cr, folder_c, 2, "Vesna")
@@ -11029,8 +11044,8 @@ def main():
        "entry for the next end",
        back8.get("ok") is True and bytes71(dir8) == uncut8 and length_c(cr, folder_c, 8) == 4.0
        and token8 in entries71(rec_c) and record_c(token8).get("undone") is True)
-    ok("and Undo again says it has gone",
-       cr.undo_trash(token8) == {"ok": False, "error": "It has already gone to the Trash."})
+    ok("and Undo again says the take is back where it was",
+       cr.undo_trash(token8) == BACK71)
     mark_c = len(sent71)
     ok("its end sends on only the cropped files",
        cr.end_trash(token8) == {"ok": True} and sent_c(mark_c) == [f"{dir8.name} (cropped)"]
@@ -11308,9 +11323,9 @@ def main():
        "still there, empty)",
        bytes71(dir14) == uncut14 and record_c(token14).get("undone") is True
        and held_c(token14, dir14).is_dir() and not any(held_c(token14, dir14).iterdir()))
-    ok("q. an Undo done, whatever is left of its entry, is done: another says so, and the marks "
-       "stay as they came back",
-       cr_k3.undo_trash(token14) == {"ok": False, "error": "It has already gone to the Trash."}
+    ok("q. an Undo done, whatever is left of its entry, is done: another says the take is back "
+       "where it was, and the marks stay as they came back",
+       cr_k3.undo_trash(token14) == BACK71
        and marks_c(cr_k3, folder_c, 14) == marks_before and length_c(cr_k3, folder_c, 14) == 4.0
        and bytes71(dir14) == uncut14)
     mark_c = len(sent71)
@@ -11961,6 +11976,82 @@ def main():
 
     e74.shutdown()
     apimod74.move_to_trash = real_trash71
+
+    print("\n[75] Undo names the system's bin")
+    # Spec P2: what the app says of the Trash is in the system's own words,
+    # "the Recycle Bin" on Windows, and "the _deleted folder" where there is
+    # no Trash to reach (platform_support.trash_kind). Python's own sentences
+    # say it too: an Undo too late, which also answers "gone" so that the
+    # interface can word it itself, the start problem for removals kept, and
+    # a Trash that refused without saying why. An Undo of what is back where
+    # it was, by an Undo or by an end, says that instead: it is not gone.
+    tmp75 = Path(tempfile.mkdtemp())
+    apimod75, g75 = fresh_api(tmp75)
+    rec75 = g75.recordings_dir
+    apimod75.move_to_trash = trash71
+    sat75 = past71(g75, "Saturday", "2026-10-03T19:00:00", ["Polyn", "Vesna", "Ogon"])
+    late75 = g75.delete_take(str(sat75), 1).get("undo")
+    g75.end_trash(late75)
+    held75 = rec75 / "Loose" / "f"
+    held75.mkdir(parents=True)
+    (held75 / "f.wav").write_bytes(b"loose")
+    refused75 = holding71.hold(rec75, {"kind": "draft", "reason": "discard", "rows": "none"},
+                               [held75])
+    kept75 = [{"folder": "/rec/_deleting/0123abcd", "error": "busy", "library": False}]
+    was75 = ps71._send2trash, ps71._system_trash_dir, ps71.WINDOWS
+
+    def said75():
+        """(the Undo too late, the start problem, a refusal that says nothing)
+        as Python words them now."""
+        return (g75.undo_trash(late75), apimod75._removals_kept(kept75),
+                holding71.send_on(rec75, refused75, lambda path, root: {"ok": False}))
+
+    try:
+        ps71._send2trash, ps71._system_trash_dir = (lambda: None), (lambda: None)
+        late, start, refused = said75()
+        ok("a. with no Trash on the machine an Undo too late says it moved to the _deleted "
+           "folder, and answers that it is gone",
+           late == {"ok": False, "gone": True,
+                    "error": "It has already moved to the _deleted folder."})
+        ok("and so do the start problem and a refusal that gives no reason",
+           "could not be put back or moved to the _deleted folder, so it is kept" in start
+           and refused == {"ok": False, "error": "Could not move it to the _deleted folder"}
+           and (rec75 / "_deleting" / refused75 / "0" / "f" / "f.wav").is_file())
+        ps71._send2trash = lambda: (lambda path: None)
+        ps71.WINDOWS = True
+        late, start, refused = said75()
+        ok("b. on Windows they say the Recycle Bin",
+           late == {"ok": False, "gone": True, "error": "It has already gone to the Recycle Bin."}
+           and "could not be put back or moved to the Recycle Bin, so it is kept" in start
+           and refused == {"ok": False, "error": "Could not move it to the Recycle Bin"})
+        ps71.WINDOWS = False
+        late, start, refused = said75()
+        ok("c. and on a Mac or Linux, the Trash",
+           late == {"ok": False, "gone": True, "error": "It has already gone to the Trash."}
+           and "could not be put back or moved to the Trash, so it is kept" in start
+           and refused == {"ok": False, "error": "Could not move it to the Trash"})
+    finally:
+        ps71._send2trash, ps71._system_trash_dir, ps71.WINDOWS = was75
+
+    undone75 = g75.delete_take(str(sat75), 2).get("undo")
+    first75 = g75.undo_trash(undone75)
+    ok("d. an Undo done, asked again, says the take is back where it was",
+       first75.get("ok") is True and g75.undo_trash(undone75) == BACK71
+       and g75._lib.take(sat75, 2) is not None)
+    back75 = rec75 / "Loose" / "g"
+    back75.mkdir(parents=True)
+    (back75 / "g.wav").write_bytes(b"back")
+    put75 = holding71.hold(rec75, {"kind": "rehearsal", "reason": "delete", "rows": "kept",
+                                   "rehearsal": None}, [back75])
+    ended75 = g75.end_trash(put75)
+    ok("e. so does one an end put back, its rows never dropped",
+       ended75 == {"ok": True} and (back75 / "g.wav").read_bytes() == b"back"
+       and put75 not in entries71(rec75) and g75.undo_trash(put75) == BACK71)
+    ok("and one that went on is still gone, a token there never was too",
+       g75.undo_trash(late75) == gone71() and g75.undo_trash("89abcdef") == gone71())
+    g75.end_trash(refused75)
+    g75.shutdown()
+    apimod75.move_to_trash = real_trash71
 
     print("\n" + "=" * 60)
     if problems:

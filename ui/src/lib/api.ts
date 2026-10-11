@@ -642,6 +642,11 @@ export type UndoResult = {
   /** A crop's Undo that went part way and could not be taken back either:
    *  ending it (end_trash) finishes it. */
   finishing?: boolean
+  /** Too late: it has gone on to the Trash, or the _deleted folder. The
+   *  interface words it (deletion.ts goneText); `error` is Python's. */
+  gone?: boolean
+  /** It is back where it was already: its Undo, or an end, put it back. */
+  back?: boolean
 }
 
 export type DiskEstimate = {

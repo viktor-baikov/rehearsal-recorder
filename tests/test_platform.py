@@ -60,6 +60,8 @@ def main():
     try:
         ok("with no recycle bin it reports the fallback",
            ps.trash_kind() == "folder")
+        ok("and calls it by the folder's name, on Windows too",
+           ps.trash_name() == "the _deleted folder")
         res = ps.move_to_trash(recordings / "Jam", recordings)
         ok("the folder is gone from where it was",
            res["ok"] and not (recordings / "Jam").exists())
@@ -85,6 +87,14 @@ def main():
     ps._system_trash_dir = lambda: fake_trash
     try:
         ok("it reports the system bin", ps.trash_kind() == "system")
+        was_windows = ps.WINDOWS
+        try:
+            ps.WINDOWS = False
+            ok("which a Mac or Linux calls the Trash", ps.trash_name() == "the Trash")
+            ps.WINDOWS = True
+            ok("and Windows the Recycle Bin", ps.trash_name() == "the Recycle Bin")
+        finally:
+            ps.WINDOWS = was_windows
         doomed = recordings / "Later"
         doomed.mkdir()
         res = ps.move_to_trash(doomed, recordings)

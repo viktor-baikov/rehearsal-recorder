@@ -347,6 +347,8 @@ window.__UNDOABLE__ = {};
 // What each waiting removal took, {folder, takes?, crop?}, for the ends
 // Python makes on its own (api.py _ends).
 const heldItems = {};
+// The tokens whose Undo put them back: asked again, they are back already.
+const backAgain = new Set();
 let removals = 0;
 function hold(putBack, item) {
   const token = `undo-${++removals}`;
@@ -1620,11 +1622,18 @@ window.__MAKE_API__ = () => ({
     }, {folder, takes:[...numbers]}) : null};
   }),
   // Python's answers to the notice: Undo puts the removal back; its end
-  // sends it on to the Trash. A token no longer waiting is gone already.
+  // sends it on to the Trash. A token no longer waiting is gone already,
+  // or back where it was when its Undo put it back (api.py _too_late): each
+  // with its flag, which the interface words in the system's words.
   undo_trash: track('undo_trash', async (token) => {
     const putBack = window.__UNDOABLE__[token];
-    if (!putBack) return {ok:false, error:'It has already gone to the Trash.'};
+    if (!putBack) {
+      return backAgain.has(token)
+        ? {ok:false, back:true, error:'It is back where it was.'}
+        : {ok:false, gone:true, error:'It has already gone to the Trash.'};
+    }
     forgetHeld(token);
+    backAgain.add(token);
     return {ok:true, ...putBack()};
   }),
   end_trash: track('end_trash', async (token) => {

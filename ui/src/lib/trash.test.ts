@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   ACTION_MS,
@@ -12,7 +11,6 @@ import {
 import { setDeletionKind } from "@/lib/deletion"
 import { setSystem } from "@/lib/platform"
 import {
-  GONE_TO_TRASH,
   endEveryOffer,
   draftMovedTo,
   endedByPython,
@@ -141,15 +139,57 @@ describe("offerUndo", () => {
     expect(bridge.end_trash).toHaveBeenCalledWith("t1")
   })
 
-  it("says an Undo too late as it is, with nothing left to offer or end", async () => {
-    bridge.undo_trash.mockResolvedValue({ ok: false, error: GONE_TO_TRASH })
+  // Python answers "gone" for an Undo too late, and the words are the
+  // interface's: the system's own name for the Trash (spec P2).
+  const tooLate = async (answer: object) => {
+    bridge.undo_trash.mockResolvedValue(answer)
     offerUndo({ text: "gone", token: "t1", onUndone: vi.fn() })
     runAction(notice("t1")!.id)
     await settle()
-    const n = notice("t1")!
+    return notice("t1")!
+  }
+
+  it("says an Undo too late as it is, with nothing left to offer or end", async () => {
+    const n = await tooLate({ ok: false, gone: true, error: "It has already gone to the Trash." })
     expect(n.kind).toBe("error")
     expect(n.text).toBe("It has already gone to the Trash.")
     expect(n.action).toBeUndefined()
+    dismiss("undo:t1")
+    await settle()
+    expect(bridge.end_trash).not.toHaveBeenCalled()
+  })
+
+  it("says the Recycle Bin for an Undo too late on Windows, whatever Python's words", async () => {
+    setSystem("windows")
+    const n = await tooLate({ ok: false, gone: true, error: "It has already gone to the Trash." })
+    expect(n.text).toBe("It has already gone to the Recycle Bin.")
+    expect(n.action).toBeUndefined()
+  })
+
+  it("says the _deleted folder for an Undo too late where there is no Trash", async () => {
+    setSystem("windows")
+    setDeletionKind({ kind: "folder", folder: "_deleted" })
+    const n = await tooLate({ ok: false, gone: true, error: "anything" })
+    expect(n.text).toBe("It has already moved to the _deleted folder.")
+    expect(n.action).toBeUndefined()
+  })
+
+  it("goes by Python's flag, not its words: a refusal that only reads like one is offered again", async () => {
+    const n = await tooLate({ ok: false, error: "It has already gone to the Trash." })
+    expect(n.action?.label).toBe("Undo")
+  })
+
+  it("says what is back where it was is back, and offers and ends nothing", async () => {
+    const onUndone = vi.fn()
+    bridge.undo_trash.mockResolvedValue({ ok: false, back: true, error: "It is back where it was." })
+    offerUndo({ text: "gone", token: "t1", onUndone })
+    runAction(notice("t1")!.id)
+    await settle()
+    const n = notice("t1")!
+    expect(n.kind).toBe("done")
+    expect(n.text).toBe("It is back where it was.")
+    expect(n.action).toBeUndefined()
+    expect(onUndone).not.toHaveBeenCalled()
     dismiss("undo:t1")
     await settle()
     expect(bridge.end_trash).not.toHaveBeenCalled()
@@ -197,14 +237,6 @@ describe("offerUndo", () => {
     runAction(notice("t1")!.id)
     await settle()
     expect(log).toHaveBeenCalledTimes(1)
-  })
-
-  it("knows the gone text as Python says it", () => {
-    const holding = readFileSync(
-      new URL("../../../src/rehearsal_recorder/holding.py", import.meta.url),
-      "utf-8"
-    )
-    expect(holding).toContain(`GONE_TO_TRASH = "${GONE_TO_TRASH}"`)
   })
 })
 

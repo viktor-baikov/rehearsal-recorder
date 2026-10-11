@@ -51,6 +51,15 @@ export function wentTo(subject: string): string {
   return `${subject} ${wentToEnd()}`
 }
 
+/** What an Undo too late says, Python having answered "gone": "It has
+ *  already gone to the Trash." / "… the Recycle Bin." / "It has already
+ *  moved to the _deleted folder." */
+export function goneText(): string {
+  return where?.kind === "folder"
+    ? `It has already moved to the ${where.folder} folder.`
+    : `It has already gone to ${words().trash}.`
+}
+
 /** The notice for a take that was cropped: the take as it was is what went. */
 export function croppedText(name: string): string {
   return `“${name}” is cropped. The uncut take ${wentToEnd()}`

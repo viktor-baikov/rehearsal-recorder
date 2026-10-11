@@ -112,6 +112,7 @@ from rehearsal_recorder.platform_support import (
     reveal_in_file_manager,
     safe_filename,
     trash_kind,
+    trash_name,
 )
 
 CONFIG_PATH = Path.home() / ".rehearsal-recorder" / "config.json"
@@ -245,12 +246,13 @@ def _removals_kept(kept):
     next start, or, for one whose record cannot be read, nothing the app can
     ever do, since it cannot tell where it came from.
     """
+    where = trash_name()
     if len(kept) == 1:
         said = ["Something that was being removed could not be put back or moved "
-                "to the Trash, so it is kept as it is."]
+                f"to {where}, so it is kept as it is."]
     else:
         said = [f"{len(kept)} things that were being removed could not be put back "
-                "or moved to the Trash, so they are kept as they are."]
+                f"or moved to {where}, so they are kept as they are."]
     for k in kept:
         if k["error"] == holding.UNREADABLE:
             said.append(f"“{k['folder']}”: its record cannot be read, so the app cannot "
@@ -356,6 +358,11 @@ FINISHING = "It is being put back; it will be finished when the notice goes."
 # What an Undo, delete or discard of an item answers while it is being
 # cropped (Api._start_crop).
 CROPPING = "Wait until the crop is done."
+
+# What an Undo answers, with "back", once what went is back where it was:
+# by its Undo, or by an end that put it back (Api._put_back). Not that it
+# has gone to the Trash, which an Undo too late answers (holding.gone_text).
+BACK = "It is back where it was."
 
 
 def _take_dir_name(take_number, name):
@@ -661,6 +668,10 @@ class Api:
         self._files_lock = threading.RLock()
         # The takes and drafts being cropped (_start_crop), by identity.
         self._cropping = []
+        # The removals whose item is back where it was, by token: an Undo,
+        # or an end, put it back (_put_back). Its Undo asked again says so
+        # (_too_late), rather than that it has gone to the Trash.
+        self._back = set()
         # Takes whose folder or cloud copy no longer carries their name are
         # renamed in the background — see names_pass.py.
         self._names_pass = NamesPass(
@@ -4268,8 +4279,26 @@ class Api:
             return {"ok": True}
         except (OSError, ValueError) as e:
             return {"ok": False, "error": f"Could not put it back: {e}"}
+        self._put_back(token)
         holding.drop(self._recordings_dir, token)
         return {"ok": True}
+
+    def _put_back(self, token):
+        """What a removal took is back where it was, by its Undo or by an
+        end: its Undo, asked again, says so (_too_late)."""
+        self._back.add(token)
+
+    def _too_late(self, token):
+        """What an Undo answers when its entry is not waiting any more:
+        {"ok": False, "back": True, "error": BACK} when an Undo or an end
+        put what went back where it was (_put_back), and otherwise {"ok":
+        False, "gone": True, "error"}, that it has gone on to the Trash, in
+        the system's words (holding.gone_text). The interface words each
+        itself, from "back" or "gone"."""
+        # A token comes from the interface, and may be anything at all.
+        if isinstance(token, str) and token in self._back:
+            return {"ok": False, "back": True, "error": BACK}
+        return {"ok": False, "gone": True, "error": holding.gone_text()}
 
     def _kept(self, token, error):
         """Says, in the log a windowed build keeps, that an entry stays in the
@@ -4489,9 +4518,11 @@ class Api:
         with "folder" and "take_numbers", "rehearsal" with "folder", "draft"
         with "temp_dir" and "folder", "crop" (the take as it was before its
         crop, _uncrop) with "folder" and "take_numbers" or, for a draft,
-        "temp_dir". {"ok": False, "error"} when it cannot come back: it has
-        gone on to the Trash already, something else is in its place, its
-        number is taken, or its rehearsal is gone. Those are asked before
+        "temp_dir". {"ok": False, "error"} when it cannot come back:
+        something else is in its place, its number is taken, or its
+        rehearsal is gone; with "gone" when it has gone on to the Trash
+        already, or "back" when it is back where it was (_too_late), which
+        the interface words itself. Those are asked before
         anything moves, and the entry is left as it was. Should the library
         still refuse once the files are back, the files stay back, as they
         are the person's, and the entry is gone. A crop's Undo that fails on
@@ -4502,14 +4533,14 @@ class Api:
         with self._files_lock:
             data = holding.read(self._recordings_dir, token)
             if data is None:
-                return {"ok": False, "error": holding.GONE_TO_TRASH}
+                return self._too_late(token)
             record = data.get("record") or {}
             kind = record.get("kind")
             if kind == "crop":
                 try:
                     return self._uncrop(token, data)
                 except holding.Gone:
-                    return {"ok": False, "error": holding.GONE_TO_TRASH}
+                    return self._too_late(token)
                 except holding.Stuck as e:
                     # Part of it moved and would not all go back: the record
                     # says an Undo is under way, and the next end finishes it.
@@ -4529,14 +4560,15 @@ class Api:
                 holding.check_places(self._recordings_dir, token, places)
                 return self._finish_undo(token, data, places)
             except holding.Gone:
-                return {"ok": False, "error": holding.GONE_TO_TRASH}
+                return self._too_late(token)
             except FileExistsError as e:
                 return {"ok": False, "error": str(e)}
             except (OSError, ValueError) as e:
                 return {"ok": False, "error": f"Could not put it back: {e}"}
 
     def _undo_refused(self, record, items):
-        """Why an Undo cannot be done, asked before anything moves, or None."""
+        """Why an Undo cannot be done, asked before anything moves, or None.
+        Raises holding.Gone when nothing of it is waiting."""
         kind = record.get("kind")
         if kind in ("take", "takes"):
             # Only files need the folder: a take whose files were not on disk
@@ -4550,7 +4582,7 @@ class Api:
                     return f"Take {n} is taken by another take now."
             return None
         if not items:
-            return holding.GONE_TO_TRASH
+            raise holding.Gone()  # nothing of it is waiting: it has gone on
         if kind == "rehearsal":
             place = self._recordings_dir / Path(*PurePosixPath(items[0]["from"]).parts)
             if record.get("rehearsal") is not None and self._lib.has(place):
@@ -4616,6 +4648,7 @@ class Api:
             if not resuming:
                 holding.update(rec, token, record)  # all of it still in the entry
             raise
+        self._put_back(token)
         kind = record.get("kind")
         error = None
         restore = not resuming or self._rows_there(record) is False
@@ -4716,14 +4749,17 @@ class Api:
         rec = self._recordings_dir
         record = dict(data.get("record") or {})
         if record.get("undone"):
-            return {"ok": False, "error": holding.GONE_TO_TRASH}
+            # Done already: the take is back as it was, and only the
+            # cropped files wait in the entry.
+            self._put_back(token)
+            return self._too_late(token)
         if self._being_cropped(_identities(record)):
             # Its places are empty for a moment while the crop moves files.
             return {"ok": False, "error": CROPPING}
         resuming = record.get("rows") == "restoring"
         inside = holding.held(rec, token, 0)
         if inside is None or (not resuming and not inside.is_dir()):
-            return {"ok": False, "error": holding.GONE_TO_TRASH}
+            return self._too_late(token)
         where = self._uncut_places(record, data.get("items") or [])
         if "error" in where:
             return {"ok": False, "error": where["error"]}
@@ -4857,6 +4893,7 @@ class Api:
 
         # Done: the record says so, with the cloud step still to do, so that
         # an end finds it there should the app die before it is done.
+        self._put_back(token)
         done = {**waiting, "undone": True}
         if take is not None:
             send = record.get("send") or {}

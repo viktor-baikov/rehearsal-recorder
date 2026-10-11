@@ -39,6 +39,8 @@ import secrets
 import time
 from pathlib import Path
 
+from rehearsal_recorder import platform_support
+
 HOLDING_DIR = "_deleting"
 RECORD_FILE = "record.json"
 # An entry left waiting this long has outlived any notice: the window was
@@ -49,9 +51,18 @@ STALE_SEC = 120
 # because a take's path inside it still has to fit under Windows' limit.
 _TOKEN = re.compile(r"[0-9a-f]{8}")
 
-# What Undo says once the item it was for has gone on: to the Trash, or the
-# _deleted folder where there is none, by the end of its notice or another.
-GONE_TO_TRASH = "It has already gone to the Trash."
+
+def gone_text():
+    """
+    What Undo says once the item it was for has gone on, by the end of its
+    notice or another: to the Trash, the Recycle Bin on Windows, or the
+    _deleted folder where there is neither (platform_support.trash_name).
+    The interface words it itself from the answer's "gone" (Api.undo_trash);
+    this is the answer's "error", for whatever reads that.
+    """
+    kind = platform_support.trash_kind()
+    went = "moved" if kind == "folder" else "gone"
+    return f"It has already {went} to {platform_support.trash_name(kind)}."
 
 
 # Why an entry whose record cannot be read is kept as it is.
@@ -59,10 +70,11 @@ UNREADABLE = "its record cannot be read"
 
 
 class Gone(FileNotFoundError):
-    """The entry is not there any more: it has gone on (GONE_TO_TRASH)."""
+    """The entry is not there any more: it has gone on (gone_text), or an
+    Undo or an end has put it back."""
 
     def __init__(self):
-        super().__init__(GONE_TO_TRASH)
+        super().__init__("It is not waiting for its Undo any more")
 
 
 class Stuck(OSError):
@@ -535,7 +547,8 @@ def send_on(recordings: Path, token: str, trash) -> dict:
             except Exception as e:  # noqa: BLE001 - the entry waits for the next start
                 res = {"ok": False, "error": str(e)}
             if not res.get("ok"):
-                return {"ok": False, "error": res.get("error") or "Could not move it to the Trash"}
+                return {"ok": False, "error": res.get("error")
+                        or f"Could not move it to {platform_support.trash_name()}"}
     if not _remove(entry):
         return {"ok": False, "error": f"Something is still in {entry}"}
     return {"ok": True}

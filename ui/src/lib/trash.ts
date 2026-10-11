@@ -1,6 +1,6 @@
 import { api, type PendingTake, type UndoResult } from "@/lib/api"
 import { reportBridgeError } from "@/lib/bridgeErrors"
-import { croppedText, trashName } from "@/lib/deletion"
+import { croppedText, goneText, trashName } from "@/lib/deletion"
 import { dismiss, getNotices, notify } from "@/lib/notices"
 
 /**
@@ -15,10 +15,9 @@ import { dismiss, getNotices, notify } from "@/lib/notices"
  * it on to the Trash. Nothing is destroyed either way.
  */
 
-/** What an Undo answers when what went has gone on to the Trash already,
- *  as Python says it (holding.py, GONE_TO_TRASH): nothing is left to take
- *  back, so nothing is offered again. */
-export const GONE_TO_TRASH = "It has already gone to the Trash."
+/** What an Undo says that found what went back where it was already: its
+ *  Undo, or an end, put it back (api.py BACK). */
+const BACK_TEXT = "It is back where it was."
 
 /**
  * Says what went, under a key of its own (`undo:{token}`), with Undo.
@@ -27,8 +26,10 @@ export const GONE_TO_TRASH = "It has already gone to the Trash."
  * puts the screen back as it was. An Undo refused for now (a crop of the
  * take still running, its place or number taken since) is offered again with
  * why, as an error, and its removal still ends when that notice goes. One
- * too late is said, with nothing to offer. One a crop's Undo could not
- * finish (`finishing`) is finished by ending it at once.
+ * too late (`gone`) is said in the system's words for the Trash, and one
+ * whose item is back where it was already (`back`) says so: nothing is left
+ * to offer or end. One a crop's Undo could not finish (`finishing`) is
+ * finished by ending it at once.
  *
  * Returns the offer's end: what the screen calls when the moment for Undo
  * has passed (another take started, the take saved). The notice goes, and
@@ -66,8 +67,13 @@ export function offerUndo({
       else notify({ key, kind: "error", text: f.error ?? "Could not put it back" })
       return
     }
-    if (r.error === GONE_TO_TRASH) {
-      notify({ key, kind: "error", text: r.error })
+    // Python's flags, not its words: the words are the system's (spec P2).
+    if (r.gone) {
+      notify({ key, kind: "error", text: goneText() })
+      return
+    }
+    if (r.back) {
+      notify({ key, kind: "done", text: BACK_TEXT })
       return
     }
     offer("error", r.error ?? "Could not put it back")
