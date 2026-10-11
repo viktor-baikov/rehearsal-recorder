@@ -65,8 +65,19 @@ export function WholeTip({
   // Focus is inside the child, and did not come with a press.
   const [focused, setFocused] = useState(false)
   const pressed = useRef(false)
+  // Radix says "open" or "closed" only when that differs from the `open` it was
+  // given, and while the name fits it is given false. So a hover over a name
+  // that fits would be remembered with its leave never heard, and the tip
+  // would open on its own when the name was next cut; and a tip open on a
+  // cut name that then fits would stay "open" past the leave. Radix's flag is
+  // kept only while the name is cut, and let go when it stops being.
+  const [wasCut, setWasCut] = useState(cut)
+  if (wasCut !== cut) {
+    setWasCut(cut)
+    if (!cut) setOpen(false)
+  }
   return (
-    <Tooltip open={cut && (open || focused)} onOpenChange={setOpen}>
+    <Tooltip open={cut && (open || focused)} onOpenChange={(next) => setOpen(cut && next)}>
       <TooltipTrigger
         asChild
         onPointerDown={() => {
@@ -142,7 +153,9 @@ export function Figures({ parts, className }: { parts: Part[]; className?: strin
         ref={box}
         data-figures
         data-dropped={dropped || undefined}
-        className={cn("relative block min-w-0 flex-[1_1_0%] truncate", className)}
+        // min-h-lh: a line tall even when every figure has dropped, so the
+        // box can still be hovered and shows them all.
+        className={cn("relative block min-h-lh min-w-0 flex-[1_1_0%] truncate", className)}
       >
         {/* Read whole, whatever shows: the tip is for the pointer only. */}
         <span className="sr-only">{all}</span>

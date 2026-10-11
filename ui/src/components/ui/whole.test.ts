@@ -24,6 +24,10 @@ describe("Figures", () => {
     expect(out).toContain("flex-[1_1_0%]")
     expect(out).toContain("truncate")
   })
+
+  it("keeps one line of height even when every figure has dropped, so it can still be hovered", () => {
+    expect(out).toContain("min-h-lh")
+  })
 })
 
 describe("Whole", () => {

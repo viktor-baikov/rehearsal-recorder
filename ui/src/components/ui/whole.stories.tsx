@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { Button } from "./button"
 import { Figures, Whole, WholeTip, useCut } from "./whole"
@@ -93,6 +93,32 @@ export const FocusScrollsThePanel: Story = {
       )}
     </div>
   ),
+}
+
+const MEDIUM = "Kalychanka (the long one, with the bridge in G)"
+
+function Resizable() {
+  const [narrow, setNarrow] = useState(false)
+  return (
+    <div className="flex flex-col items-start gap-4">
+      <Button variant="outline" size="row" onClick={() => setNarrow((n) => !n)}>
+        Resize
+      </Button>
+      <div className={narrow ? "w-56" : "w-[26rem]"}>
+        <NameButton text={MEDIUM} />
+      </div>
+    </div>
+  )
+}
+
+/** A name that fits and then is cut (or the other way) under a pointer that
+ *  has not moved asks for nothing: no tip opens by itself. Tab to Resize, put
+ *  the pointer on the name while it fits and press Space: the name is cut and
+ *  its tip stays shut until the pointer leaves and comes back. The other way:
+ *  hover the cut name until its tip shows, press Space (it fits, the tip
+ *  goes), move the pointer away and press Space again: still nothing. */
+export const ResizedUnderThePointer: Story = {
+  render: () => <Resizable />,
 }
 
 const p = (text: string, keep: number, join?: string): Part => ({ text, keep, join })
