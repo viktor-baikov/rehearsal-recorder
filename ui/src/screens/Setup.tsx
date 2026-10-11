@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import {
   Activity,
+  AudioLines,
   Check,
   HardDrive,
   History,
+  PanelLeftOpen,
   Plus,
   Radio,
   RefreshCw,
@@ -24,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 import { Figures, Whole } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
 import { IconPicker } from "@/components/IconPicker"
@@ -42,6 +45,7 @@ import { byFiles, useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { cn } from "@/lib/utils"
 import { dismiss, notify } from "@/lib/notices"
 import { useUpdate } from "@/lib/update"
+import { useWide } from "@/lib/wide"
 import { aboutDuration, inputsLabel, notConnected } from "@/lib/format"
 import { QUIET_THRESHOLD, fallBack, meterReach } from "@/lib/levels"
 import { modeOf, notesProblem, recordsAudio, recordsNotes } from "@/lib/midi"
@@ -171,6 +175,16 @@ export function Setup({
   // two takes 2 are told apart by their files.
   const [lastTime, setLastTime] = useState<LastTimeData | null>(null)
   const { cued, playInOverview, uncue, player } = useTakeStripPlayer(byFiles)
+  // In a window too narrow for it beside the setup (lib/wide), Last time is
+  // a panel from the left, opened by its button in the header (Q4). The
+  // player is the screen's, not the panel's: a take plays on as it closes.
+  const wide = useWide()
+  const [pastOpen, setPastOpen] = useState(false)
+  const pastButton = useRef<HTMLButtonElement>(null)
+  // Widened, Last time is beside the setup again, so an open panel closes,
+  // and stays shut when the window narrows once more. Set as this renders,
+  // not after: React renders again at once, before anything is drawn.
+  if (wide && pastOpen) setPastOpen(false)
 
   // The interface that was chosen and is not plugged in. Not the same as
   // none chosen: the desk is often switched on after the laptop.
@@ -1053,6 +1067,27 @@ export function Setup({
     </div>
   )
 
+  // Last time: beside the setup in a wide window, in the panel otherwise.
+  const pastPart = lastTime?.last ? (
+    <LastTime
+      data={lastTime}
+      playback={
+        cued && {
+          take: cued,
+          playing: player.playing,
+          loading: player.loading,
+          position: player.position,
+        }
+      }
+      problem={cued ? player.loadError : null}
+      onPlay={playLastTime}
+      onOpen={onOpenRehearsal}
+      onAll={onOpenHistory}
+      onOpenSong={onOpenSong}
+    />
+  ) : null
+  const pastPlaying = cued !== null && player.playing
+
   return (
     <Shell
       air
@@ -1067,6 +1102,23 @@ export function Setup({
       }
       headerAction={
         <div className="flex items-center gap-2">
+          {!wide && pastPart && (
+            <Button
+              ref={pastButton}
+              variant="outline"
+              onClick={() => setPastOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={pastOpen}
+              data-playing={pastPlaying || undefined}
+            >
+              {/* While a take from it plays, the icon says so in the accent
+                  (F2), in the same place: the button keeps its width and
+                  nothing in the header moves (B4). */}
+              {pastPlaying ? <AudioLines className="text-primary" /> : <PanelLeftOpen />}
+              Last time
+              {pastPlaying && <span className="sr-only">, playing</span>}
+            </Button>
+          )}
           <Button variant="outline" onClick={onOpenHistory}>
             <History />
             History
@@ -1084,10 +1136,10 @@ export function Setup({
           </Button>
         </div>
       }
-      // With last time beside it the screen is two columns, each scrolling
-      // on its own; each part pads itself, by the same 32 px as the header
-      // and the footer.
-      className="p-0 min-[1100px]:flex min-[1100px]:overflow-hidden"
+      // In a wide window the screen is two columns, each scrolling on its
+      // own; each part pads itself, by the same 32 px as the header and the
+      // footer.
+      className={cn("p-0", wide && "flex overflow-hidden")}
       footer={
         <div className="animate-rise" style={rise(2)}>
           <FooterRow error={error} rule left={nameField}>
@@ -1128,10 +1180,10 @@ export function Setup({
     >
       {/* Last time beside the setup when the window is wide enough for both
           — on the left, so that the setup is over Start rehearsal — and
-          under it when it is not. */}
+          behind its button in the header when it is not. */}
       <div
         data-part="setup"
-        className="px-8 py-8 min-[1100px]:min-w-0 min-[1100px]:flex-1 min-[1100px]:overflow-y-auto"
+        className={cn("px-8 py-8", wide && "min-w-0 flex-1 overflow-y-auto")}
       >
         <div className="mx-auto flex max-w-3xl min-w-0 flex-col gap-12">
           {/* The tracks as one group, headed by what they record with, a
@@ -1152,31 +1204,34 @@ export function Setup({
       {/* The past set back from the rehearsal about to start: a panel of its
           own, darker, down the side, as history's list is. With both on the
           same background the two columns ran into one. */}
-      {lastTime?.last && (
+      {wide && pastPart && (
         <div
           data-part="past"
-          className="border-t bg-panel px-8 py-8 min-[1100px]:order-first min-[1100px]:w-[28rem] min-[1100px]:shrink-0 min-[1100px]:overflow-y-auto min-[1100px]:border-t-0 min-[1100px]:border-r"
+          className="order-first w-[28rem] shrink-0 overflow-y-auto border-r bg-panel px-8 py-8"
         >
-          {/* Under the tracks, as wide as they are. */}
-          <div className="mx-auto max-w-3xl animate-rise" style={rise(0)}>
-            <LastTime
-              data={lastTime}
-              playback={
-                cued && {
-                  take: cued,
-                  playing: player.playing,
-                  loading: player.loading,
-                  position: player.position,
-                }
-              }
-              problem={cued ? player.loadError : null}
-              onPlay={playLastTime}
-              onOpen={onOpenRehearsal}
-              onAll={onOpenHistory}
-              onOpenSong={onOpenSong}
-            />
+          <div className="animate-rise" style={rise(0)}>
+            {pastPart}
           </div>
         </div>
+      )}
+      {!wide && pastPart && (
+        <Sheet open={pastOpen} onOpenChange={setPastOpen}>
+          <SheetContent
+            side="left"
+            // Its button is in the header, not the Sheet's own trigger, so
+            // focus is sent back to it here.
+            onCloseAutoFocus={(e) => {
+              e.preventDefault()
+              pastButton.current?.focus()
+            }}
+          >
+            <SheetTitle className="sr-only">Last time</SheetTitle>
+            <SheetDescription className="sr-only">
+              The last rehearsal, the songs not played in it, and earlier ones.
+            </SheetDescription>
+            <div className="min-h-0 flex-1 overflow-y-auto px-8 pt-1 pb-8">{pastPart}</div>
+          </SheetContent>
+        </Sheet>
       )}
     </Shell>
   )

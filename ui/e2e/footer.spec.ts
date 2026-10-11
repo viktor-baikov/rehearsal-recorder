@@ -107,11 +107,12 @@ test.describe("the setup screen with a rehearsal before", () => {
     expect(setup.x + setup.width).toBeGreaterThan(start.x)
   })
 
-  test("narrow, the new rehearsal comes first and Last time under it", async ({ page }) => {
+  test("narrow, the new rehearsal over Start and Last time behind its button", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
-    await expect(lastTime(page)).toBeAttached()
-    const last = (await lastTime(page).boundingBox())!
+    await expect(page.locator("header").getByRole("button", { name: "Last time" })).toBeVisible()
+    await expect(lastTime(page)).toHaveCount(0)
     const setup = (await setupBox(page).boundingBox())!
-    expect(last.y).toBeGreaterThan(setup.y + setup.height)
+    const start = (await startButton(page).boundingBox())!
+    expect(setup.x + setup.width).toBeGreaterThan(start.x)
   })
 })

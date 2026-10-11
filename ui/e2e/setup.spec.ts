@@ -602,3 +602,193 @@ test.describe("the tracks during the check", () => {
     expect(await layout()).toEqual(before)
   })
 })
+
+// Narrower than 68.75rem (1100 px at 100 %, 1430 at 130 %) the left part
+// waits behind a Last time button in the header, before History, and opens
+// as a panel from the left (Alex, Q4). The player stays the screen's, so the
+// panel can close, or the window widen, with a take playing.
+test.describe("the left part behind a button in a narrow window", () => {
+  test.use({ viewport: { width: 1000, height: 820 } })
+
+  /** The header's Last time button. Hidden from a screen reader with the
+   *  rest of the page while the panel is open, as a modal hides it. */
+  const pastButton = (page: Page) =>
+    page.locator("header").getByRole("button", { name: /^Last time/, includeHidden: true })
+  /** The panel it opens. */
+  const panel = (page: Page) => page.getByRole("dialog", { name: "Last time" })
+  /** The left part, where it is beside the setup. */
+  const past = (page: Page) => page.locator("[data-part='past']")
+
+  /** The Appearance scale, as Settings keeps it: the root's font size follows. */
+  const scaled = (scale: number) =>
+    `window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:${scale}}));`
+
+  /** The tracks group's width; the most the setup part gives it (its width
+   *  less its padding, at most 48rem); and how wide the setup part and the
+   *  screen are. */
+  const tracksRoom = (page: Page) =>
+    page.evaluate(() => {
+      const setup = document.querySelector<HTMLElement>("[data-part='setup']")!
+      const style = getComputedStyle(setup)
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
+      const inside = setup.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+      return {
+        group: document.querySelector("section[data-tracks]")!.getBoundingClientRect().width,
+        most: Math.min(inside, 48 * rem),
+        setup: setup.getBoundingClientRect().width,
+        screen: document.querySelector("main")!.clientWidth,
+      }
+    })
+
+  /** What the fake's player says: whether it plays, and where it is. */
+  const playerNow = (page: Page) =>
+    page.evaluate(() => {
+      const w = window as unknown as {
+        pywebview: { api: { player_state: () => Promise<{ playing: boolean; position: number }> } }
+      }
+      return w.pywebview.api.player_state()
+    })
+
+  test("under 1100 px Last time opens as a side panel from the header", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    const button = pastButton(page)
+    await expect(button).toBeVisible()
+    await expect(past(page)).toBeHidden()
+    const history = page.locator("header").getByRole("button", { name: "History", exact: true })
+    expect((await button.boundingBox())!.x).toBeLessThan((await history.boundingBox())!.x)
+    await expect(button).toHaveAttribute("aria-expanded", "false")
+
+    await button.click()
+    await expect(button).toHaveAttribute("aria-expanded", "true")
+    const sheet = panel(page)
+    await expect(sheet.getByRole("complementary", { name: "Last time" })).toContainText(
+      "Last time · Thu 10 Sep"
+    )
+    // From the left, 28rem wide.
+    await expect.poll(async () => (await sheet.boundingBox())?.x).toBe(0)
+    expect((await sheet.boundingBox())!.width).toBeCloseTo(28 * 16, 0)
+  })
+
+  test("Esc closes the panel and focus returns to its button", async ({ page }) => {
+    await openApp(page)
+    const button = pastButton(page)
+    const ways: [string, () => Promise<void>][] = [
+      ["Esc", () => page.keyboard.press("Escape")],
+      ["the close button", () => panel(page).getByRole("button", { name: "Close" }).click()],
+      // Right of the panel, on the veil.
+      ["the veil", () => page.mouse.click(980, 400)],
+    ]
+    for (const [way, close] of ways) {
+      await button.click()
+      await expect(panel(page), way).toBeVisible()
+      await close()
+      await expect(panel(page), way).toHaveCount(0)
+      await expect(button, way).toBeFocused()
+      await expect(button, way).toHaveAttribute("aria-expanded", "false")
+    }
+  })
+
+  test("widening the window closes the panel", async ({ page }) => {
+    await openApp(page)
+    await pastButton(page).click()
+    await expect(panel(page)).toBeVisible()
+
+    await page.setViewportSize({ width: 1180, height: 820 })
+    await expect(panel(page)).toHaveCount(0)
+    await expect(pastButton(page)).toHaveCount(0)
+    await expect(past(page)).toBeVisible()
+    await settled(page)
+    const left = (await past(page).boundingBox())!
+    const setup = (await page.locator("[data-part='setup']").boundingBox())!
+    expect(left.x + left.width).toBeLessThanOrEqual(setup.x + 0.5)
+
+    // Narrowed again, it stays shut until it is asked for.
+    await page.setViewportSize({ width: 1000, height: 820 })
+    await expect(pastButton(page)).toHaveAttribute("aria-expanded", "false")
+    await expect(panel(page)).toHaveCount(0)
+  })
+
+  test("at 130 percent the side panel takes over below 1430 px", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 820 })
+    await openApp(page)
+    // At 100 % the window has room for both.
+    await expect(past(page)).toBeVisible()
+    await expect(pastButton(page)).toHaveCount(0)
+
+    // 130 %, as Appearance sets it: on the root's font size.
+    await page.evaluate(() => (document.documentElement.style.fontSize = "20.8px"))
+    await expect(pastButton(page)).toBeVisible()
+    await expect(past(page)).toBeHidden()
+    await settled(page)
+    const room = await tracksRoom(page)
+    expect(room.setup).toBeCloseTo(room.screen, 0)
+    expect(room.group).toBeCloseTo(room.most, 0)
+  })
+
+  test("at 150 percent in the smallest window the panel takes over and nothing scrolls sideways", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openApp(page, { before: scaled(1.5) })
+    await expect
+      .poll(() => page.evaluate(() => getComputedStyle(document.documentElement).fontSize))
+      .toBe("24px")
+    await expect(pastButton(page)).toBeVisible()
+    await expect(past(page)).toBeHidden()
+    await settled(page)
+    const room = await tracksRoom(page)
+    expect(room.setup).toBeCloseTo(room.screen, 0)
+    expect(room.group).toBeCloseTo(room.most, 0)
+
+    // Shell clips rather than scrolls, so a header button cut off at the
+    // edge is looked for directly too.
+    const sideways = () =>
+      page.evaluate(() => ({
+        scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        cut: [...document.querySelectorAll("header button")].some(
+          (b) => b.getBoundingClientRect().right > window.innerWidth
+        ),
+      }))
+    expect(await sideways()).toEqual({ scrolls: false, cut: false })
+
+    await pastButton(page).click()
+    await expect(panel(page).getByRole("complementary", { name: "Last time" })).toBeVisible()
+    expect(await sideways()).toEqual({ scrolls: false, cut: false })
+  })
+
+  test("the header button shows Last time playing", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    const button = pastButton(page)
+    await expect(button).toBeVisible()
+    const width = (await button.boundingBox())!.width
+    await expect(button).not.toHaveAttribute("data-playing")
+    await expect(button).toHaveAccessibleName("Last time")
+
+    await button.click()
+    await panel(page).getByRole("button", { name: "Play Pałyn 2, the last go at Pałyn" }).click()
+    await expect(
+      panel(page).getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })
+    ).toBeVisible()
+    // Esc is the panel's while it is open: it closes it, and the take plays on.
+    await page.keyboard.press("Escape")
+    await expect(panel(page)).toHaveCount(0)
+    await expect(button).toHaveAttribute("data-playing")
+    // The sr-only words are a box of their own, so Chromium sets them apart.
+    await expect(button).toHaveAccessibleName(/^Last time ?, playing$/)
+    expect((await button.boundingBox())!.width).toBe(width)
+    const was = await playerNow(page)
+    expect(was.playing).toBe(true)
+    await expect.poll(async () => (await playerNow(page)).position).toBeGreaterThan(was.position)
+
+    // Widened, the left part is beside the setup again, the take still
+    // playing in it, never opened again.
+    const opens = await callCount(page, "player_open")
+    await page.setViewportSize({ width: 1180, height: 820 })
+    await expect(pastButton(page)).toHaveCount(0)
+    await expect(
+      past(page).getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })
+    ).toBeVisible()
+    expect((await playerNow(page)).playing).toBe(true)
+    expect(await callCount(page, "player_open")).toBe(opens)
+  })
+})
