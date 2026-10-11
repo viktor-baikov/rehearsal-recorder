@@ -2447,6 +2447,8 @@ class Api:
         # a crop: a discard of a draft of that name is another draft's.
         with self._files_lock:
             ident = self._draft_identity(Path(temp_dir))
+            if ident is not None and self._being_cropped([ident]):
+                return {"ok": False, "error": CROPPING}
             if ident is not None:
                 self._end_before([ident], stale=False, reasons={"crop"})
 
@@ -2699,6 +2701,8 @@ class Api:
         # the Trash first.
         with self._files_lock:
             ident = self._draft_identity(draft_dir)
+            if ident is not None and self._being_cropped([ident]):
+                return {"ok": False, "error": CROPPING}
             if ident is not None:
                 self._end_before([ident], stale=False, reasons={"crop"})
 
@@ -3057,6 +3061,9 @@ class Api:
                 if not self._lib.has(folder):
                     return {"ok": False, "error": "Rehearsal not found"}
                 return {"ok": False, "error": "Take not found"}
+            # Its folder would move while the crop moves its files.
+            if self._take_being_cropped(folder, take_number):
+                return {"ok": False, "error": CROPPING}
 
             # The folder carries the name the take ends up with, which can
             # differ from what was typed: renamed to its own song, a take
@@ -3146,6 +3153,12 @@ class Api:
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
         with self._files_lock:
+            # Its folder would move while a crop moves files in it.
+            ref = self._lib.rehearsal_ref(folder)
+            if ref is not None and self._being_cropped(
+                    [{"kind": "rehearsal", "folder": self._recordings_key(folder),
+                      "rehearsal_id": ref["id"]}]):
+                return {"ok": False, "error": CROPPING}
             return self._rename_rehearsal_locked(folder, new_name)
 
     def _rename_rehearsal_locked(self, folder, new_name):
@@ -3522,9 +3535,11 @@ class Api:
         (`idents`) that was broken off is finished first, as it moves the
         item's files (_end_before with `broken`, only those made for one of
         `reasons` when given); then the item is registered as being cropped,
-        until _end_crop. Meanwhile its crop's Undo (_uncrop), and its delete
-        or discard, wait ("Wait until the crop is done."): the crop moves the
-        take's files outside the lock, and its places are empty for a moment.
+        until _end_crop. Meanwhile its crop's Undo (_uncrop), its delete,
+        discard, rename, save (keep_take) or rescue (recover_draft), and a
+        delete or rename of its rehearsal, wait ("Wait until the crop is
+        done."): the crop moves the take's files outside the lock, and its
+        places are empty for a moment.
         An earlier crop's entry ends only once this crop's own is held, so
         that a crop that fails leaves that Undo there. False, with nothing
         registered, when a crop of the item is under way already.
@@ -3604,10 +3619,13 @@ class Api:
             return asked
         take, tracks, notes, span = asked["take"], asked["tracks"], asked["notes"], asked["span"]
         # What the crop needs of the library, read before any file moves: a
-        # library that fails here changes nothing on disk.
+        # library that fails here changes nothing on disk. The copies other
+        # takes name are asked for here only as that check: by the time the
+        # crop is done they may be others (below).
         try:
             rows = self._lib.take_record(folder, take_number)
-            live = self._lib.cloud_paths(but=rows["take"]["id"]) if rows is not None else set()
+            if rows is not None:
+                self._lib.cloud_paths(but=rows["take"]["id"])
         except Exception as e:  # noqa: BLE001 - nothing has moved: answered
             log.error("crop: the library could not be read, so nothing was cropped: %s", e)
             return {"ok": False, "error": f"Could not crop: {e}"}
@@ -3682,8 +3700,18 @@ class Api:
                         self._kept(token, gone.get("error"))
                 return {"ok": False, "error": "Take not found"}
             # Not a copy another take names now (one that came after it under
-            # the same name): that one stays.
-            self._remove_shared(self._unused(take.get("cloud"), live))
+            # the same name): that one stays. Asked now, not before the crop:
+            # the copy worker runs outside _files_lock, and may have recorded
+            # such a copy meanwhile. Should the library not say, the copy
+            # stays too: one left behind is the safe way to fail.
+            try:
+                live = self._lib.cloud_paths(but=rows["take"]["id"])
+            except Exception as e:  # noqa: BLE001 - the crop is done all the same
+                log.error("crop: the take's old cloud copy is left in the cloud folder, as "
+                          "which copies other takes name could not be read: %s", e)
+                live = None
+            if live is not None:
+                self._remove_shared(self._unused(take.get("cloud"), live))
             self._lib.set_cloud_copy(folder, take_number, None, None)
             token, error = self._hold_uncut({
                 "item": ident,

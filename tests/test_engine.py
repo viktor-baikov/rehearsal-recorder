@@ -11173,6 +11173,9 @@ def main():
         def replace(self, src, dst):
             if "answer" not in during_d7:
                 during_d7["answer"] = cr.discard_take(str(d7))
+                during_d7["keep"] = cr.keep_take(7, str(d7), "Kept", 4.0, tracks_d7,
+                                                 notes=[note_d7])
+                during_d7["recover"] = cr.recover_draft(str(d7))
             return os71.replace(src, dst)
 
     apimod_c.os = Discarding_c()
@@ -11181,6 +11184,9 @@ def main():
     ok("a draft being cropped is not discarded meanwhile: that waits until the crop is done",
        during_d7.get("answer") == {"ok": False, "error": "Wait until the crop is done."}
        and cut_d7.get("ok") is True and wav_frames(d7 / "Gtr.wav") == 2 * SR)
+    ok("nor saved, nor rescued as a take",
+       during_d7.get("keep") == {"ok": False, "error": "Wait until the crop is done."}
+       and during_d7.get("recover") == {"ok": False, "error": "Wait until the crop is done."})
     cr.end_trash(cut_d7.get("undo"))
     cr.end_trash(cut_d5.get("undo"))
     cr.end_trash(dropped_d5.get("undo"))
@@ -11631,6 +11637,8 @@ def main():
                 during31["delete"] = cr_v.delete_take(str(folder_c), 31)
                 during31["takes"] = cr_v.delete_takes(str(folder_c), [31])
                 during31["rehearsal"] = cr_v.delete_rehearsal(str(folder_c))
+                during31["rename"] = cr_v.rename_take(str(folder_c), 31, "Kapel renamed")
+                during31["rehearsal_rename"] = cr_v.rename_rehearsal(str(folder_c), "Crops renamed")
                 during31["held"] = bytes71(held_c(first31.get("undo"), dir31))
                 during31["aside"] = bytes71(folder_c / f"{dir31.name} (before crop)")
                 during31["writing"] = sorted(
@@ -11649,6 +11657,8 @@ def main():
        during31.get("takes") == {"ok": True, "deleted": [], "undo": None, "failed": [
            {"take_number": 31, "error": "Wait until the crop is done."}]}
        and during31.get("rehearsal") == wait_c)
+    ok("and renaming the take or its rehearsal",
+       during31.get("rename") == wait_c and during31.get("rehearsal_rename") == wait_c)
     ok("every version of the take on disk meanwhile: as it was, in the first crop's entry; "
        "cropped once, beside the take; cropped twice, being written",
        during31.get("held") == uncut31 and during31.get("aside") == cropped31
@@ -11792,6 +11802,60 @@ def main():
        and bytes71(dir36) == uncut36 and length_c(cr_x, folder_c, 36) == 4.0
        and marks_c(cr_x, folder_c, 36) == marks_before and entries71(rec_c) == waiting36
        and not (folder_c / f"{dir36.name} (before crop)").exists())
+
+    print("  a copy another take came to name during the crop")
+    take_c(cr_x, folder_c, 37, "Klever")
+    cr_x._copy_to_cloud(str(folder_c), 37, "mix")
+    copy37 = Path((cr_x._lib.take(folder_c, 37)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    named37 = {}
+
+    class Recording_c:
+        """os, except that at the crop's first os.replace the copy worker
+        records another take's copy in this take's place in the cloud
+        folder, as from its own thread."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def replace(self, src, dst):
+            if not named37:
+                named37["done"] = cr_x._lib.set_cloud_copy(
+                    folder_c, 36, {"mix": str(copy37), "mix_format": "wav"}, drive_c)
+            return os71.replace(src, dst)
+
+    apimod_c.os = Recording_c()
+    token37 = cr_x.crop_take(str(folder_c), 37, 1.0, 3.0).get("undo")
+    apimod_c.os = os71
+    ok("a crop leaves its take's cloud copy when another take came to name it during the crop",
+       named37.get("done") is True and isinstance(token37, str)
+       and copy37.is_file() and wav_frames(copy37) == 4 * SR
+       and cr_x._lib.take(folder_c, 36)["cloud"].get("mix") == str(copy37))
+    cr_x._lib.set_cloud_copy(folder_c, 36, None, None)
+    drain_c(cr_x)
+    cr_x.end_trash(token37)
+
+    take_c(cr_x, folder_c, 38, "Myata")
+    cr_x._copy_to_cloud(str(folder_c), 38, "mix")
+    copy38 = Path((cr_x._lib.take(folder_c, 38)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    real_paths_c = cr_x._lib.cloud_paths
+    asked38 = []
+
+    def once_c(but=None):
+        """cloud_paths, answering before the crop and failing after it."""
+        asked38.append(but)
+        if len(asked38) > 1:
+            raise RuntimeError("database is locked")
+        return real_paths_c(but=but)
+
+    cr_x._lib.cloud_paths = once_c
+    cut38 = cr_x.crop_take(str(folder_c), 38, 1.0, 3.0)
+    del cr_x._lib.cloud_paths
+    ok("and when which copies other takes name cannot be read after the crop, the crop is done "
+       "and the old copy is left in the cloud folder",
+       cut38.get("ok") is True and length_c(cr_x, folder_c, 38) == 2.0
+       and copy38.is_file() and wav_frames(copy38) == 4 * SR)
+    drain_c(cr_x)
+    cr_x.end_trash(cut38.get("undo"))
 
     print("  its rehearsal gone")
     dir13 = take_c(cr_x, folder_c, 13, "Oktyabr")
