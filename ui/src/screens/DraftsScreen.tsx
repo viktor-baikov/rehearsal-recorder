@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { LifeBuoy, Save, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FooterRow } from "@/components/FooterRow"
@@ -29,12 +29,21 @@ export function DraftsScreen({
 }: {
   drafts: Draft[]
   onDone: () => void
-  /** The list again, after it closed because its last take was discarded
-   *  and Undo brought that one back. */
+  /** The list again, after it closed: an Undo brought back a take that
+   *  was discarded from it. */
   onReopen: () => void
 }) {
   const [remaining, setRemaining] = useState(drafts)
   const [busy, setBusy] = useState<string | null>(null)
+  // Whether this list is still the one on screen: an Undo can come after it
+  // closed, its last take discarded since.
+  const shown = useRef(true)
+  useEffect(() => {
+    shown.current = true
+    return () => {
+      shown.current = false
+    }
+  }, [])
   // Turning a long take's raw tracks into .wav takes real seconds.
   const { entries: work } = useActivity()
 
@@ -55,9 +64,10 @@ export function DraftsScreen({
     finish(remaining.filter((d) => d.dir !== draft.dir))
   }
 
-  // Asks nothing: Undo brings the take back, into this list, or with the
-  // list when it closed because this was the last one in it. Named as the
-  // list names it, by its rehearsal.
+  // Asks nothing: Undo brings the take back, into this list while it is on
+  // screen, or with the list again once it has closed. Which, is decided
+  // when the Undo comes, not when the take went. Named as the list names
+  // it, by its rehearsal.
   const discard = async (draft: Draft) => {
     setBusy(draft.dir)
     dismiss(SAID)
@@ -67,15 +77,20 @@ export function DraftsScreen({
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not discard the take" })
       return
     }
-    const rest = remaining.filter((d) => d.dir !== draft.dir)
-    finish(rest)
+    finish(remaining.filter((d) => d.dir !== draft.dir))
     if (!res.undo) return
     offerUndo({
       text: wentTo(`“${draft.rehearsal_name}”`),
       token: res.undo,
+      item: { folder: draft.dir },
       onUndone: async () => {
-        if (rest.length === 0) onReopen()
-        else setRemaining(await api().list_drafts())
+        if (!shown.current) {
+          onReopen()
+          return
+        }
+        const now = await api().list_drafts()
+        if (shown.current) setRemaining(now)
+        else onReopen()
       },
     })
   }

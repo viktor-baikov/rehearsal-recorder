@@ -28,7 +28,7 @@ import { SCALE_OPTIONS, THEME_LABELS, type Theme } from "@/lib/appearance"
 import { describeRescan, notConnected } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
 import { loadLabels } from "@/lib/labels"
-import { keptText } from "@/lib/trash"
+import { endEveryOffer, keptText } from "@/lib/trash"
 import {
   api,
   type CloudFormat,
@@ -268,13 +268,15 @@ export function Settings({
     // Another library: other labels.
     void loadLabels()
     notify({ key: SAID, kind: "done", text: "Folder saved" })
-    sayKept(res.kept)
+    switched(res.kept)
   }
 
-  // Removals still waiting in the old folder when it was left, which could
-  // be neither put back nor sent to the Trash: nothing will look there
-  // again, so they are named now, and the warning stays until it is closed.
-  const sayKept = (kept: string[] | undefined) => {
+  // Removals waiting for their Undo in the old folder were ended before the
+  // switch, so their notices go. Those that could be neither put back nor
+  // sent to the Trash stay there: nothing will look there again, so they
+  // are named now, and the warning stays until it is closed.
+  const switched = (kept: string[] | undefined) => {
+    endEveryOffer()
     if (kept?.length) notify({ key: "kept", kind: "warning", text: keptText(kept) })
   }
 
@@ -323,7 +325,7 @@ export function Settings({
     // Another library: other labels.
     void loadLabels()
     notify({ key: SAID, kind: "done", text: "Folder saved" })
-    sayKept(res.kept)
+    switched(res.kept)
   }
 
   // Whatever the card said, or the usual three while the answer is pending —

@@ -21,7 +21,7 @@ import {
 import { formatMMSS } from "@/lib/format"
 import { nameWithGo } from "@/lib/goes"
 import { dismiss } from "@/lib/notices"
-import { offerCropUndo } from "@/lib/trash"
+import { endOffersFor, offerCropUndo } from "@/lib/trash"
 import { useRunning, watching } from "@/lib/activity"
 import { useLabels } from "@/lib/labels"
 
@@ -128,16 +128,6 @@ export function Review({
   // The take as the screen calls it, with its go, for what a notice says.
   const title = nameWithGo(name, songChoices) || take.default_name || `Take ${take.take_number}`
 
-  // A crop's Undo, while it is on offer: what ends it. Saving or discarding
-  // the take ends it, as the take it would put back is saved or gone by
-  // then; so does another crop, as Python sends the first one's uncut take
-  // on when the second is done.
-  const cropOffer = useRef<() => void>(() => {})
-  const endCropOffer = () => {
-    cropOffer.current()
-    cropOffer.current = () => {}
-  }
-
   const addMarker = (at: number) => {
     const rounded = Math.round(at * 100) / 100
     // Python gives the first label too, but this take has no folder yet and
@@ -168,7 +158,6 @@ export function Review({
     setBusy(true)
     setError(null)
     player.pause()
-    endCropOffer()
     const res = await api().keep_take(
       take.take_number,
       take.temp_dir,
@@ -187,6 +176,9 @@ export function Review({
       setError(res.error ?? "Could not save the take")
       return
     }
+    // A crop's Undo is over, as Python ended it: the draft it would put the
+    // uncut take back into is a saved take now.
+    endOffersFor(take.temp_dir, undefined, { cropsOnly: true })
     onKept()
   }
 
@@ -202,13 +194,15 @@ export function Review({
     setBusy(true)
     setError(null)
     player.pause()
-    endCropOffer()
     const res = await api().discard_take(take.temp_dir)
-    setBusy(false)
     if (!res.ok) {
+      setBusy(false)
       setError(res.error ?? "Could not discard the take")
       return
     }
+    // Still busy: the take is gone, and until App has moved on, Space or
+    // Escape here would act on it. A crop's Undo went with it, in Python.
+    endOffersFor(take.temp_dir)
     onDiscarded({ take, title, kept: { name, markers, send }, undo: res.undo ?? null })
   }
   useEscape(() => void discard(), !busy)
@@ -244,12 +238,11 @@ export function Review({
       notes: res.notes ?? take.notes,
       duration_sec: res.duration_sec ?? take.duration_sec,
     })
-    endCropOffer()
-    cropOffer.current = offerCropUndo(
+    offerCropUndo(
       title,
       res,
+      { folder: take.temp_dir },
       () => {
-        cropOffer.current = () => {}
         onCropped(before.take)
         setMarkers(before.markers)
       },

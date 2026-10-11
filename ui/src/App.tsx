@@ -33,7 +33,7 @@ type Screen =
   | { name: "setup" }
   | { name: "rehearsal" }
   | { name: "recording"; takeNumber: number; takeName: string; takeGo: number | null }
-  | { name: "review"; take: PendingTake; kept?: ReviewKept }
+  | { name: "review"; take: PendingTake; kept?: ReviewKept; visit?: number }
   | { name: "history"; folder?: string; song?: string | null }
   | { name: "settings" }
 
@@ -82,33 +82,49 @@ export function App() {
     discardOffer.current()
     discardOffer.current = () => {}
   }
+  // Each entry to the review screen by an Undo is a screen of its own: one
+  // still up over the discarded take, busy with it, starts afresh.
+  const reviewVisit = useRef(0)
   const discarded = async (gone: Discarded) => {
-    await refreshSession()
-    setScreen({ name: "rehearsal" })
-    if (!gone.undo) return
-    endDiscardOffer()
-    discardOffer.current = offerUndo({
-      text: wentTo(`“${gone.title}”`),
-      token: gone.undo,
-      onUndone: (r) => {
-        discardOffer.current = () => {}
-        // Only from the rehearsal screen, where the take was left for; the
-        // offer ends before any other could be up.
-        setScreen((s) =>
-          s.name === "rehearsal"
-            ? {
-                name: "review",
-                take: { ...gone.take, temp_dir: r.temp_dir ?? gone.take.temp_dir },
-                kept: gone.kept,
-              }
-            : s
-        )
-      },
-    })
+    // Offered before anything else is asked of Python: however the read of
+    // the session goes, the take that went can be had back.
+    let back = false
+    if (gone.undo) {
+      endDiscardOffer()
+      discardOffer.current = offerUndo({
+        text: wentTo(`“${gone.title}”`),
+        token: gone.undo,
+        item: { folder: gone.take.temp_dir },
+        onUndone: (r) => {
+          back = true
+          discardOffer.current = () => {}
+          const visit = ++reviewVisit.current
+          // From the rehearsal screen, where the take was left for, or from
+          // the review screen still on its way there; the offer ends before
+          // any other could be up.
+          setScreen((s) =>
+            s.name === "rehearsal" || s.name === "review"
+              ? {
+                  name: "review",
+                  take: { ...gone.take, temp_dir: r.temp_dir ?? gone.take.temp_dir },
+                  kept: gone.kept,
+                  visit,
+                }
+              : s
+          )
+        },
+      })
+    }
+    try {
+      await refreshSession()
+    } catch {
+      // Said on the error bar already (api); the screen moves on all the same.
+    }
+    if (!back) setScreen({ name: "rehearsal" })
   }
 
-  // Unsaved takes again, after an Undo brought back the last one discarded
-  // there: the list had closed without it. Not over a take in hand.
+  // Unsaved takes again, after an Undo brought back one discarded there
+  // once the list had closed. Not over a take in hand.
   const reopenDrafts = useCallback(async () => {
     let drafts: Draft[] = []
     try {
@@ -221,7 +237,10 @@ export function App() {
 
   if (screen.name === "drafts") {
     return (
+      // Keyed by the takes it lists: the list opened again by an Undo starts
+      // from what is on disk now.
       <DraftsScreen
+        key={screen.drafts.map((d) => d.dir).join("\n")}
         drafts={screen.drafts}
         onDone={async () => {
           const s = await refreshSession()
@@ -305,6 +324,7 @@ export function App() {
 
   return (
     <Review
+      key={screen.visit ?? 0}
       take={screen.take}
       kept={screen.kept}
       rehearsalName={session.name}

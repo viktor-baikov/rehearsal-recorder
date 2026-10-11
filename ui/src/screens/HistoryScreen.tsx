@@ -46,7 +46,7 @@ import {
   formatWhen,
 } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
-import { offerCropUndo, offerUndo } from "@/lib/trash"
+import { endOffersFor, offerCropUndo, offerUndo } from "@/lib/trash"
 import {
   useActivity,
   useCloudSettled,
@@ -656,10 +656,13 @@ export function HistoryScreen({
       return
     }
     forget(take)
+    // What waited of this take, a crop of it, Python has sent on.
+    endOffersFor(take.folder, [take.take_number])
     if (res.undo) {
       offerUndo({
         text: wentTo(`“${take.name}”`),
         token: res.undo,
+        item: { folder: take.folder, takes: [take.take_number] },
         onUndone: () => changed(take.folder),
       })
     }
@@ -770,7 +773,13 @@ export function HistoryScreen({
       return
     }
     if (res.take) reselect(placed(take.folder, res.take))
-    offerCropUndo(take.name, res, () => uncropped(take), SAID)
+    offerCropUndo(
+      take.name,
+      res,
+      { folder: take.folder, takes: [take.take_number] },
+      () => uncropped(take),
+      SAID
+    )
     await changed(take.folder)
   }
 
@@ -822,10 +831,14 @@ export function HistoryScreen({
       return
     }
     if (r.folder === current) close()
+    // Everything of it still waiting, its takes' and their crops', Python
+    // has sent on with it.
+    endOffersFor(r.folder)
     if (res.undo) {
       offerUndo({
         text: wentTo(`“${r.name}”`),
         token: res.undo,
+        item: { folder: r.folder },
         onUndone: () => refresh(r.folder),
       })
     }

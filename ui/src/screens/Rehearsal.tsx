@@ -32,7 +32,7 @@ import { goFor } from "@/lib/goes"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss } from "@/lib/notices"
 import { wentTo } from "@/lib/deletion"
-import { offerCropUndo, offerUndo } from "@/lib/trash"
+import { endOffersFor, offerCropUndo, offerUndo } from "@/lib/trash"
 
 /**
  * The rehearsal hub: what has been recorded, and a big button to record more.
@@ -284,8 +284,15 @@ export function Rehearsal({
     }
     forget(take)
     onChanged()
+    // What waited of this take, a crop of it, Python has sent on.
+    endOffersFor(session.folder, [take.take_number])
     if (res.undo) {
-      offerUndo({ text: wentTo(`“${take.name}”`), token: res.undo, onUndone: () => onChanged() })
+      offerUndo({
+        text: wentTo(`“${take.name}”`),
+        token: res.undo,
+        item: { folder: session.folder, takes: [take.take_number] },
+        onUndone: () => onChanged(),
+      })
     }
   }
 
@@ -321,7 +328,13 @@ export function Rehearsal({
     }
     if (res.take) reselect(res.take)
     onChanged()
-    offerCropUndo(take.name, res, () => uncropped(take), "rehearsal")
+    offerCropUndo(
+      take.name,
+      res,
+      { folder: session.folder, takes: [take.take_number] },
+      () => uncropped(take),
+      "rehearsal"
+    )
   }
 
   // A crop's Undo: the uncut take is under the same paths again, and only a

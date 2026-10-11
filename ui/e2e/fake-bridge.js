@@ -141,8 +141,14 @@ function withCloud(r) {
 // "folder#take_number": those rehearsals are built afresh on every call, so
 // what the player changed is kept here and laid over them.
 const pastMarks = {};
+// Takes of the rehearsals before this one that were cropped, by
+// "folder#take_number": their length and their rewritten files, laid over
+// them as their marks are; a crop's Undo takes it off again.
+const pastCrops = {};
 function withEdits(r) {
   for (const t of r.takes) {
+    const crop = pastCrops[`${r.folder}#${t.take_number}`];
+    if (crop) Object.assign(t, crop);
     const kept = pastMarks[`${r.folder}#${t.take_number}`];
     if (kept) t.markers = kept.map(m => ({...m, label_id: labelIdOf(m.label_id)}));
   }
@@ -156,6 +162,32 @@ async function markedTake(folder, n) {
 }
 function keepMarks(folder, n, take) {
   if (take && !(session && folder === session.folder)) pastMarks[`${folder}#${n}`] = take.markers;
+}
+// crop_take on a take of a rehearsal before this one: laid over it in
+// pastCrops and pastMarks, which its Undo puts back as they were.
+async function cropPast(folder, n, a, b) {
+  const take = await markedTake(folder, n);
+  if (!take) return {ok:false, error:'Take not found'};
+  const key = `${folder}#${n}`;
+  const was = {crop: pastCrops[key], marks: pastMarks[key]};
+  let dropped = 0;
+  const markers = (take.markers || [])
+    .filter(m => { const keep = m.at >= a && m.at <= b; if (!keep) dropped++; return keep; })
+    .map(m => ({...m, at: Math.round((m.at - a) * 100) / 100}));
+  const tracks = take.tracks.map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
+  pastCrops[key] = {duration_sec: b - a, tracks};
+  pastMarks[key] = markers;
+  for (const t of tracks) fileDurations[t.file] = b - a;
+  P = null;
+  endHeld(folder, [n], true);
+  const undo = hold(() => {
+    if (was.crop) pastCrops[key] = was.crop; else delete pastCrops[key];
+    if (was.marks) pastMarks[key] = was.marks; else delete pastMarks[key];
+    P = null;
+    return {kind:'crop', folder, take_numbers:[n]};
+  }, {folder, takes:[n], crop:true});
+  return JSON.parse(JSON.stringify({ok:true, take:{...take, duration_sec: b - a, tracks, markers},
+    markers_dropped:dropped, undo}));
 }
 
 // The library's labels, in their order, as list_labels gives them: the four
@@ -312,11 +344,31 @@ const deleted = new Set();
 // it back and answers what came back. undo_trash runs one, end_trash
 // forgets it (it has gone on to the Trash). A test reads which are waiting.
 window.__UNDOABLE__ = {};
+// What each waiting removal took, {folder, takes?, crop?}, for the ends
+// Python makes on its own (api.py _ends).
+const heldItems = {};
 let removals = 0;
-function hold(putBack) {
+function hold(putBack, item) {
   const token = `undo-${++removals}`;
   window.__UNDOABLE__[token] = putBack;
+  heldItems[token] = item;
   return token;
+}
+function forgetHeld(token) {
+  delete window.__UNDOABLE__[token];
+  delete heldItems[token];
+}
+// Python's own ends: removing a take ends what waits of that take, a crop
+// of it among them; a crop, the take's earlier crops; a rehearsal, all of
+// it, its drafts too. They go on to the Trash, with no Undo left.
+function endHeld(folder, takes, cropsOnly = false) {
+  for (const [token, item] of Object.entries(heldItems)) {
+    if (cropsOnly && !item.crop) continue;
+    const same = takes
+      ? item.folder === folder && (item.takes || []).some(n => takes.includes(n))
+      : item.folder === folder || item.folder.startsWith(folder + '/');
+    if (same) forgetHeld(token);
+  }
 }
 // Takes of the live rehearsal taken out of it, back where they were.
 function backTonight(folder, takes) {
@@ -1084,7 +1136,9 @@ window.__MAKE_API__ = () => ({
       && (midiPortState(t) === 'ok' || (midiTake && midiTake.heard.has(t.name)))).map(t => t.name);
     return {...take, ...notesOfTake(band, take.tracks, heard)};
   }),
-  keep_take: track('keep_take', async (n, _t, name, dur, tracks, markers, _cloud, notes) => {
+  keep_take: track('keep_take', async (n, dir, name, dur, tracks, markers, _cloud, notes) => {
+    // A crop of the draft waiting for its Undo is over once it is kept.
+    endHeld(dir, null, true);
     const take = {take_number:n, ...resolved(name, session.takes, n), duration_sec:dur, tracks,
                   markers: (markers || []).map(m => ({...m, label_id: labelIdOf(m.label_id)}))};
     // The notes handed back are kept as they are; a track that took notes and
@@ -1099,11 +1153,13 @@ window.__MAKE_API__ = () => ({
   }),
   discard_take: track('discard_take', async (dir) => {
     const folder = session ? session.folder : null;
-    return {ok:true, undo: hold(() => ({kind:'draft', temp_dir:dir, folder}))};
+    endHeld(dir, null);
+    return {ok:true, undo: hold(() => ({kind:'draft', temp_dir:dir, folder}), {folder:dir})};
   }),
   crop_take: track('crop_take', async (folder, n, a, b) => {
     await held('crop_take');
-    const take = (session ? session.takes : []).find(t => t.take_number === n);
+    if (!(session && folder === session.folder)) return cropPast(folder, n, a, b);
+    const take = session.takes.find(t => t.take_number === n);
     if (!take) return {ok:false, error:'Take not found'};
     // The take as it was, for the crop's Undo.
     const was = JSON.parse(JSON.stringify(take));
@@ -1122,11 +1178,12 @@ window.__MAKE_API__ = () => ({
       for (const n of take.notes) fileDurations[n.file] = take.duration_sec;
     }
     P = null;   // Python lets go of the files before rewriting them
+    endHeld(folder, [n], true);
     const undo = hold(() => {
       Object.assign(take, was);
       P = null;
       return {kind:'crop', folder, take_numbers:[n]};
-    });
+    }, {folder, takes:[n], crop:true});
     // Deep copy, same as rename_take — a live handle would let the interface
     // alias the mock's own state, which the real bridge never allows.
     return JSON.parse(JSON.stringify({ok:true, take, markers_dropped:dropped, undo}));
@@ -1139,10 +1196,11 @@ window.__MAKE_API__ = () => ({
     const cutNotes = (notes || []).map(n => ({...n, file: n.file + '#' + Math.round(a * 100)}));
     for (const n of cutNotes) fileDurations[n.file] = b - a;
     P = null;
+    endHeld(dir, null, true);
     const undo = hold(() => {
       P = null;
       return {kind:'crop', temp_dir:dir};
-    });
+    }, {folder:dir, crop:true});
     return JSON.parse(JSON.stringify(
       {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, undo}));
   }),
@@ -1342,7 +1400,9 @@ window.__MAKE_API__ = () => ({
             takes: session ? session.takes : []};
   }),
 
-  list_drafts: async () => drafts,
+  // A copy, as the real bridge answers: a live handle would let the list on
+  // screen change under the interface when the fake changes it.
+  list_drafts: async () => JSON.parse(JSON.stringify(drafts)),
   recover_draft: track('recover_draft', async (dir) => {
     await held('recover_draft');
     if (window.__RECOVER_FAILS__)
@@ -1353,11 +1413,12 @@ window.__MAKE_API__ = () => ({
   discard_draft: track('discard_draft', async (dir) => {
     const at = drafts.findIndex(d => d.dir === dir);
     if (at < 0) return {ok:false, error:'It is not there any more'};
+    endHeld(dir, null);
     const [draft] = drafts.splice(at, 1);
     return {ok:true, undo: hold(() => {
-      drafts.splice(at, 0, draft);
+      drafts.splice(Math.min(at, drafts.length), 0, draft);
       return {kind:'draft', temp_dir:dir, folder:draft.rehearsal_folder};
-    })};
+    }, {folder:dir})};
   }),
 
   list_rehearsals: track('list_rehearsals', async () => ([
@@ -1430,6 +1491,7 @@ window.__MAKE_API__ = () => ({
   }),
   // Out of the live rehearsal too, as Python takes it out of the library.
   delete_take: track('delete_take', async (folder, n) => {
+    endHeld(folder, [n]);
     const key = `${folder}#${n}`;
     deleted.add(key);
     const live = session && folder === session.folder
@@ -1440,13 +1502,14 @@ window.__MAKE_API__ = () => ({
         deleted.delete(key);
         backTonight(folder, live);
         return {kind:'take', folder, take_numbers:[n]};
-      })};
+      }, {folder, takes:[n]})};
   }),
   // Python takes them out of the rehearsal, the live one included.
   // A test can make it take a while (__DELETE_MS__), as moving many tracks
   // to the Trash does.
   delete_takes: track('delete_takes', async (folder, numbers) => {
     if (window.__DELETE_MS__) await new Promise(r => setTimeout(r, window.__DELETE_MS__));
+    endHeld(folder, numbers);
     for (const n of numbers) deleted.add(`${folder}#${n}`);
     const live = session && folder === session.folder
       ? session.takes.filter(t => numbers.includes(t.take_number)) : [];
@@ -1457,18 +1520,18 @@ window.__MAKE_API__ = () => ({
       for (const n of numbers) deleted.delete(`${folder}#${n}`);
       backTonight(folder, live);
       return {kind:'takes', folder, take_numbers:[...numbers]};
-    }) : null};
+    }, {folder, takes:[...numbers]}) : null};
   }),
   // Python's answers to the notice: Undo puts the removal back; its end
   // sends it on to the Trash. A token no longer waiting is gone already.
   undo_trash: track('undo_trash', async (token) => {
     const putBack = window.__UNDOABLE__[token];
     if (!putBack) return {ok:false, error:'It has already gone to the Trash.'};
-    delete window.__UNDOABLE__[token];
+    forgetHeld(token);
     return {ok:true, ...putBack()};
   }),
   end_trash: track('end_trash', async (token) => {
-    delete window.__UNDOABLE__[token];
+    forgetHeld(token);
     return {ok:true};
   }),
   // History's Songs view (api.list_songs, api.get_song), from library().
@@ -1608,11 +1671,12 @@ window.__MAKE_API__ = () => ({
     return {ok:true};
   }),
   delete_rehearsal: track('delete_rehearsal', async (folder) => {
+    endHeld(folder, null);
     deletedRehearsals.add(folder);
     return {ok:true, undo: hold(() => {
       deletedRehearsals.delete(folder);
       return {kind:'rehearsal', folder};
-    })};
+    }, {folder})};
   }),
 
   set_cloud_dir: track('set_cloud_dir', async (p) => { cloudDir = p; return {ok:true, cloud_dir:p}; }),

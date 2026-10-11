@@ -5,7 +5,7 @@ import { api, type Take } from "@/lib/api"
 import { falseStarts, starredToSend } from "@/lib/evening"
 import { wentTo } from "@/lib/deletion"
 import { notify } from "@/lib/notices"
-import { offerUndo } from "@/lib/trash"
+import { endOffersFor, offerUndo } from "@/lib/trash"
 import { pollSoon } from "@/lib/activity"
 
 /** Off, but still saying why under the mouse: a disabled button takes no
@@ -99,10 +99,8 @@ export function EveningActions({
     if (clearOff) return
     setClearing(true)
     try {
-      const res = await api().delete_takes(
-        folder,
-        going.map((t) => t.take_number)
-      )
+      const numbers = going.map((t) => t.take_number)
+      const res = await api().delete_takes(folder, numbers)
       if (!res.ok) {
         notify({
           key: "evening",
@@ -112,11 +110,14 @@ export function EveningActions({
       } else {
         const gone = new Set(res.deleted ?? [])
         onDeleted(going.filter((t) => gone.has(t.take_number)))
+        // What waited of these takes, a crop of one, Python has sent on.
+        endOffersFor(folder, numbers)
         if (res.undo) {
           const n = gone.size
           offerUndo({
             text: wentTo(n === 1 ? "1 false start" : `${n} false starts`),
             token: res.undo,
+            item: { folder, takes: [...gone] },
             onUndone: () => onChanged(),
           })
         }

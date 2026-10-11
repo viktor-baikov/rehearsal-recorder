@@ -255,8 +255,8 @@ goes green, the others grey. A take nobody named says "Take 7", grey, and how lo
 The name is filled in for you: after a take called "Pałyn", the next one is
 "Pałyn 2". Check it, then press **Save take** (Space) or **Discard**. A
 discarded take goes to the Trash at once. Pressing Esc also discards it.
-**Undo**, or ⌘Z (Ctrl+Z on Windows), brings it back to this screen as you
-left it, with its name and marks. See [Undo](#undo).
+**Undo**, or ⌘Z on a Mac (Ctrl+Z elsewhere), brings it back to this screen
+as you left it, with its name, its marks and whether it goes to the cloud. See [Undo](#undo).
 
 The pencil beside the title renames the take. The songs you have played
 are listed under the name, this rehearsal's first, then the others, most
@@ -822,15 +822,19 @@ press a button with Space, move to it with Tab.
 Deleting a take or a rehearsal, clearing false starts, discarding a take
 and cropping one happen at once, without a question first. A notice in the
 corner says what went, for example "“Pałyn 5” went to the Trash.", with an
-**Undo** button. For 10 seconds, **Undo** or ⌘Z (Ctrl+Z on Windows) puts it
-back where it was: a take with its star, marks and cloud copy, a rehearsal
+**Undo** button. For 10 seconds, **Undo** or ⌘Z on a Mac (Ctrl+Z
+elsewhere) puts it back where it was: a take with its star, marks and cloud copy, a rehearsal
 with all its takes, a cropped take as it was before the crop, a discarded
 take on the screen after it with the name and marks it had. Holding the
 mouse over the notice keeps it up.
 
 ⌘Z brings back the newest one first; an older notice keeps its own
 **Undo**. While you type in a field, ⌘Z is the field's own, and it does
-nothing while a dialog is open or a take is recording.
+nothing while a dialog is open or a take is recording. A notice also goes
+when what it would bring back is removed again: a take cropped a second
+time keeps only the second crop's **Undo**, and a deleted rehearsal takes
+the notices of its takes with it. Switching the recordings folder ends
+them all.
 
 When the notice goes, what went moves on to the Trash, or the `_deleted`
 folder on a computer without one, where you can still get it back by hand.
