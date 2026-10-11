@@ -10632,9 +10632,134 @@ def main():
        and [p["name"] for p in problems72] == ["RemovalKept"]
        and str(rec72 / "_deleting" / garbled72) in problems72[0]["message"]
        and s72.startup_problems() == [])
-    s72.shutdown()
-    for api72 in opened72[:3]:
+
+    print("  the recordings folder changes with an entry that stays")
+    moved72 = s72.set_recordings_dir(str(tmp72 / "Elsewhere"))
+    ok("p. changing the folder names, in its answer, an entry that stays in the old one",
+       moved72.get("ok") is True
+       and moved72.get("kept") == [str(rec72 / "_deleting" / garbled72)]
+       and garbled72 in entries71(rec72))
+    back72 = s72.set_recordings_dir(str(rec72))
+    ok("and names none when none stays", back72.get("ok") is True and back72.get("kept") == [])
+
+    print("  a draft discarded twice")
+    dec72 = past71(s72, "December", "2026-10-10T19:00:00", ["Polyn", "Vesna"])
+    twice72 = dec72 / "_drafts" / "take 8"
+    write_wav(twice72 / "Gtr.wav", 800, seconds=1.0)
+    files_d = bytes71(twice72)
+    mark72 = len(sent71)
+    first_d = s72.discard_draft(str(twice72))
+    second_d = s72.discard_draft(str(twice72))
+    ok("q. a second discard of a draft already gone says so, and the first one's entry waits on",
+       first_d.get("ok") is True
+       and second_d == {"ok": False, "error": "It is not there any more"}
+       and first_d.get("undo") in entries71(rec72) and sent71[mark72:] == [])
+    undone_d = s72.undo_trash(first_d.get("undo"))
+    ok("and its Undo brings the draft back",
+       undone_d.get("ok") is True and bytes71(twice72) == files_d)
+
+    print("  a record of takes that names none")
+    bare72 = rec72 / "Loose" / "f"
+    bare72.mkdir(parents=True)
+    (bare72 / "f.wav").write_bytes(b"bare")
+    bare_token = holding71.hold(rec72, {"kind": "take", "reason": "delete", "rows": "kept",
+                                        "takes": []}, [bare72])
+    mark72 = len(sent71)
+    ended_b = s72.end_trash(bare_token)
+    ok("r. an entry whose record names no rows to ask about goes back, not to the Trash",
+       ended_b.get("ok") is True and (bare72 / "f.wav").is_file()
+       and (bare72 / "f.wav").read_bytes() == b"bare"
+       and bare_token not in entries71(rec72) and sent71[mark72:] == [])
+
+    print("  what stays, said at start")
+    # A second record that cannot be read; a discard the Trash will refuse;
+    # and an Undo the app died in, whose rows will not come back (a take has
+    # its number now), so it ends with its files back and its entry gone.
+    garbled2 = s72.delete_take(str(dec72), 2).get("undo")
+    (rec72 / "_deleting" / garbled2 / "record.json").write_text("{not json", encoding="utf-8")
+    refused_d = dec72 / "_drafts" / "take 5"
+    write_wav(refused_d / "Gtr.wav", 500, seconds=1.0)
+    refused_tok = s72.discard_draft(str(refused_d)).get("undo")
+    dir_u = dir72(s72, dec72, 1)
+    files_u = bytes71(dir_u)
+    gone_u = s72.delete_take(str(dec72), 1).get("undo")
+    s72._lib.restore_takes = crash72
+    s72._lib.restore_take = crash72
+    try:
+        s72.undo_trash(gone_u)
+    except Crash72:
+        pass
+    del s72._lib.restore_takes, s72._lib.restore_take
+    add71(s72, dec72, 1, "Ogon")
+    ok("(the Undo's files are back, its entry says it was under way, and take 1 is another take)",
+       bytes71(dir_u) == files_u and record72(gone_u).get("rows") == "restoring"
+       and dir72(s72, dec72, 1) != dir_u)
+
+    def refusing72(path, fallback_root=None):
+        return {"ok": False, "error": "The Trash said no"}
+
+    apimod72.move_to_trash = refusing72
+    caught72 = Caught72()
+    logging.getLogger("rehearsal_recorder").addHandler(caught72)
+    t72 = restart72()
+    logging.getLogger("rehearsal_recorder").removeHandler(caught72)
+    apimod72.move_to_trash = trash71
+    problems_t = t72.startup_problems()
+    said_t = problems_t[0]["message"] if problems_t else ""
+    kept_t = [str(rec72 / "_deleting" / t) for t in (garbled72, garbled2, refused_tok)]
+    ok("s. every entry that stays is said in one start problem, naming each folder",
+       [p["name"] for p in problems_t] == ["RemovalKept"]
+       and all(k in said_t for k in kept_t) and said_t.startswith("3 things"))
+    ok("t. an entry an end gave up on, and that is gone, is never said to stay: "
+       "not to the person, not in the log",
+       gone_u not in entries71(rec72) and gone_u not in said_t
+       and not any(gone_u in line and "stays" in line for line in caught72.said)
+       and bytes71(dir_u) == files_u)
+    ok("u. one whose record cannot be read is said plainly: where it came from cannot be "
+       "told, and what is needed can be moved out of it; only the other is tried again",
+       said_t.count("cannot tell where it came from") == 2
+       and said_t.count("can be moved out of that folder") == 2
+       and said_t.count("tried again next time") == 1
+       and "(The Trash said no): it will be tried again next time" in said_t)
+    t72.end_trash(refused_tok)
+    t72.shutdown()
+    for api72 in opened72[:3] + [s72]:
         api72._library.close()
+
+    print("  what stays only because the library cannot be opened")
+    tmp73 = Path(tempfile.mkdtemp())
+    rec73 = newer_folder(tmp73 / "Rec")
+    held73 = rec73 / "Sunday - 2026-10-04 19-00" / "01 - Polyn"
+    write_wav(held73 / "Gtr.wav", 730, seconds=1.0)
+    files73 = bytes71(held73)
+    ref73 = {"id": 1, "created_at": "2026-10-04T19:00:00", "folder": "Sunday - 2026-10-04 19-00"}
+    token73 = holding71.hold(rec73, {
+        "kind": "take", "reason": "delete", "rows": "kept",
+        "item": {"kind": "take", "rehearsal_id": 1, "take_number": 1},
+        "rehearsal": ref73,
+        "takes": [{"take": {"id": 1, "take_number": 1}, "rehearsal": ref73,
+                   "files": [{"file": str(held73 / "Gtr.wav")}]}],
+        "shared": []}, [held73])
+    _, u73 = fresh_api(tmp73)
+    ok("v. an entry that stays only for want of the library adds nothing to the library's "
+       "own start problem, which is not buried",
+       u73.startup_problems() == [{"name": "LibraryUnavailable", "message": NEWER_DATABASE}]
+       and entries71(rec73) == [token73]
+       and bytes71(rec73 / "_deleting" / token73 / "0" / held73.name) == files73)
+    loose73 = rec73 / "Loose"
+    loose73.mkdir()
+    (loose73 / "f.wav").write_bytes(b"loose")
+    garbled73 = holding71.hold(rec73, {"kind": "draft", "reason": "discard", "rows": "none"},
+                               [loose73])
+    (rec73 / "_deleting" / garbled73 / "record.json").write_text("{not json", encoding="utf-8")
+    _, v73 = fresh_api(tmp73)
+    problems73 = v73.startup_problems()
+    ok("and one that stays for another reason is said first, so the library's comes last, "
+       "on top, and names only itself",
+       [p["name"] for p in problems73] == ["RemovalKept", "LibraryUnavailable"]
+       and str(rec73 / "_deleting" / garbled73) in problems73[0]["message"]
+       and token73 not in problems73[0]["message"]
+       and sorted(entries71(rec73)) == sorted([token73, garbled73]))
     apimod72.move_to_trash = real_trash71
 
     print("\n" + "=" * 60)

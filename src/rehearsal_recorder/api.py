@@ -237,6 +237,29 @@ def _same_draft(a, b):
     return bool(a.get("draft")) and a.get("draft") == b.get("draft")
 
 
+def _removals_kept(kept):
+    """
+    The one start problem for removals kept in the holding folder (_end_all),
+    each named by its folder with what becomes of it: tried again at the
+    next start, or, for one whose record cannot be read, nothing the app can
+    ever do, since it cannot tell where it came from.
+    """
+    if len(kept) == 1:
+        said = ["Something that was being removed could not be put back or moved "
+                "to the Trash, so it is kept as it is."]
+    else:
+        said = [f"{len(kept)} things that were being removed could not be put back "
+                "or moved to the Trash, so they are kept as they are."]
+    for k in kept:
+        if k["error"] == holding.UNREADABLE:
+            said.append(f"“{k['folder']}”: its record cannot be read, so the app cannot "
+                        "tell where it came from. Anything in it you need can be moved "
+                        "out of that folder.")
+        else:
+            said.append(f"“{k['folder']}” ({k['error']}): it will be tried again next time.")
+    return " ".join(said)
+
+
 def _ends(new, was):
     """
     Whether removing `new` ends a waiting entry of `was`, both identities.
@@ -1072,9 +1095,11 @@ class Api:
         # Undo can reach from the new one: it goes on first, against the old
         # folder's library (an entry whose rows were never dropped goes back
         # into it), and only then is the new one put in its place, so no
-        # removal on another thread reaches the new library meanwhile.
+        # removal on another thread reaches the new library meanwhile. One
+        # that stays there is named in the answer ("kept", its folder): no
+        # start looks in the old folder again, so nothing else ever would.
         with self._files_lock:
-            self._end_all()
+            kept = self._end_all()
             self._install_library(library)
             self._recordings_dir = folder
         self._config["recordings_dir"] = str(folder)
@@ -1083,7 +1108,8 @@ class Api:
         # folder right away, without restarting the app.
         self._server.set_media_root(folder)
         self._names_pass.request()
-        return {"ok": True, "recordings_dir": str(folder)}
+        return {"ok": True, "recordings_dir": str(folder),
+                "kept": [k["folder"] for k in kept]}
 
     def choose_recordings_dir(self):
         if self._window is None:
@@ -2667,9 +2693,15 @@ class Api:
         if not self._inside_recordings(draft_dir):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
         with self._files_lock:
+            # Asked before anything ends: a second call for a draft already
+            # discarded (a double click) would otherwise end the first one's
+            # entry, a draft of the very same name, and take its Undo with it.
+            if not draft_dir.exists():
+                return {"ok": False, "error": "It is not there any more"}
             ref = self._draft_rehearsal(draft_dir)
             ident = self._draft_identity(draft_dir, ref)
             self._end_before([ident] if ident is not None else [])
+            # And again after: an end moves files.
             if not draft_dir.exists():
                 return {"ok": False, "error": "It is not there any more"}
             self._release_player_in(draft_dir)
@@ -3943,9 +3975,15 @@ class Api:
 
     def _kept(self, token, error):
         """Says, in the log a windowed build keeps, that an entry stays in the
-        holding folder for the next end, and why."""
-        log.error("removal %s stays in %s for the next end: %s",
-                  token, self._recordings_dir / holding.HOLDING_DIR / token, error)
+        holding folder for the next end, and why; returns its folder. Only
+        an entry still there: one an end failed on after all may be gone (an
+        Undo finished whose rows would not come back, said in its own log
+        line), and that one returns None, unsaid."""
+        where = self._recordings_dir / holding.HOLDING_DIR / token
+        if not where.exists():
+            return None
+        log.error("removal %s stays in %s for the next end: %s", token, where, error)
+        return where
 
     def _end_before(self, idents, stale=True, reasons=None):
         """Ends every waiting entry of the same item as any of `idents`
@@ -4045,7 +4083,9 @@ class Api:
             found = [self._lib.rehearsal_there(record["rehearsal"])]
         else:
             return None
-        if found and all(found):
+        if not found:
+            return None
+        if all(found):
             return True
         return False if not any(found) else None
 
@@ -4061,27 +4101,39 @@ class Api:
         return [self._back_in(folder, was, i) for i in items]
 
     def _end_all(self, at_start=False):
-        """Every entry waiting goes on to the Trash, or back: at quit, at
-        start, and before the recordings folder changes. One that fails stays
-        for the next start, and the others still go. At start, each that
-        stays is also said once to the person (startup_problems): it is what
-        nothing else would ever show them."""
+        """
+        Every entry waiting goes on to the Trash, or back: at quit, at start,
+        and before the recordings folder changes. One that fails stays for
+        the next end, and the others still go. Returns those that stay, each
+        {"folder", "error", "library"}: "library" true when it stayed only
+        because the library is not open.
+
+        At start they are said to the person too, as nothing else would ever
+        show them: all in one start problem, put first, since the interface
+        shows only the last problem said and the others (the library not
+        opening, a history that cannot be read) must not be buried by it.
+        Not one that stayed only for want of the library: that is said
+        already, by LibraryUnavailable, and goes when the library is back.
+        """
+        kept = []
         for token in holding.tokens(self._recordings_dir):
+            library = False
             try:
                 result = self._end(token)
+            except LibraryUnavailable as e:
+                result, library = {"ok": False, "error": str(e)}, True
             except Exception as e:  # noqa: BLE001 - starting and quitting go on
                 result = {"ok": False, "error": str(e)}
             if result.get("ok"):
                 continue
-            self._kept(token, result.get("error"))
-            if at_start:
-                where = self._recordings_dir / holding.HOLDING_DIR / token
-                self._problems.append({
-                    "name": "RemovalKept",
-                    "message": "Something that was being removed could not be put back or "
-                               f"moved to the Trash ({result.get('error')}). It is kept, as "
-                               f"it is, in “{where}”, and will be tried again next time.",
-                })
+            where = self._kept(token, result.get("error"))
+            if where is not None:
+                kept.append({"folder": str(where), "error": result.get("error"),
+                             "library": library})
+        said = [k for k in kept if not k["library"]]
+        if at_start and said:
+            self._problems.insert(0, {"name": "RemovalKept", "message": _removals_kept(said)})
+        return kept
 
     def end_trash(self, token):
         """
