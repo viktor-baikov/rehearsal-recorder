@@ -292,12 +292,11 @@ export function UnderTheHood() {
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <CopyReport label="Copy details for a bug report" />
-          {/* Bare words, flush with the button above: no padding, and none
-              of the clear 1 px frame every Button has, or the words sit
-              1 px in from the edge and the box is 2 px larger than they are. */}
+          {/* Bare words, flush with the button above: no padding (a link
+              has no frame either, so nothing sets the words in). */}
           <Button
             variant="link"
-            className="h-auto border-0 p-0 text-sm"
+            className="h-auto p-0 text-sm"
             onClick={() => void api().open_releases()}
           >
             All releases on GitHub

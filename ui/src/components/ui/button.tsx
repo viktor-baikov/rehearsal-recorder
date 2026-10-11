@@ -11,7 +11,8 @@ import { Slot } from "radix-ui"
   would otherwise change width on every click (a heavier word is wider), and
   every pill beside it would shift. The fill carries the emphasis. The same goes
   for the frame: every variant has a 1 px border (clear on all but outline), so
-  swapping variants leaves the width alone.
+  swapping variants leaves the width alone. A link has none: it is bare words,
+  never swapped with a filled button, and a frame would set it 1 px in.
 
   Sizes are named for their place, not their height: the footer's big
   button, the aside next to it, a list row's, a row's icon. Every size is a
@@ -36,7 +37,9 @@ const buttonVariants = cva(
           "bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         ghost:
           "border-transparent hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "border-transparent text-foreground underline decoration-current/40 decoration-1 underline-offset-4 hover:decoration-current",
+        // No frame: bare words sit flush with what is beside them, and a link
+        // never swaps with a filled button, so it has no width to keep.
+        link: "border-0 text-foreground underline decoration-current/40 decoration-1 underline-offset-4 hover:decoration-current",
       },
       size: {
         default: "h-9 rounded-md px-4 py-2 has-[>svg]:px-3",

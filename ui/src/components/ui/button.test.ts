@@ -39,12 +39,22 @@ describe("Button variants", () => {
   it("gives every variant the same 1 px border, clear on all but outline", () => {
     // Outline's frame takes 2 px of width; a variant without one is 2 px
     // narrower, so swapping between them would move whatever sits beside.
-    for (const variant of ["default", "strong", "destructive", "outline", "ghost", "link"] as const) {
-      const tokens = looks({ variant }).split(/\s+/)
+    // Not link: it never swaps with a filled button (see the next test).
+    for (const variant of ["default", "strong", "destructive", "outline", "ghost"] as const) {
+      const tokens = cn(looks({ variant })).split(/\s+/)
       expect(tokens, variant).toContain("border")
       if (variant === "outline") expect(tokens, variant).not.toContain("border-transparent")
       else expect(tokens, variant).toContain("border-transparent")
     }
+  })
+
+  it("gives a link no frame at all, so its words sit flush with what is beside it", () => {
+    // As the Button merges its classes: the variant's border-0 wins over the
+    // base's border, so there is no clear 1 px around the words either.
+    const tokens = cn(looks({ variant: "link" })).split(/\s+/)
+    expect(tokens).toContain("border-0")
+    expect(tokens).not.toContain("border")
+    expect(tokens).not.toContain("border-transparent")
   })
 
   it("has no secondary", () => {

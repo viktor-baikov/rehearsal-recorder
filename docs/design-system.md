@@ -176,7 +176,9 @@ piece of its own moves onto the shared one when it is redone.
   `row`, `footer`, `footer-aside`, `icon`, `icon-row`, `icon-tiny`, `player`
   and `lane`. Every variant has the same weight and the same 1 px border, so
   a toggle that swaps variants never changes width and never moves what is
-  beside it. The check refuses `<button` outside `components/ui/`.
+  beside it; all but `link`, which has no frame: it is bare words, never
+  swapped with a filled button, and a clear frame set them 1 px in from what
+  they line up with. The check refuses `<button` outside `components/ui/`.
 - **C2. The small player**, `PlayButton`: one round ▶ for a take in a list
   or on a page, where there were four hand-made ones in three sizes. 32 px
   (`size="row"`), or 48 on the song page (`"head"`); a thin border, and the
