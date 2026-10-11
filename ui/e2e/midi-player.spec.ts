@@ -491,7 +491,6 @@ test.describe("notes in the player", () => {
     await expect.poll(() => callCount(page, "take_notes")).toBe(1)
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
-    await page.getByRole("button", { name: "Crop", exact: true }).click()
     await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
     expect((await calls(page, "crop_draft"))[0].args[4]).toEqual(NOTES)
     // The cut take is a take opened again: its notes are asked for anew.

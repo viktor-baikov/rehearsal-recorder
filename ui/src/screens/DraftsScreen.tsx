@@ -3,13 +3,13 @@ import { LifeBuoy, Save, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FooterRow } from "@/components/FooterRow"
 import { Shell } from "@/components/Shell"
-import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { RunningLine } from "@/components/RunningLine"
 import { api, type Draft } from "@/lib/api"
 import { formatDateHuman, formatMMSS } from "@/lib/format"
-import { canBePutBack, goesTo } from "@/lib/deletion"
+import { wentTo } from "@/lib/deletion"
 import { useActivity, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
+import { offerUndo } from "@/lib/trash"
 
 /**
  * Takes that were recorded but never saved — the app was closed or died
@@ -25,15 +25,18 @@ const SAID = "drafts"
 export function DraftsScreen({
   drafts,
   onDone,
+  onReopen,
 }: {
   drafts: Draft[]
   onDone: () => void
+  /** The list again, after it closed because its last take was discarded
+   *  and Undo brought that one back. */
+  onReopen: () => void
 }) {
   const [remaining, setRemaining] = useState(drafts)
   const [busy, setBusy] = useState<string | null>(null)
   // Turning a long take's raw tracks into .wav takes real seconds.
   const { entries: work } = useActivity()
-  const [toDiscard, setToDiscard] = useState<Draft | null>(null)
 
   const finish = (rest: Draft[]) => {
     setRemaining(rest)
@@ -52,6 +55,9 @@ export function DraftsScreen({
     finish(remaining.filter((d) => d.dir !== draft.dir))
   }
 
+  // Asks nothing: Undo brings the take back, into this list, or with the
+  // list when it closed because this was the last one in it. Named as the
+  // list names it, by its rehearsal.
   const discard = async (draft: Draft) => {
     setBusy(draft.dir)
     dismiss(SAID)
@@ -61,7 +67,17 @@ export function DraftsScreen({
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not discard the take" })
       return
     }
-    finish(remaining.filter((d) => d.dir !== draft.dir))
+    const rest = remaining.filter((d) => d.dir !== draft.dir)
+    finish(rest)
+    if (!res.undo) return
+    offerUndo({
+      text: wentTo(`“${draft.rehearsal_name}”`),
+      token: res.undo,
+      onUndone: async () => {
+        if (rest.length === 0) onReopen()
+        else setRemaining(await api().list_drafts())
+      },
+    })
   }
 
   return (
@@ -121,7 +137,7 @@ export function DraftsScreen({
               <Button
                 variant="ghost"
                 size="row"
-                onClick={() => setToDiscard(draft)}
+                onClick={() => void discard(draft)}
                 disabled={busy !== null}
                 className="text-muted-foreground hover:text-destructive"
               >
@@ -140,18 +156,6 @@ export function DraftsScreen({
           ))}
         </div>
       </div>
-
-      <ConfirmDialog
-        open={toDiscard !== null}
-        onOpenChange={(open) => !open && setToDiscard(null)}
-        title="Discard this unsaved take?"
-        description={`The recording ${goesTo()}. ${canBePutBack()}`}
-        actionLabel="Discard"
-        onConfirm={() => {
-          if (toDiscard) void discard(toDiscard)
-          setToDiscard(null)
-        }}
-      />
     </Shell>
   )
 }

@@ -4,6 +4,7 @@ import {
   dragRegion,
   expect,
   nameTake,
+  notices,
   openApp,
   recordTake,
   startRehearsal,
@@ -168,7 +169,6 @@ test("a take renamed and then cropped keeps its new name, bars and line", async 
   await expect(title(page)).toHaveText("Dym 2")
   await dragRegion(page, 0.25, 0.75)
   await page.getByRole("button", { name: "Crop to the region" }).click()
-  await page.getByRole("button", { name: "Crop", exact: true }).click()
   await expect(page.getByText(/^Take 4 recorded/)).toBeVisible()
   await expect(line(page)).toHaveText(/^0:03 · /)
   await expect(title(page)).toHaveText("Dym 2")
@@ -190,20 +190,26 @@ test("Space types in the dialog and Esc closes it without discarding", async ({ 
   await page.keyboard.press("Escape")
   await expect(dialog(page)).toHaveCount(0)
   await page.waitForTimeout(200)
-  await expect(page.getByText("Discard this take?")).toHaveCount(0)
   await expect(title(page)).toHaveText("Take 1")
   expect(await callCount(page, "discard_take")).toBe(0)
 })
 
-test("outside the dialog Space saves and Esc asks", async ({ page }) => {
+test("outside the dialog Esc discards at once, Undo brings it back, and Space saves", async ({
+  page,
+}) => {
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
   await nameTake(page, "Sonca")
   await page.keyboard.press("Escape")
-  await expect(page.getByText("Discard this take?")).toBeVisible()
-  await page.getByRole("button", { name: "Cancel" }).click()
-  await expect(page.getByText("Discard this take?")).toHaveCount(0)
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(title(page)).toHaveCount(0)
+  expect(await callCount(page, "discard_take")).toBe(1)
+  await notices(page)
+    .filter({ hasText: "“Sonca 1” went to the Trash." })
+    .getByRole("button", { name: "Undo" })
+    .click()
+  await expect(title(page)).toHaveText("Sonca 1")
   await page.keyboard.press("Space")
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Sonca")
 })

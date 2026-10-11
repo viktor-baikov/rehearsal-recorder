@@ -81,11 +81,11 @@ let steppedOut: KeyboardEvent | null = null
  * Space and Escape are the screen's again. Letters, Space and the arrows in
  * a field stay the field's: that is typing.
  *
- * Leaving rather than acting at once, because of the screen where a field
- * matters most: a take is named on the review screen, whose Escape asks to
- * throw the take away. Name, Escape, Space saves it. Blurring is also what
- * a click elsewhere does, so a field that keeps what was typed when it
- * loses focus keeps it here too.
+ * Leaving rather than acting at once, because a take is named in a field
+ * on screens whose Escape does something: the rehearsal screen's finishes
+ * the rehearsal, and the screen after a take's throws the take away. Name,
+ * Escape, Space records. Blurring is also what a click elsewhere does, so a
+ * field that keeps what was typed when it loses focus keeps it here too.
  *
  * Called from the window listener above and from useEscape, whichever the
  * keydown reaches first; the second finds it already done.
@@ -176,9 +176,11 @@ export function useSpacebar(handler: () => void, enabled = true) {
 /**
  * Escape means one level up, and each screen decides what its level is: the
  * open take first, then the rehearsal it was in, then the screen itself. It
- * never climbs past a decision — it will not end a rehearsal, stop a
- * recording, or throw a take away without asking — because a key pressed by
- * accident should cost nothing that cannot be got back.
+ * never climbs past a decision — it will not end a rehearsal or stop a
+ * recording without asking — because a key pressed by accident should cost
+ * nothing that cannot be got back. On the screen after a take it throws the
+ * take away at once, as that screen's Discard does: the notice's Undo gets
+ * it back, screen and all.
  */
 export function useEscape(handler: () => void, enabled = true) {
   const handlerRef = useRef(handler)
@@ -197,7 +199,7 @@ export function useEscape(handler: () => void, enabled = true) {
     // the event has finished travelling, the dialog may be unmounted with
     // focus back on the button that opened it — so a check made then sees no
     // dialog and lets Escape climb a rung it should not have: closing the
-    // player's key list also asked to throw the take away.
+    // player's key list also threw the take away.
     //
     // The acting has to be last, in the bubble phase on window, because a
     // dialog this handler opens goes on screen while the same keydown is

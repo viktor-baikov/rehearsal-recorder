@@ -1,4 +1,14 @@
-import { callCount, calls, expect, nameTake, openApp, recordTake, startRehearsal, test } from "./app.ts"
+import {
+  callCount,
+  calls,
+  expect,
+  nameTake,
+  notices,
+  openApp,
+  recordTake,
+  startRehearsal,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // The band's cloud folder: what goes there, and when.
@@ -60,11 +70,16 @@ test("a take is copied to the cloud from its row, and taken back out again", asy
   expect(shared[0].args[2]).toBe("both")
   await expect(page.getByRole("button", { name: "Cloud copies of Pałyn 1" })).toHaveCount(1)
 
-  // Deleting a take takes its copy out of the cloud folder too, which is the
-  // band's: somebody else may be listening to it. So it says so.
+  // Deleting a take takes its copy out of the cloud folder too, at once; its
+  // Undo puts both back.
   await page.getByRole("button", { name: "Delete take Pałyn 1" }).click()
-  await expect(page.getByRole("dialog")).toContainText("Its copy in the cloud folder goes too.")
-  await page.getByRole("button", { name: "Cancel" }).click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Cloud copies of Pałyn 1" })).toHaveCount(0)
+  await notices(page)
+    .filter({ hasText: "“Pałyn 1” went to the Trash." })
+    .getByRole("button", { name: "Undo" })
+    .click()
+  await expect(page.getByRole("button", { name: "Cloud copies of Pałyn 1" })).toHaveCount(1)
 
   await page.getByRole("button", { name: "Cloud copies of Pałyn 1" }).click()
   await expect(page.getByRole("dialog")).toContainText("already there")

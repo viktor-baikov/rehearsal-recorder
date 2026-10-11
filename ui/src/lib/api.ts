@@ -614,13 +614,29 @@ export type PlayerState = {
   reopened?: boolean
 }
 
+/**
+ * What a removal answers. It is done at once: what went waits in Python's
+ * holding folder, and `undo` is the token its Undo sends back (undo_trash),
+ * or that says its notice ended (end_trash) and it goes on to the Trash.
+ */
 export type DeleteResult = {
   ok: boolean
   error?: string
-  /** true — the system Trash; false — the _deleted folder. Never destroyed. */
-  trashed?: boolean
-  location?: string | null
+  undo?: string | null
   takes_left?: number
+}
+
+/** What an Undo answers: what came back, and where. */
+export type UndoResult = {
+  ok: boolean
+  error?: string
+  kind?: "take" | "takes" | "rehearsal" | "draft" | "crop"
+  folder?: string
+  take_numbers?: number[]
+  temp_dir?: string
+  /** A crop's Undo that went part way and could not be taken back either:
+   *  ending it (end_trash) finishes it. */
+  finishing?: boolean
 }
 
 export type DiskEstimate = {
@@ -864,12 +880,12 @@ type PyApi = {
     /** The .mid files stop_take made, to be kept beside the audio. */
     notes?: NotesFile[]
   ): Promise<Ok<{ take?: Take }>>
-  discard_take(tempDir: string): Promise<Ok>
+  discard_take(tempDir: string): Promise<DeleteResult>
   /**
-   * Keep only [startSec, endSec) of a saved take; the rest goes to the Trash.
-   * `error` can be set even when `ok` is true — the crop itself went
-   * through, but the originals could not be swept away, and `location` is
-   * where they are sitting instead.
+   * Keep only [startSec, endSec) of a saved take. The take as it was waits
+   * for the crop's Undo (`undo`, as a removal's). `error` can be set even
+   * when `ok` is true: the crop went through, but the uncut take could not
+   * be held for an Undo, and `error` says where it is instead.
    */
   crop_take(
     folder: string,
@@ -877,7 +893,7 @@ type PyApi = {
     startSec: number,
     endSec: number
   ): Promise<
-    Ok<{ take?: Take; markers_dropped?: number; location?: string | null }>
+    Ok<{ take?: Take; markers_dropped?: number; undo?: string | null }>
   >
   /** The same, for a take that is still on the review screen. */
   crop_draft(
@@ -893,7 +909,7 @@ type PyApi = {
       /** The notes again, cut to the same part. */
       notes?: NotesFile[]
       duration_sec?: number
-      location?: string | null
+      undo?: string | null
     }>
   >
 
@@ -989,14 +1005,24 @@ type PyApi = {
   set_false_start(seconds: number): Promise<Ok<{ false_start_sec?: number }>>
 
   delete_take(folder: string, takeNumber: number): Promise<DeleteResult>
-  /** Each as delete_take does it; what could not go is said take by take. */
+  /** Each as delete_take does it, all with one Undo (null when none went);
+   *  what could not go is said take by take. */
   delete_takes(
     folder: string,
     takeNumbers: number[]
   ): Promise<
-    Ok<{ deleted?: number[]; failed?: { take_number: number; error: string }[] }>
+    Ok<{
+      deleted?: number[]
+      failed?: { take_number: number; error: string }[]
+      undo?: string | null
+    }>
   >
   delete_rehearsal(folder: string): Promise<DeleteResult>
+  /** A removal's Undo: what went is back where it was. */
+  undo_trash(token: string): Promise<UndoResult>
+  /** A removal's notice has ended: what went goes on to the Trash, or to
+   *  the _deleted folder. ok also for one no longer waiting. */
+  end_trash(token: string): Promise<Ok>
 
   add_take_marker(
     folder: string,
@@ -1066,9 +1092,13 @@ type PyApi = {
   start_interface_check(): Promise<Ok>
   interface_check(): Promise<InterfaceCheck>
   stop_interface_check(): Promise<Ok>
-  set_recordings_dir(path: string): Promise<Ok<{ recordings_dir?: string }>>
+  /** `kept`: the folders of removals that could be neither put back nor
+   *  sent to the Trash before the switch; they stay in the old folder. */
+  set_recordings_dir(
+    path: string
+  ): Promise<Ok<{ recordings_dir?: string; kept?: string[] }>>
   choose_recordings_dir(): Promise<
-    Ok<{ recordings_dir?: string; cancelled?: boolean }>
+    Ok<{ recordings_dir?: string; cancelled?: boolean; kept?: string[] }>
   >
   save_mix(volumes: Record<string, number>): Promise<Ok>
   /** The listening level, kept between takes. Not part of the cloud mix. */

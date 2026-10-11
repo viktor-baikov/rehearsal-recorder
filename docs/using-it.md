@@ -142,8 +142,9 @@ which go was the good one. None of it has to be done:
 - A take shorter than 30 seconds, with no ★ and no marks, is a false
   start: a count-in, or a stop after eight bars. Its bar is dashed, its
   name and length are grey, and it says **false start**. **Clear false
-  starts**, over the takes, moves them all to the Trash, after asking,
-  and their copies in the cloud go with them. How short a false start is
+  starts**, over the takes, moves them all to the Trash at once, and their
+  copies in the cloud go with them; **Undo** brings them back. See
+  [Undo](#undo). How short a false start is
   can be changed in **Settings → Folders**, from 5 to 120 seconds.
 - **Send starred**, beside it, sends every ★ take that is not in the
   cloud folder yet, as **What gets published** in Settings says. See
@@ -253,8 +254,9 @@ goes green, the others grey. A take nobody named says "Take 7", grey, and how lo
 
 The name is filled in for you: after a take called "Pałyn", the next one is
 "Pałyn 2". Check it, then press **Save take** (Space) or **Discard**. A
-discarded take goes to the Trash. Pressing Esc also discards it, but asks
-first.
+discarded take goes to the Trash at once. Pressing Esc also discards it.
+**Undo**, or ⌘Z (Ctrl+Z on Windows), brings it back to this screen as you
+left it, with its name and marks. See [Undo](#undo).
 
 The pencil beside the title renames the take. The songs you have played
 are listed under the name, this rehearsal's first, then the others, most
@@ -317,20 +319,22 @@ rehearsal into the next.
   times. Drag the edges on the ruler to adjust the selection. The cross
   beside its times removes the selection. It leaves the take as it was.
 - **Trim a take:** select the part worth keeping and press **Crop**, under
-  the selection's times. The rest goes to the Trash, and the markers inside
-  the part move with it.
+  the selection's times. It crops at once: the take as it was goes to the
+  Trash, and the markers inside the part move with it. **Undo** puts the
+  uncut take back.
 
 A few things about cropping:
 
-- Markers outside the part you keep are removed. The app tells you how many
-  before it crops.
+- Markers outside the part you keep are removed. **Undo** puts them back
+  with the uncut take.
 - **Crop** is greyed out when the selection is shorter than a second, or when
   it covers the whole take.
 - If the take was already copied to the cloud folder, that copy no longer
   matches and is removed. With automatic sending on, the cropped take is sent
   again right away. Otherwise, send it again by hand.
-- The part you cut off is in the Trash, as one folder named after the take.
-  To get the audio back, move its files back into the take's folder. The app
+- Once the notice has gone, the take as it was is in the Trash, as one
+  folder named after the take with "(before crop)" after it. To get the
+  audio back then, move its files back into the take's folder. The app
   still shows the shorter length, and the markers stay where the crop moved
   them.
 
@@ -467,8 +471,9 @@ a played song to go to its takes. The card shows the set as it was that
 evening, whatever has changed in it since.
 
 You can rename and delete takes and whole rehearsals here. The pencil and
-the bin next to the rehearsal's name work on the rehearsal. Deleting asks
-first, tells you how much space it frees and moves the folder to the Trash.
+the bin next to the rehearsal's name work on the rehearsal. Deleting moves
+the take or the rehearsal's folder to the Trash at once; **Undo** brings it
+back. See [Undo](#undo).
 The header shows how many rehearsals there are, how long you played in all
 and how much disk space they take.
 
@@ -596,8 +601,8 @@ rehearsal, however it was sent, and whether automatic sending is on or not:
 - Rename a take or a rehearsal, and its copies in the cloud get the new name.
 - Crop a take, and its copy is made again from the cropped take: the mix, the
   tracks or both, whatever was there before.
-- Delete a take or a rehearsal, and its copies go to the Trash with it; the
-  question before deleting says so. A rehearsal's folder in the cloud goes
+- Delete a take or a rehearsal, and its copies go to the Trash with it.
+  **Undo** brings them back with it. A rehearsal's folder in the cloud goes
   once nothing is left in it.
 
 If you move a fader, or change the format or the cloud folder, the takes of
@@ -799,8 +804,11 @@ Esc goes one step back. It closes a dialog first, then the strip's columns,
 then the open take, then a take playing in the list of takes, then the
 screen. On the rehearsal screen it finishes the rehearsal, and asks first
 if there are takes in it; the start screen comes next. After a take, it
-asks before discarding the take. Esc never stops a recording; press
-**Stop** for that.
+discards the take, and **Undo** brings it back. Esc never stops a recording;
+press **Stop** for that.
+
+⌘Z on a Mac, Ctrl+Z elsewhere, is **Undo** for the last thing deleted,
+discarded or cropped, while its notice is up. See [Undo](#undo).
 
 While you are typing in a text field, the keys type. Press Esc to leave the
 field, and the keys work again.
@@ -808,6 +816,28 @@ field, and the keys work again.
 Clicking a button or moving a fader with the mouse does not take the keys
 away. Space still does the main thing, and the other keys still work. To
 press a button with Space, move to it with Tab.
+
+## Undo
+
+Deleting a take or a rehearsal, clearing false starts, discarding a take
+and cropping one happen at once, without a question first. A notice in the
+corner says what went, for example "“Pałyn 5” went to the Trash.", with an
+**Undo** button. For 10 seconds, **Undo** or ⌘Z (Ctrl+Z on Windows) puts it
+back where it was: a take with its star, marks and cloud copy, a rehearsal
+with all its takes, a cropped take as it was before the crop, a discarded
+take on the screen after it with the name and marks it had. Holding the
+mouse over the notice keeps it up.
+
+⌘Z brings back the newest one first; an older notice keeps its own
+**Undo**. While you type in a field, ⌘Z is the field's own, and it does
+nothing while a dialog is open or a take is recording.
+
+When the notice goes, what went moves on to the Trash, or the `_deleted`
+folder on a computer without one, where you can still get it back by hand.
+Starting the next take, or finishing the rehearsal, ends the notice for a
+discarded take. Saving or discarding a take ends the notice for a crop made
+on the screen after it. If the app
+closes before the notice goes, what went moves to the Trash then.
 
 ## When something goes wrong
 
@@ -893,8 +923,8 @@ at most the last half minute. The notes of a MIDI track are written the same
 way, and come back with the take.
 
 Next time you open the app, it offers these takes first. **Recover** adds a
-take to its rehearsal, **Discard** moves it to the Trash, and **Decide
-later** keeps it for next time. Closing the window during a take works the
+take to its rehearsal, **Discard** moves it to the Trash at once (**Undo**
+brings it back), and **Decide later** keeps it for next time. Closing the window during a take works the
 same way: the take stops and is offered the next time you open the app.
 
 ## Where the files are
@@ -924,7 +954,8 @@ name. See [Where the .mid files are](#where-the-mid-files-are).
 
 Deleted takes and rehearsals go to the Trash or the Recycle Bin. On a
 computer without one, they go to a `_deleted` folder inside the recordings
-folder.
+folder. Until their notice goes, they wait in a `_deleting` folder inside
+the recordings folder, so that **Undo** can put them back.
 
 Rehearsals with no saved takes are removed on their own. A folder that still
 holds an unsaved take, or any other file, is left alone.

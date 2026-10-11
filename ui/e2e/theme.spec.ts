@@ -64,10 +64,10 @@ test("a figure is in the system font, with digits of one width", async ({ page }
 })
 
 test.describe("motion", () => {
-  /** A dialog on a screen that is not recording: History's delete. */
+  /** A dialog on a screen that is not recording: History's Rename rehearsal. */
   async function openDialog(page: Page) {
     await openHistory(page)
-    await page.getByRole("button", { name: "Delete rehearsal Tuesday jam" }).click()
+    await page.getByRole("button", { name: "Rename rehearsal Tuesday jam" }).click()
     const dialog = page.getByRole("dialog")
     await expect(dialog).toBeVisible()
     return dialog

@@ -178,11 +178,11 @@ test("a dialog opened with its Enter button disabled still has the keyboard insi
 })
 
 test("the title and the text stay while the dialog closes", async ({ page }) => {
-  await openApp(page)
-  await page.getByRole("button", { name: "History", exact: true }).click()
-  await page.getByRole("button", { name: "Delete rehearsal Tuesday jam" }).click()
+  await openApp(page, { before: "window.__CANCEL_LOCATE__ = true;" })
+  await openHistory(page, "Missing jam")
+  await page.getByRole("button", { name: "Remove from history" }).click()
   const dialog = page.getByRole("dialog")
-  await expect(dialog.getByRole("heading")).toHaveText("Delete “Tuesday jam”?")
+  await expect(dialog.getByRole("heading")).toHaveText("Remove “Missing jam” from history?")
   // Looked at one frame after Cancel, with the dialog on its way out: what
   // it asked about is already forgotten, and it still says it.
   const seen = await dialog.getByRole("button", { name: "Cancel" }).evaluate(
@@ -197,8 +197,8 @@ test("the title and the text stay while the dialog closes", async ({ page }) => 
         )
       })
   )
-  expect(seen.title).toBe("Delete “Tuesday jam”?")
-  expect(seen.text).toContain("goes to the Trash")
+  expect(seen.title).toBe("Remove “Missing jam” from history?")
+  expect(seen.text).toContain("Only the entry goes")
   await expect(dialog).toHaveCount(0)
 })
 

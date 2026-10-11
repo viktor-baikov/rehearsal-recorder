@@ -4,6 +4,7 @@ import {
   expect,
   keyOn,
   nameTake,
+  notices,
   openApp,
   recordTake,
   setFake,
@@ -341,9 +342,11 @@ test.describe("on a machine shaped like Windows", () => {
     await openApp(page, { before: WINDOWS })
     await page.getByRole("button", { name: "History", exact: true }).click()
     await page.getByRole("button", { name: "Delete rehearsal Tuesday jam" }).click()
-    await expect(page.getByText("_deleted folder")).toBeVisible()
-    await expect(page.getByText("goes to the Trash")).toHaveCount(0)
-    await expect(page.getByText("Nothing is destroyed")).toHaveCount(1)
+    await expect(
+      notices(page, "done").filter({ hasText: "“Tuesday jam” moved to the _deleted folder." })
+    ).toHaveCount(1)
+    await expect(page.getByText("went to the Trash")).toHaveCount(0)
+    await expect(page.getByText("went to the Recycle Bin")).toHaveCount(0)
   })
 
   test("the recording card is chosen by driver first", async ({ page }) => {

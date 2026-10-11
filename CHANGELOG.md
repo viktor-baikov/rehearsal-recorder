@@ -7,6 +7,10 @@ opening.
 
 ## Unreleased
 
+- **Deleting, discarding and cropping happen at once, with Undo for 10 s.**
+  Deleting a take or a rehearsal, clearing false starts, discarding a take
+  and cropping one no longer ask first: a notice says what went, and its
+  **Undo**, or ⌘Z / Ctrl+Z, puts it back for 10 seconds.
 - **Record what the e-kit plays, or the keyboard.** Every track card has an
   **Audio / Both / MIDI** switch, and a track on *Both* or *MIDI* has a MIDI
   port to pick under it: an e-kit, a keyboard, several at once. The notes are

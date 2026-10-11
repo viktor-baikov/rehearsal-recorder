@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Check, Cloud, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
@@ -10,9 +10,7 @@ import { TakeSummary } from "@/components/TakeSummary"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import { MarkerDialog } from "@/components/MarkerDialog"
-import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
-import { canBePutBack, goesTo } from "@/lib/deletion"
 import {
   api,
   type Marker,
@@ -20,8 +18,10 @@ import {
   type ShareWhat,
   type Take,
 } from "@/lib/api"
-import { croppedButNotSwept, formatMMSS } from "@/lib/format"
-import { dismiss, notify } from "@/lib/notices"
+import { formatMMSS } from "@/lib/format"
+import { nameWithGo } from "@/lib/goes"
+import { dismiss } from "@/lib/notices"
+import { offerCropUndo } from "@/lib/trash"
 import { useRunning, watching } from "@/lib/activity"
 import { useLabels } from "@/lib/labels"
 
@@ -36,8 +36,24 @@ const WHAT_GOES: Record<ShareWhat, string> = {
   both: "the mix and the tracks",
 }
 
+/** What was made of a take on this screen, which only this screen holds
+ *  until it is saved: its name, its marks, and whether it goes to the
+ *  cloud folder. */
+export type ReviewKept = { name: string; markers: Marker[]; send: boolean }
+
+/** A take discarded here, with what Undo needs to bring this screen back
+ *  as it was left: `undo` is the removal's token, `title` the take as the
+ *  screen called it. */
+export type Discarded = {
+  take: PendingTake
+  title: string
+  kept: ReviewKept
+  undo: string | null
+}
+
 export function Review({
   take,
+  kept,
   rehearsalName,
   takes,
   onKept,
@@ -45,17 +61,20 @@ export function Review({
   onCropped,
 }: {
   take: PendingTake
+  /** What was made of it before it was discarded, when Undo brought it
+   *  back. */
+  kept?: ReviewKept
   rehearsalName: string
   /** Tonight's takes kept so far: the song's goes before this one. */
   takes: Take[]
   onKept: () => void
-  onDiscarded: () => void
+  onDiscarded: (gone: Discarded) => void
   onCropped: (take: PendingTake) => void
 }) {
   // A new take is usually another go at the same song, so the name carries
   // over from the previous one with the counter bumped.
   const firstName = take.suggested_name ?? `Take ${take.take_number}`
-  const [name, setName] = useState(firstName)
+  const [name, setName] = useState(kept?.name ?? firstName)
   // And when the band has moved on, the song they moved to is a click, in
   // Rename take.
   const songChoices = useSongChoices(true, null, take.take_number)
@@ -67,7 +86,7 @@ export function Review({
   // Marks made here are held in memory until the take is saved: it has no
   // folder yet, so there is nowhere on disk to put them. They travel with
   // keep_take, and go away with the take if it is discarded.
-  const [markers, setMarkers] = useState<Marker[]>([])
+  const [markers, setMarkers] = useState<Marker[]>(kept?.markers ?? [])
   const labels = useLabels()
 
   // Whether this take goes to the cloud folder, said before it is saved and
@@ -80,7 +99,9 @@ export function Review({
     what: ShareWhat
     format: string
   } | null>(null)
-  const [send, setSend] = useState(false)
+  const [send, setSend] = useState(kept?.send ?? false)
+  // A take brought back by Undo keeps the answer it had.
+  const keptSend = useRef(kept?.send)
   useEffect(() => {
     let alive = true
     void api()
@@ -93,7 +114,7 @@ export function Review({
           what: s.auto_publish_what,
           format: s.cloud_format,
         })
-        setSend(Boolean(s.cloud_dir) && s.auto_publish)
+        setSend(keptSend.current ?? (Boolean(s.cloud_dir) && s.auto_publish))
       })
       .catch(() => {
         /* the bar has said so; the take still saves by the setting */
@@ -104,13 +125,18 @@ export function Review({
   }, [])
   const [editing, setEditing] = useState<Marker | null>(null)
 
-  // This screen is a fork — save or give up — so Escape, which everywhere else
-  // means one level up, has only the one way out to offer. It asks first: the
-  // take was played seconds ago and cannot be played again, and a key pressed
-  // by accident is exactly what a confirmation is for. The Discard button does
-  // not ask, because pressing a labelled button is not an accident.
-  const [discarding, setDiscarding] = useState(false)
-  useEscape(() => setDiscarding(true), !busy)
+  // The take as the screen calls it, with its go, for what a notice says.
+  const title = nameWithGo(name, songChoices) || take.default_name || `Take ${take.take_number}`
+
+  // A crop's Undo, while it is on offer: what ends it. Saving or discarding
+  // the take ends it, as the take it would put back is saved or gone by
+  // then; so does another crop, as Python sends the first one's uncut take
+  // on when the second is done.
+  const cropOffer = useRef<() => void>(() => {})
+  const endCropOffer = () => {
+    cropOffer.current()
+    cropOffer.current = () => {}
+  }
 
   const addMarker = (at: number) => {
     const rounded = Math.round(at * 100) / 100
@@ -142,6 +168,7 @@ export function Review({
     setBusy(true)
     setError(null)
     player.pause()
+    endCropOffer()
     const res = await api().keep_take(
       take.take_number,
       take.temp_dir,
@@ -166,14 +193,25 @@ export function Review({
   // Declared after keep, because that is what it runs.
   useSpacebar(keep, !busy)
 
+  // Discarding asks nothing, from the button or from Escape: this screen is
+  // a fork — save or give up — and Escape, which everywhere else means one
+  // level up, has only the one way out to offer. What goes can be had back
+  // with Undo, this screen with it, as it was left (App).
   const discard = async () => {
     if (busy) return
     setBusy(true)
+    setError(null)
     player.pause()
-    await api().discard_take(take.temp_dir)
+    endCropOffer()
+    const res = await api().discard_take(take.temp_dir)
     setBusy(false)
-    onDiscarded()
+    if (!res.ok) {
+      setError(res.error ?? "Could not discard the take")
+      return
+    }
+    onDiscarded({ take, title, kept: { name, markers, send }, undo: res.undo ?? null })
   }
+  useEscape(() => void discard(), !busy)
 
   // The markers here are held in memory — the take has no folder on disk yet —
   // so they move with the audio by hand rather than coming back from Python.
@@ -183,6 +221,8 @@ export function Review({
     setError(null)
     dismiss("review")
     player.pause()
+    // What the crop's Undo puts back: the take, and its marks, as they are.
+    const before = { take, markers }
     const res = await watching(
       api().crop_draft(take.temp_dir, take.tracks, from, to, take.notes)
     )
@@ -197,22 +237,24 @@ export function Review({
         .map((m) => ({ ...m, at: Math.round((m.at - from) * 100) / 100 }))
     )
     // The notes are cut with the audio. A new list is a take opened again:
-    // the player reads them afresh.
+    // the player reads them afresh, as it does the old ones after an Undo.
     onCropped({
       ...take,
       tracks: res.tracks ?? take.tracks,
       notes: res.notes ?? take.notes,
       duration_sec: res.duration_sec ?? take.duration_sec,
     })
-    // The crop itself went through — only the sweep of the original is what
-    // failed — so this adds to the success path rather than standing in for it.
-    if (res.error) {
-      notify({
-        key: "review",
-        kind: "warning",
-        text: croppedButNotSwept(res.error, res.location),
-      })
-    }
+    endCropOffer()
+    cropOffer.current = offerCropUndo(
+      title,
+      res,
+      () => {
+        cropOffer.current = () => {}
+        onCropped(before.take)
+        setMarkers(before.markers)
+      },
+      "review"
+    )
   }
 
   return (
@@ -237,8 +279,7 @@ export function Review({
           }
         >
           <div className="flex items-center gap-3">
-            {/* Escape asks before discarding; the button itself does not.
-                It is still the button Escape leads to. */}
+            {/* Escape discards, as the button does; Undo brings it back. */}
             <Button
               variant="outline"
               size="footer-aside"
@@ -313,15 +354,6 @@ export function Review({
         onOpenChange={(open) => !open && setEditing(null)}
         onSave={saveMarker}
         onDelete={removeMarker}
-      />
-
-      <ConfirmDialog
-        open={discarding}
-        onOpenChange={setDiscarding}
-        title="Discard this take?"
-        description={`The recording ${goesTo()}. ${canBePutBack()}`}
-        actionLabel="Discard"
-        onConfirm={discard}
       />
     </Shell>
   )

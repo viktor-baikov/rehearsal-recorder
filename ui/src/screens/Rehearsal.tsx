@@ -27,11 +27,12 @@ import {
   type SessionState,
   type Take,
 } from "@/lib/api"
-import { croppedButNotSwept, savedLine } from "@/lib/format"
+import { savedLine } from "@/lib/format"
 import { goFor } from "@/lib/goes"
 import { useRunning, watching } from "@/lib/activity"
-import { dismiss, notify } from "@/lib/notices"
-import { canBePutBack, goPlural, takeCloudToo } from "@/lib/deletion"
+import { dismiss } from "@/lib/notices"
+import { wentTo } from "@/lib/deletion"
+import { offerCropUndo, offerUndo } from "@/lib/trash"
 
 /**
  * The rehearsal hub: what has been recorded, and a big button to record more.
@@ -46,7 +47,8 @@ export function Rehearsal({
   session: Extract<SessionState, { active: true }>
   onStartTake: (takeNumber: number, takeName: string, takeGo: number | null) => void
   onFinished: () => void
-  onChanged: () => void
+  /** Reads the session again, and answers it as it now is. */
+  onChanged: () => Promise<SessionState>
 }) {
   const {
     selected,
@@ -71,7 +73,6 @@ export function Rehearsal({
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [toDelete, setToDelete] = useState<Take | null>(null)
   const [toRename, setToRename] = useState<Take | null>(null)
   const renameChoices = useSongChoices(
     toRename !== null,
@@ -273,6 +274,7 @@ export function Rehearsal({
     return () => clearInterval(id)
   }, [inFlight, onChanged])
 
+  // Asks nothing: the notice's Undo brings the take back into its place.
   const deleteTake = async (take: Take) => {
     player.pause()
     const res = await api().delete_take(session.folder, take.take_number)
@@ -282,6 +284,9 @@ export function Rehearsal({
     }
     forget(take)
     onChanged()
+    if (res.undo) {
+      offerUndo({ text: wentTo(`“${take.name}”`), token: res.undo, onUndone: () => onChanged() })
+    }
   }
 
   const renameTake = async (take: Take, name: string) => {
@@ -316,15 +321,15 @@ export function Rehearsal({
     }
     if (res.take) reselect(res.take)
     onChanged()
-    // The crop itself went through — only the sweep of the original is what
-    // failed — so this adds to the success path rather than standing in for it.
-    if (res.error) {
-      notify({
-        key: "rehearsal",
-        kind: "warning",
-        text: croppedButNotSwept(res.error, res.location),
-      })
-    }
+    offerCropUndo(take.name, res, () => uncropped(take), "rehearsal")
+  }
+
+  // A crop's Undo: the uncut take is under the same paths again, and only a
+  // fresh copy of it tells the player so.
+  const uncropped = async (take: Take) => {
+    const s = await onChanged()
+    const fresh = s.active ? s.takes.find((t) => t.take_number === take.take_number) : undefined
+    if (fresh) reselect(fresh)
   }
 
   const renameRehearsal = async (name: string) => {
@@ -496,7 +501,7 @@ export function Rehearsal({
           onGo={move}
           onRename={setToRename}
           onShare={setToShare}
-          onDelete={setToDelete}
+          onDelete={(take) => void deleteTake(take)}
           onStar={starTake}
           cloudStates={session.cloud_queue}
           emptyHint="Hit Record or press Space — takes show up here and can be played straight away."
@@ -537,7 +542,7 @@ export function Rehearsal({
               onRename={setToRename}
               onStar={starTake}
               onShare={setToShare}
-              onDelete={setToDelete}
+              onDelete={(take) => void deleteTake(take)}
               cloudStates={session.cloud_queue}
               falseStartSec={evening?.falseStartSec}
               folder={session.folder}
@@ -570,21 +575,6 @@ export function Rehearsal({
         actionLabel="Finish"
         destructive={false}
         onConfirm={() => void finish()}
-      />
-
-      <ConfirmDialog
-        open={toDelete !== null}
-        onOpenChange={(open) => !open && setToDelete(null)}
-        title={toDelete && `Delete “${toDelete.name}”?`}
-        description={
-          toDelete &&
-          `The take and all its tracks ${goPlural()}.${takeCloudToo(toDelete)} ${canBePutBack()}`
-        }
-        actionLabel="Delete"
-        onConfirm={() => {
-          if (toDelete) void deleteTake(toDelete)
-          setToDelete(null)
-        }}
       />
 
       <RenameTakeDialog

@@ -307,6 +307,22 @@ function withExtraSongs(r) {
 // Takes deleted from the rehearsals before this one, as "folder#take_number":
 // gone from the library the Songs view reads.
 const deleted = new Set();
+// Removals waiting for their Undo, by the token each answered with, as
+// Python keeps them in its holding folder: each is the function that puts
+// it back and answers what came back. undo_trash runs one, end_trash
+// forgets it (it has gone on to the Trash). A test reads which are waiting.
+window.__UNDOABLE__ = {};
+let removals = 0;
+function hold(putBack) {
+  const token = `undo-${++removals}`;
+  window.__UNDOABLE__[token] = putBack;
+  return token;
+}
+// Takes of the live rehearsal taken out of it, back where they were.
+function backTonight(folder, takes) {
+  if (!session || session.folder !== folder) return;
+  session.takes = [...session.takes, ...takes].sort((a, b) => a.take_number - b.take_number);
+}
 let library = async () => [
   pastRehearsal('/rec/old'), pastRehearsal('/rec/quiet'), withExtraSongs(pastRehearsal('/rec/older')),
   ...(missingRehearsal ? [{folder:missingRehearsal.folder, name:missingRehearsal.name,
@@ -1081,11 +1097,16 @@ window.__MAKE_API__ = () => ({
     cloudQueue = {...cloudQueue, [n]: 'queued'};
     return {ok:true, take};
   }),
-  discard_take: track('discard_take', async () => ({ok:true})),
+  discard_take: track('discard_take', async (dir) => {
+    const folder = session ? session.folder : null;
+    return {ok:true, undo: hold(() => ({kind:'draft', temp_dir:dir, folder}))};
+  }),
   crop_take: track('crop_take', async (folder, n, a, b) => {
     await held('crop_take');
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     if (!take) return {ok:false, error:'Take not found'};
+    // The take as it was, for the crop's Undo.
+    const was = JSON.parse(JSON.stringify(take));
     let dropped = 0;
     take.markers = (take.markers || [])
       .filter(m => { const keep = m.at >= a && m.at <= b; if (!keep) dropped++; return keep; })
@@ -1101,10 +1122,14 @@ window.__MAKE_API__ = () => ({
       for (const n of take.notes) fileDurations[n.file] = take.duration_sec;
     }
     P = null;   // Python lets go of the files before rewriting them
+    const undo = hold(() => {
+      Object.assign(take, was);
+      P = null;
+      return {kind:'crop', folder, take_numbers:[n]};
+    });
     // Deep copy, same as rename_take — a live handle would let the interface
     // alias the mock's own state, which the real bridge never allows.
-    return JSON.parse(JSON.stringify(
-      {ok:true, take, trashed:true, location:null, markers_dropped:dropped}));
+    return JSON.parse(JSON.stringify({ok:true, take, markers_dropped:dropped, undo}));
   }),
   crop_draft: track('crop_draft', async (dir, tracks, a, b, notes) => {
     await held('crop_draft');
@@ -1114,8 +1139,12 @@ window.__MAKE_API__ = () => ({
     const cutNotes = (notes || []).map(n => ({...n, file: n.file + '#' + Math.round(a * 100)}));
     for (const n of cutNotes) fileDurations[n.file] = b - a;
     P = null;
+    const undo = hold(() => {
+      P = null;
+      return {kind:'crop', temp_dir:dir};
+    });
     return JSON.parse(JSON.stringify(
-      {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, trashed:true, location:null}));
+      {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, undo}));
   }),
 
   take_media: track('take_media', async (tracks, _buckets, _from, _to) => tracks.map(t => {
@@ -1322,8 +1351,13 @@ window.__MAKE_API__ = () => ({
     return {ok:true, take:{take_number:1, song:'Recovered', go:1, name:'Recovered 1', duration_sec:5, tracks:[], markers:[]}};
   }),
   discard_draft: track('discard_draft', async (dir) => {
-    drafts = drafts.filter(d => d.dir !== dir);
-    return {ok:true, trashed:true};
+    const at = drafts.findIndex(d => d.dir === dir);
+    if (at < 0) return {ok:false, error:'It is not there any more'};
+    const [draft] = drafts.splice(at, 1);
+    return {ok:true, undo: hold(() => {
+      drafts.splice(at, 0, draft);
+      return {kind:'draft', temp_dir:dir, folder:draft.rehearsal_folder};
+    })};
   }),
 
   list_rehearsals: track('list_rehearsals', async () => ([
@@ -1344,7 +1378,7 @@ window.__MAKE_API__ = () => ({
     {folder:'/rec/older', name:'First rehearsal', created_at:'2026-08-25T19:00:00',
      take_count:2, total_duration_sec:470, disk_bytes:160000000, songs:[{name:'Daroha', takes:2}],
      runs:runsOf(pastRehearsal('/rec/older').takes)},
-    ...(missingRehearsal ? [missingRehearsal] : [])])),
+    ...(missingRehearsal ? [missingRehearsal] : [])].filter(r => !deletedRehearsals.has(r.folder)))),
   forget_rehearsal: track('forget_rehearsal', async (folder) => {
     if (missingRehearsal && folder === missingRehearsal.folder) missingRehearsal = null;
     return {ok:true};
@@ -1394,9 +1428,19 @@ window.__MAKE_API__ = () => ({
       earlier,
       count: earlier.length + 1}));
   }),
+  // Out of the live rehearsal too, as Python takes it out of the library.
   delete_take: track('delete_take', async (folder, n) => {
-    deleted.add(`${folder}#${n}`);
-    return {ok:true, trashed:true, takes_left:0};
+    const key = `${folder}#${n}`;
+    deleted.add(key);
+    const live = session && folder === session.folder
+      ? session.takes.filter(t => t.take_number === n) : [];
+    if (session && live.length) session.takes = session.takes.filter(t => t.take_number !== n);
+    return {ok:true, takes_left: session && folder === session.folder ? session.takes.length : 0,
+      undo: hold(() => {
+        deleted.delete(key);
+        backTonight(folder, live);
+        return {kind:'take', folder, take_numbers:[n]};
+      })};
   }),
   // Python takes them out of the rehearsal, the live one included.
   // A test can make it take a while (__DELETE_MS__), as moving many tracks
@@ -1404,9 +1448,28 @@ window.__MAKE_API__ = () => ({
   delete_takes: track('delete_takes', async (folder, numbers) => {
     if (window.__DELETE_MS__) await new Promise(r => setTimeout(r, window.__DELETE_MS__));
     for (const n of numbers) deleted.add(`${folder}#${n}`);
+    const live = session && folder === session.folder
+      ? session.takes.filter(t => numbers.includes(t.take_number)) : [];
     if (session && folder === session.folder)
       session.takes = session.takes.filter(t => !numbers.includes(t.take_number));
-    return {ok:true, deleted:[...numbers], failed:[]};
+    // All of them in one entry, with one Undo.
+    return {ok:true, deleted:[...numbers], failed:[], undo: numbers.length ? hold(() => {
+      for (const n of numbers) deleted.delete(`${folder}#${n}`);
+      backTonight(folder, live);
+      return {kind:'takes', folder, take_numbers:[...numbers]};
+    }) : null};
+  }),
+  // Python's answers to the notice: Undo puts the removal back; its end
+  // sends it on to the Trash. A token no longer waiting is gone already.
+  undo_trash: track('undo_trash', async (token) => {
+    const putBack = window.__UNDOABLE__[token];
+    if (!putBack) return {ok:false, error:'It has already gone to the Trash.'};
+    delete window.__UNDOABLE__[token];
+    return {ok:true, ...putBack()};
+  }),
+  end_trash: track('end_trash', async (token) => {
+    delete window.__UNDOABLE__[token];
+    return {ok:true};
   }),
   // History's Songs view (api.list_songs, api.get_song), from library().
   // The list is read when it is asked for; a test can hold the answer on its
@@ -1546,7 +1609,10 @@ window.__MAKE_API__ = () => ({
   }),
   delete_rehearsal: track('delete_rehearsal', async (folder) => {
     deletedRehearsals.add(folder);
-    return {ok:true, trashed:true};
+    return {ok:true, undo: hold(() => {
+      deletedRehearsals.delete(folder);
+      return {kind:'rehearsal', folder};
+    })};
   }),
 
   set_cloud_dir: track('set_cloud_dir', async (p) => { cloudDir = p; return {ok:true, cloud_dir:p}; }),
@@ -1725,14 +1791,16 @@ window.__MAKE_API__ = () => ({
     version:'0.2.0'}),
   // A folder under /nope cannot be written to. Its message carries the
   // whole path, so a long one shows what a long message does to a notice.
+  // What waited for its Undo in the old folder is ended before the switch;
+  // window.__KEPT__ is what could not be, which stays there.
   set_recordings_dir: async (p) => {
     if (p.startsWith('/nope')) return {ok:false, error:'Cannot write to ' + p};
     toOtherFolder();
-    return {ok:true, recordings_dir:p};
+    return {ok:true, recordings_dir:p, kept: window.__KEPT__ || []};
   },
   choose_recordings_dir: track('choose_recordings_dir', async () => {
     toOtherFolder();
-    return {ok:true, recordings_dir:'/Users/alex/Dropbox/Band'};
+    return {ok:true, recordings_dir:'/Users/alex/Dropbox/Band', kept: window.__KEPT__ || []};
   }),
   save_mix: track('save_mix', async () => ({ok:true})),
   save_master_volume: track('save_master_volume', async (v) => {
