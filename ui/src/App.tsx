@@ -20,7 +20,7 @@ import { useUndoKey } from "@/hooks/useUndoKey"
 import { reportBridgeError } from "@/lib/bridgeErrors"
 import { loadDeletionKind, wentTo } from "@/lib/deletion"
 import { loadLabels } from "@/lib/labels"
-import { offerUndo } from "@/lib/trash"
+import { draftMovedTo, offerUndo } from "@/lib/trash"
 import {
   applyAppearance,
   readCachedAppearance,
@@ -94,19 +94,19 @@ export function App() {
       discardOffer.current = offerUndo({
         text: wentTo(`“${gone.title}”`),
         token: gone.undo,
-        item: { folder: gone.take.temp_dir },
         onUndone: (r) => {
           back = true
           discardOffer.current = () => {}
           const visit = ++reviewVisit.current
           // From the rehearsal screen, where the take was left for, or from
           // the review screen still on its way there; the offer ends before
-          // any other could be up.
+          // any other could be up. Where Python put it back: a rename of the
+          // rehearsal meanwhile moved it, its files with it.
           setScreen((s) =>
             s.name === "rehearsal" || s.name === "review"
               ? {
                   name: "review",
-                  take: { ...gone.take, temp_dir: r.temp_dir ?? gone.take.temp_dir },
+                  take: draftMovedTo(gone.take, r.temp_dir),
                   kept: gone.kept,
                   visit,
                 }

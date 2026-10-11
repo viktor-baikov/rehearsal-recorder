@@ -2992,7 +2992,7 @@ def main():
     finally:
         del g._crop_tracks
     ok("a take deleted during its crop is reported as not found",
-       vanished == {"ok": False, "error": "Take not found"})
+       vanished == {"ok": False, "error": "Take not found", "ended": []})
     g.finish_rehearsal()
 
     print("\n[25] A rehearsal whose record vanishes during a rename")
@@ -8992,7 +8992,7 @@ def main():
         listed = [(d["tracks"], d["notes"]) for d in b.list_drafts()]
         res = b.recover_draft(str(temp))
         ok("a draft whose audio is lost is listed by its notes, and Recover refuses it as having no audio",
-           listed == [([], ["Drums"])] and res == {"ok": False, "error": "Draft has no audio"})
+           listed == [([], ["Drums"])] and res == {"ok": False, "error": "Draft has no audio", "ended": []})
         ok("it is still listed afterwards, its notes now a .mid",
            [(d["tracks"], d["notes"]) for d in b.list_drafts()] == [([], ["Drums"])] and "Drums.mid" in names67(temp))
         b.shutdown()
@@ -9979,7 +9979,7 @@ def main():
     files_fri = bytes71(fri71)
     gone_fri = u.delete_rehearsal(str(fri71))
     ok("e. deleting a rehearsal answers an Undo, and its folder waits whole",
-       gone_fri.get("ok") is True and set(gone_fri) == {"ok", "undo"} and not fri71.exists()
+       gone_fri.get("ok") is True and set(gone_fri) == {"ok", "undo", "ended"} and not fri71.exists()
        and bytes71(rec71 / "_deleting" / str(gone_fri.get("undo")) / "0" / fri71.name) == files_fri)
     ok("a take of it waiting already went to the Trash before it",
        first_gone not in entries71() and len(binned71(dir3f.name)) == 1)
@@ -10007,7 +10007,7 @@ def main():
     u._session["take_counter"] = 1
     dropped = u.discard_take(str(draft71))
     ok("f. discarding a take answers an Undo, and its draft waits",
-       dropped.get("ok") is True and set(dropped) == {"ok", "undo"} and not draft71.exists())
+       dropped.get("ok") is True and set(dropped) == {"ok", "undo", "ended"} and not draft71.exists())
     ok("Undo puts the folder back at _drafts/take 1, every file in it",
        u.undo_trash(dropped.get("undo")) == {"ok": True, "kind": "draft",
                                               "temp_dir": str(draft71), "folder": str(live71)}
@@ -11654,7 +11654,7 @@ def main():
        "is done, and so does deleting the take",
        during31.get("undo") == wait_c and during31.get("delete") == wait_c)
     ok("on its own, with others, or with its rehearsal",
-       during31.get("takes") == {"ok": True, "deleted": [], "undo": None, "failed": [
+       during31.get("takes") == {"ok": True, "deleted": [], "undo": None, "ended": [], "failed": [
            {"take_number": 31, "error": "Wait until the crop is done."}]}
        and during31.get("rehearsal") == wait_c)
     ok("and renaming the take or its rehearsal",
@@ -11798,7 +11798,7 @@ def main():
     del cr_x._lib.cloud_paths
     ok("a crop whose library fails before it starts says so, and changes nothing: the take's "
        "files, marks and length as they were, and nothing held",
-       cut36 == {"ok": False, "error": "Could not crop: database is locked"}
+       cut36 == {"ok": False, "error": "Could not crop: database is locked", "ended": []}
        and bytes71(dir36) == uncut36 and length_c(cr_x, folder_c, 36) == 4.0
        and marks_c(cr_x, folder_c, 36) == marks_before and entries71(rec_c) == waiting36
        and not (folder_c / f"{dir36.name} (before crop)").exists())
@@ -11871,6 +11871,96 @@ def main():
     for api_c in opened_c[:-1]:
         api_c._library.close()
     apimod_c.move_to_trash = real_trash71
+
+    print("\n[74] Python says which removals it ended")
+    # A removal's Undo is offered by a notice. Python ends a waiting entry of
+    # its own accord when the same item is removed again (_end_before): a
+    # second crop of a take ends the first's, deleting the take ends its
+    # crop's, deleting a rehearsal ends everything of it, saving a draft ends
+    # its crop's. A notice still offering Undo for one of those would only
+    # be told it has gone, so every call that ends one answers which:
+    # "ended", the tokens. The interface lets their notices go. Python knows
+    # an item by its rehearsal's id, which a rename does not change, so the
+    # interface has no matching of its own to do.
+    tmp74 = Path(tempfile.mkdtemp())
+    apimod74, e74 = fresh_api(tmp74)
+    rec74 = e74.recordings_dir
+    apimod74.move_to_trash = trash71
+    folder74 = rec74 / "Ends - 2026-10-11 20-00"
+    e74._lib.create_rehearsal(folder74, "Ends", "2026-10-11T20:00:00", SR, 16, band_c)
+
+    take_c(e74, folder74, 1, "Polyn")
+    first74 = e74.crop_take(str(folder74), 1, 0.5, 3.5)
+    second74 = e74.crop_take(str(folder74), 1, 0.5, 2.5)
+    ok("a. a first crop ends nothing, and says so",
+       first74.get("ok") is True and first74.get("ended") == [])
+    ok("a second crop of the take answers the first crop's token as ended",
+       second74.get("ok") is True and second74.get("ended") == [first74.get("undo")]
+       and first74.get("undo") not in entries71(rec74))
+    gone74 = e74.delete_take(str(folder74), 1)
+    ok("b. deleting the take after its crop answers the crop's token as ended",
+       gone74.get("ok") is True and gone74.get("ended") == [second74.get("undo")])
+
+    take_c(e74, folder74, 2, "Vesna")
+    take_c(e74, folder74, 3, "Ogon")
+    crop74 = e74.crop_take(str(folder74), 2, 0.5, 3.5)
+    cleared74 = e74.delete_takes(str(folder74), [2, 3])
+    ok("and so does clearing it with others",
+       cleared74.get("ok") is True and cleared74.get("ended") == [crop74.get("undo")])
+
+    wed74 = past71(e74, "Wednesday", "2026-09-30T19:00:00", ["Polyn", "Vesna"])
+    take74 = e74.delete_take(str(wed74), 2)
+    draft74 = wed74 / "_drafts" / "take 3"
+    write_wav(draft74 / "Gtr.wav", 74, seconds=1.0)
+    dropped74 = e74.discard_draft(str(draft74))
+    whole74 = e74.delete_rehearsal(str(wed74))
+    ok("c. deleting a rehearsal answers the tokens of its take's and its draft's entries",
+       whole74.get("ok") is True
+       and sorted(whole74.get("ended") or []) == sorted([take74.get("undo"), dropped74.get("undo")]))
+    e74.end_trash(whole74.get("undo"))
+
+    e74.start_rehearsal("Live", None, SR, band_c[:2], 16)
+    live74 = Path(e74._session["folder"])
+
+    def draft74_(n):
+        """A draft on the review screen, four seconds of two WAVs."""
+        where = live74 / "_drafts" / f"take {n}"
+        write_wav(where / "Gtr.wav", 740 + n, seconds=4.0)
+        write_wav(where / "Bass.wav", 750 + n, seconds=4.0)
+        return where, [{"name": "Gtr", "file": str(where / "Gtr.wav")},
+                       {"name": "Bass", "file": str(where / "Bass.wav")}]
+
+    d74, tracks74 = draft74_(1)
+    cut74 = e74.crop_draft(str(d74), tracks74, 1.0, 3.0)
+    again74 = e74.crop_draft(str(d74), tracks74, 0.5, 1.5)
+    ok("a draft cropped twice answers the first crop's token as ended",
+       again74.get("ok") is True and again74.get("ended") == [cut74.get("undo")])
+    e74._session["take_counter"] = 1
+    kept74 = e74.keep_take(1, str(d74), "Kept", again74.get("duration_sec"), tracks74)
+    ok("d. saving a cropped draft answers its crop's token as ended",
+       kept74.get("ok") is True and kept74.get("ended") == [again74.get("undo")])
+
+    d74, tracks74 = draft74_(2)
+    cut74 = e74.crop_draft(str(d74), tracks74, 1.0, 3.0)
+    thrown74 = e74.discard_take(str(d74))
+    ok("e. and so does discarding one",
+       thrown74.get("ok") is True and thrown74.get("ended") == [cut74.get("undo")])
+
+    d74, tracks74 = draft74_(3)
+    cut74 = e74.crop_draft(str(d74), tracks74, 1.0, 3.0)
+    e74.finish_rehearsal()
+    saved74 = e74.recover_draft(str(d74))
+    ok("and rescuing one from the Drafts screen",
+       saved74.get("ok") is True and saved74.get("ended") == [cut74.get("undo")])
+
+    waiting74 = entries71(rec74)
+    moved74 = e74.set_recordings_dir(str(tmp74 / "Elsewhere"))
+    ok("f. switching the recordings folder answers every token it ended there",
+       moved74.get("ok") is True and thrown74.get("undo") in waiting74
+       and sorted(moved74.get("ended") or []) == waiting74)
+
+    e74.shutdown()
+    apimod74.move_to_trash = real_trash71
 
     print("\n" + "=" * 60)
     if problems:

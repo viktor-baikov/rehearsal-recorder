@@ -46,7 +46,7 @@ import {
   formatWhen,
 } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
-import { endOffersFor, offerCropUndo, offerUndo } from "@/lib/trash"
+import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 import {
   useActivity,
   useCloudSettled,
@@ -651,18 +651,17 @@ export function HistoryScreen({
     dismiss(SAID)
     player.pause()
     const res = await api().delete_take(take.folder, take.take_number)
+    // What waited of this take, a crop of it, Python has sent on.
+    endedByPython(res.ended)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not delete the take" })
       return
     }
     forget(take)
-    // What waited of this take, a crop of it, Python has sent on.
-    endOffersFor(take.folder, [take.take_number])
     if (res.undo) {
       offerUndo({
         text: wentTo(`“${take.name}”`),
         token: res.undo,
-        item: { folder: take.folder, takes: [take.take_number] },
         onUndone: () => changed(take.folder),
       })
     }
@@ -768,18 +767,14 @@ export function HistoryScreen({
     player.pause()
     const res = await watching(api().crop_take(take.folder, take.take_number, from, to))
     setBusy(false)
+    // The take's earlier crops, Python has sent on.
+    endedByPython(res.ended)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not crop the take" })
       return
     }
     if (res.take) reselect(placed(take.folder, res.take))
-    offerCropUndo(
-      take.name,
-      res,
-      { folder: take.folder, takes: [take.take_number] },
-      () => uncropped(take),
-      SAID
-    )
+    offerCropUndo(take.name, res, () => uncropped(take), SAID)
     await changed(take.folder)
   }
 
@@ -826,19 +821,18 @@ export function HistoryScreen({
     player.pause()
     const next = neighbourOf(r.folder)
     const res = await api().delete_rehearsal(r.folder)
+    // Everything of it still waiting, its takes', their crops' and its
+    // drafts', Python has sent on with it, under whatever name.
+    endedByPython(res.ended)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not delete the rehearsal" })
       return
     }
     if (r.folder === current) close()
-    // Everything of it still waiting, its takes' and their crops', Python
-    // has sent on with it.
-    endOffersFor(r.folder)
     if (res.undo) {
       offerUndo({
         text: wentTo(`“${r.name}”`),
         token: res.undo,
-        item: { folder: r.folder },
         onUndone: () => refresh(r.folder),
       })
     }

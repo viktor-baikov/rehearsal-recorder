@@ -21,7 +21,7 @@ import {
 import { formatMMSS } from "@/lib/format"
 import { nameWithGo } from "@/lib/goes"
 import { dismiss } from "@/lib/notices"
-import { endOffersFor, offerCropUndo } from "@/lib/trash"
+import { endedByPython, offerCropUndo } from "@/lib/trash"
 import { useRunning, watching } from "@/lib/activity"
 import { useLabels } from "@/lib/labels"
 
@@ -172,13 +172,13 @@ export function Review({
       take.notes
     )
     setBusy(false)
+    // A crop's Undo is over, as Python ended it: the draft it would put the
+    // uncut take back into is a saved take now.
+    endedByPython(res.ended)
     if (!res.ok) {
       setError(res.error ?? "Could not save the take")
       return
     }
-    // A crop's Undo is over, as Python ended it: the draft it would put the
-    // uncut take back into is a saved take now.
-    endOffersFor(take.temp_dir, undefined, { cropsOnly: true })
     onKept()
   }
 
@@ -195,14 +195,15 @@ export function Review({
     setError(null)
     player.pause()
     const res = await api().discard_take(take.temp_dir)
+    // A crop's Undo goes with it, as Python ended it.
+    endedByPython(res.ended)
     if (!res.ok) {
       setBusy(false)
       setError(res.error ?? "Could not discard the take")
       return
     }
     // Still busy: the take is gone, and until App has moved on, Space or
-    // Escape here would act on it. A crop's Undo went with it, in Python.
-    endOffersFor(take.temp_dir)
+    // Escape here would act on it.
     onDiscarded({ take, title, kept: { name, markers, send }, undo: res.undo ?? null })
   }
   useEscape(() => void discard(), !busy)
@@ -221,6 +222,8 @@ export function Review({
       api().crop_draft(take.temp_dir, take.tracks, from, to, take.notes)
     )
     setBusy(false)
+    // The draft's earlier crops, Python has sent on.
+    endedByPython(res.ended)
     if (!res.ok) {
       setError(res.error ?? "Could not crop the take")
       return
@@ -241,7 +244,6 @@ export function Review({
     offerCropUndo(
       title,
       res,
-      { folder: take.temp_dir },
       () => {
         onCropped(before.take)
         setMarkers(before.markers)

@@ -32,7 +32,7 @@ import { goFor } from "@/lib/goes"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss } from "@/lib/notices"
 import { wentTo } from "@/lib/deletion"
-import { endOffersFor, offerCropUndo, offerUndo } from "@/lib/trash"
+import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 
 /**
  * The rehearsal hub: what has been recorded, and a big button to record more.
@@ -278,19 +278,18 @@ export function Rehearsal({
   const deleteTake = async (take: Take) => {
     player.pause()
     const res = await api().delete_take(session.folder, take.take_number)
+    // What waited of this take, a crop of it, Python has sent on.
+    endedByPython(res.ended)
     if (!res.ok) {
       setError(res.error ?? "Could not delete the take")
       return
     }
     forget(take)
     onChanged()
-    // What waited of this take, a crop of it, Python has sent on.
-    endOffersFor(session.folder, [take.take_number])
     if (res.undo) {
       offerUndo({
         text: wentTo(`“${take.name}”`),
         token: res.undo,
-        item: { folder: session.folder, takes: [take.take_number] },
         onUndone: () => onChanged(),
       })
     }
@@ -322,19 +321,15 @@ export function Rehearsal({
     player.pause()
     const res = await watching(api().crop_take(session.folder, take.take_number, from, to))
     setBusy(false)
+    // The take's earlier crops, Python has sent on.
+    endedByPython(res.ended)
     if (!res.ok) {
       setError(res.error ?? "Could not crop the take")
       return
     }
     if (res.take) reselect(res.take)
     onChanged()
-    offerCropUndo(
-      take.name,
-      res,
-      { folder: session.folder, takes: [take.take_number] },
-      () => uncropped(take),
-      "rehearsal"
-    )
+    offerCropUndo(take.name, res, () => uncropped(take), "rehearsal")
   }
 
   // A crop's Undo: the uncut take is under the same paths again, and only a

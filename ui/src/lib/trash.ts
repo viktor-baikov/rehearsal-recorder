@@ -1,7 +1,7 @@
-import { api, type UndoResult } from "@/lib/api"
+import { api, type PendingTake, type UndoResult } from "@/lib/api"
 import { reportBridgeError } from "@/lib/bridgeErrors"
 import { croppedText, trashName } from "@/lib/deletion"
-import { dismiss, notify } from "@/lib/notices"
+import { dismiss, getNotices, notify } from "@/lib/notices"
 
 /**
  * Removing something happens at once, and can be taken back (spec B1).
@@ -21,20 +21,7 @@ import { dismiss, notify } from "@/lib/notices"
 export const GONE_TO_TRASH = "It has already gone to the Trash."
 
 /**
- * What an offer took away, as far as another removal can end it: the
- * folder of a rehearsal, or of a draft; the takes of it, when it was takes;
- * and whether it is a crop, whose entry holds the take as it was.
- */
-export type Removed = { folder: string; takes?: number[]; crop?: boolean }
-
-// The offers on screen, by token, with what each took away: for the ends
-// Python makes on its own (endOffersFor). An offer leaves this when its
-// removal ends or is undone.
-const offers = new Map<string, Removed>()
-
-/**
  * Says what went, under a key of its own (`undo:{token}`), with Undo.
- * `item` is what went, for the ends another removal makes (endOffersFor).
  *
  * Undo asks Python for it back and hands the answer to `onUndone`, which
  * puts the screen back as it was. An Undo refused for now (a crop of the
@@ -50,19 +37,15 @@ const offers = new Map<string, Removed>()
 export function offerUndo({
   text,
   token,
-  item,
   onUndone,
 }: {
   text: string
   token: string
-  item: Removed
   onUndone: (r: UndoResult) => unknown
 }): () => void {
   const key = `undo:${token}`
-  offers.set(token, item)
 
   async function end() {
-    offers.delete(token)
     const r = await api().end_trash(token)
     if (!r.ok) {
       notify({ key, kind: "error", text: r.error ?? `Could not move it to ${trashName()}` })
@@ -72,12 +55,10 @@ export function offerUndo({
   async function undo() {
     const r = await api().undo_trash(token)
     if (r.ok) {
-      offers.delete(token)
       await onUndone(r)
       return
     }
     if (r.finishing) {
-      offers.delete(token)
       // Part of it is back and the rest would not follow: the end finishes
       // the Undo, as it would at the next start.
       const f = await api().end_trash(token)
@@ -86,7 +67,6 @@ export function offerUndo({
       return
     }
     if (r.error === GONE_TO_TRASH) {
-      offers.delete(token)
       notify({ key, kind: "error", text: r.error })
       return
     }
@@ -110,56 +90,44 @@ export function offerUndo({
 }
 
 /**
- * Ends the offers whose removal Python has just ended on its own, which an
- * Undo would only be told has gone (api.py _ends): removing a take ends the
- * offers of that take, a crop of it included; a crop, the take's earlier
- * crops (`cropsOnly`, `except` its own); a rehearsal, all of it, takes and
- * drafts. Called once the removal that ends them went through, as Python
- * ends them then. Their end_trash finds nothing left, and answers ok.
+ * Lets go the notices of the removals Python has just ended on its own
+ * (`ended`, answered by every call that removes, crops or keeps): removing
+ * a take ends its earlier removals and crops, a crop the take's earlier
+ * crops, a rehearsal all of it, takes and drafts, by what Python knows them
+ * by, whatever their folder is called now. An Undo of one would only be told
+ * it has gone. Their end_trash finds nothing left, and answers ok; what was
+ * said of one whose end failed before goes with it, as it is ended now.
  */
-export function endOffersFor(
-  folder: string,
-  takes?: number[],
-  { cropsOnly = false, except }: { cropsOnly?: boolean; except?: string | null } = {}
-) {
-  for (const [token, item] of [...offers]) {
-    if (token === except || (cropsOnly && !item.crop)) continue
-    const same = takes
-      ? item.folder === folder && (item.takes ?? []).some((n) => takes.includes(n))
-      : item.folder === folder || item.folder.startsWith(`${folder}/`)
-    if (same) dismiss(`undo:${token}`)
-  }
+export function endedByPython(tokens?: string[] | null) {
+  for (const token of tokens ?? []) dismiss(`undo:${token}`)
 }
 
-/** Ends every offer: a switch of the recordings folder ended them all
- *  before it switched. */
+/** Ends every offer, its removal with it: a switch of the recordings folder
+ *  ended them all, or left them in the old folder, before it switched. An
+ *  offer is a removal's notice that still has its Undo; what was said of
+ *  one whose end failed stays. */
 export function endEveryOffer() {
-  for (const token of [...offers.keys()]) dismiss(`undo:${token}`)
+  for (const n of getNotices()) {
+    if (n.key.startsWith("undo:") && n.action) dismiss(n.key)
+  }
 }
 
 /**
  * What a crop says once it went through: its Undo, which `onUndone` answers
  * by putting the take back as it was; or, when the uncut take could not wait
  * for one, a warning under the screen's `key` that says where it is. The
- * take's earlier crops end either way, as Python ends them (`item` is the
- * take, or the draft); this one ends when the take is saved, discarded,
- * deleted or cropped again (endOffersFor).
+ * take's earlier crops are ended by Python (the crop's `ended`, which the
+ * caller hands to endedByPython); this one ends when the take is saved,
+ * discarded, deleted or cropped again, and Python says so then.
  */
 export function offerCropUndo(
   name: string,
   res: { undo?: string | null; error?: string },
-  item: Omit<Removed, "crop">,
   onUndone: (r: UndoResult) => unknown,
   key: string
 ) {
-  endOffersFor(item.folder, item.takes, { cropsOnly: true, except: res.undo })
   if (res.undo) {
-    offerUndo({
-      text: croppedText(name),
-      token: res.undo,
-      item: { ...item, crop: true },
-      onUndone,
-    })
+    offerUndo({ text: croppedText(name), token: res.undo, onUndone })
     return
   }
   if (res.error) {
@@ -170,6 +138,29 @@ export function offerCropUndo(
       kind: "warning",
       text: `“${name}” is cropped, but the uncut take could not be moved out of the way, so the crop cannot be undone: ${res.error}.`,
     })
+  }
+}
+
+/**
+ * A discarded take as its Undo brought it back: under `dir`, the folder
+ * Python put the draft back in (undo_trash's `temp_dir`), which is not where
+ * it went from once its rehearsal was renamed meanwhile. Its audio and notes
+ * are moved there with it, so the review screen plays what is on disk.
+ */
+export function draftMovedTo<T extends PendingTake>(take: T, dir: string | undefined): T {
+  const from = take.temp_dir
+  if (!dir || dir === from) return take
+  const moved = <F extends { file: string }>(f: F): F => {
+    const rest = f.file.slice(from.length)
+    return f.file.startsWith(from) && (rest[0] === "/" || rest[0] === "\\")
+      ? { ...f, file: dir + rest }
+      : f
+  }
+  return {
+    ...take,
+    temp_dir: dir,
+    tracks: take.tracks.map(moved),
+    notes: take.notes?.map(moved),
   }
 }
 

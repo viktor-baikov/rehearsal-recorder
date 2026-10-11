@@ -280,6 +280,33 @@ test.describe("on the screen after a take", () => {
     expect(kept[5]).toHaveLength(1)
   })
 
+  test("Undo after the rehearsal was renamed opens the take where the rename moved it", async ({
+    page,
+  }) => {
+    // The draft is in the rehearsal's own folder, as Python keeps it, and
+    // a rename moves it, its files with it.
+    await openApp(page, { before: "window.__DRAFTS_IN_REHEARSAL__ = true;" })
+    await startRehearsal(page)
+    await recordTake(page)
+    await nameTake(page, "Sonca")
+    await page.keyboard.press("Escape")
+    await expect(title(page)).toHaveCount(0)
+    await page.getByRole("button", { name: "Rename rehearsal" }).click()
+    const dialog = page.getByRole("dialog", { name: "Rename rehearsal" })
+    await dialog.locator("input").fill("Tuesday blues")
+    await dialog.getByRole("button", { name: "Rename" }).click()
+    await expect(dialog).toHaveCount(0)
+
+    await said(page, "“Sonca 1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
+    await expect(title(page)).toHaveText("Sonca 1")
+    // Its tracks are read from where they are now, and play.
+    const play = page.getByRole("button", { name: "Play", exact: true })
+    await expect(play).toBeEnabled()
+    await expect(page.getByText("Track file not found")).toHaveCount(0)
+    await play.click()
+    await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+  })
+
   test("starting the next take ends the offer, and the take goes on to the Trash", async ({
     page,
   }) => {
@@ -537,6 +564,27 @@ test("deleting a rehearsal ends the offers of its takes", async ({ page }) => {
   expect(await waiting(page)).not.toContain(token)
 })
 
+test("deleting a rehearsal renamed since ends the offers of its takes", async ({ page }) => {
+  const overview = await tuesday(page)
+  await deleteTake(overview, 2, "Pałyn 2")
+  const take = said(page, "“Pałyn 2” went to the Trash.")
+  await expect(take).toHaveCount(1)
+  const [token] = await waiting(page)
+  // The rename moves the rehearsal's folder; Python knows it, and what of
+  // it waits for an Undo, by its id all the same.
+  await page.getByRole("button", { name: "Rename rehearsal Tuesday jam" }).click()
+  const dialog = page.getByRole("dialog", { name: "Rename rehearsal" })
+  await dialog.locator("input").fill("Tuesday blues")
+  await dialog.getByRole("button", { name: "Rename" }).click()
+  const renamed = page.getByRole("button", { name: "Delete rehearsal Tuesday blues" })
+  await expect(renamed).toBeVisible()
+  await expect(take).toHaveCount(1)
+  await renamed.click()
+  await expect(said(page, "“Tuesday blues” went to the Trash.")).toHaveCount(1)
+  await expect(take).toHaveCount(0)
+  expect(await waiting(page)).not.toContain(token)
+})
+
 test("switching the recordings folder ends every offer", async ({ page }) => {
   const overview = await tuesday(page)
   await deleteTake(overview, 2, "Pałyn 2")
@@ -630,6 +678,31 @@ test("discarding the last unsaved take leaves the list, and Undo opens it again"
   await said(page, "“Tuesday jam” went to the Trash.").getByRole("button", { name: "Undo" }).click()
   await expect(page.getByText("Unsaved takes found")).toBeVisible()
   await expect(page.getByRole("button", { name: "Recover" })).toHaveCount(1)
+})
+
+test("an unsaved take discarded from a list still showing comes back into it", async ({
+  page,
+}) => {
+  await openApp(page, {
+    before: `window.__DRAFTS__ = [
+      {dir: '/rec/old/_drafts/take 4', name: 'take 4', tracks: ['Guitar'], duration_sec: 95,
+       rehearsal_folder: '/rec/old', rehearsal_name: 'Tuesday jam',
+       created_at: '2026-09-10T19:00:00'},
+      {dir: '/rec/quiet/_drafts/take 2', name: 'take 2', tracks: ['Guitar'], duration_sec: 60,
+       rehearsal_folder: '/rec/quiet', rehearsal_name: 'Wednesday jam',
+       created_at: '2026-09-03T19:00:00'}];`,
+  })
+  const list = page.getByText("Unsaved takes found")
+  const recover = page.getByRole("button", { name: "Recover" })
+  await expect(recover).toHaveCount(2)
+  await page.getByRole("button", { name: "Discard" }).first().click()
+  await expect(recover).toHaveCount(1)
+  await expect(list).toBeVisible()
+
+  await said(page, "“Tuesday jam” went to the Trash.").getByRole("button", { name: "Undo" }).click()
+  await expect(recover).toHaveCount(2)
+  await expect(page.getByText("Tuesday jam")).toBeVisible()
+  await expect(list).toHaveCount(1)
 })
 
 test("two unsaved takes discarded, each Undo brings its own back to the list", async ({

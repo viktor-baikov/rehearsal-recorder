@@ -9,7 +9,7 @@ import { formatDateHuman, formatMMSS } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
 import { useActivity, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
-import { offerUndo } from "@/lib/trash"
+import { endedByPython, offerUndo } from "@/lib/trash"
 
 /**
  * Takes that were recorded but never saved — the app was closed or died
@@ -57,6 +57,9 @@ export function DraftsScreen({
     dismiss(SAID)
     const res = await watching(api().recover_draft(draft.dir))
     setBusy(null)
+    // A crop's Undo of it that was waiting, Python has ended, however the
+    // recovery went.
+    endedByPython(res.ended)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not recover the take" })
       return
@@ -73,6 +76,7 @@ export function DraftsScreen({
     dismiss(SAID)
     const res = await api().discard_draft(draft.dir)
     setBusy(null)
+    endedByPython(res.ended)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not discard the take" })
       return
@@ -82,7 +86,6 @@ export function DraftsScreen({
     offerUndo({
       text: wentTo(`“${draft.rehearsal_name}”`),
       token: res.undo,
-      item: { folder: draft.dir },
       onUndone: async () => {
         if (!shown.current) {
           onReopen()

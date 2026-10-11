@@ -179,7 +179,7 @@ async function cropPast(folder, n, a, b) {
   pastMarks[key] = markers;
   for (const t of tracks) fileDurations[t.file] = b - a;
   P = null;
-  endHeld(folder, [n], true);
+  const ended = endHeld(folder, [n], true);
   const undo = hold(() => {
     if (was.crop) pastCrops[key] = was.crop; else delete pastCrops[key];
     if (was.marks) pastMarks[key] = was.marks; else delete pastMarks[key];
@@ -187,7 +187,7 @@ async function cropPast(folder, n, a, b) {
     return {kind:'crop', folder, take_numbers:[n]};
   }, {folder, takes:[n], crop:true});
   return JSON.parse(JSON.stringify({ok:true, take:{...take, duration_sec: b - a, tracks, markers},
-    markers_dropped:dropped, undo}));
+    markers_dropped:dropped, undo, ended}));
 }
 
 // The library's labels, in their order, as list_labels gives them: the four
@@ -360,15 +360,70 @@ function forgetHeld(token) {
 }
 // Python's own ends: removing a take ends what waits of that take, a crop
 // of it among them; a crop, the take's earlier crops; a rehearsal, all of
-// it, its drafts too. They go on to the Trash, with no Undo left.
+// it, its drafts too. They go on to the Trash, with no Undo left, and the
+// call answers their tokens ("ended"), as Python's do. Matched here by the
+// folder each was made with, which a rename does not change (spelledNow):
+// Python knows them by the rehearsal's id.
 function endHeld(folder, takes, cropsOnly = false) {
+  const ended = [];
   for (const [token, item] of Object.entries(heldItems)) {
     if (cropsOnly && !item.crop) continue;
     const same = takes
       ? item.folder === folder && (item.takes || []).some(n => takes.includes(n))
       : item.folder === folder || item.folder.startsWith(folder + '/');
-    if (same) forgetHeld(token);
+    if (same) {
+      forgetHeld(token);
+      ended.push(token);
+    }
   }
+  return ended;
+}
+// Rehearsals renamed (rename_rehearsal), by the folder each was made with:
+// the folder it has now. Python moves the folder and goes on knowing the
+// rehearsal by its id; here everything stays kept under the folder it was
+// made with, and the two cross at the bridge (spelledNow): what comes in
+// under the new folder is read under the old one, and what goes out under
+// the old one is said under the new. A path under a folder a rename moved
+// away is not there any more: it comes in under /gone, where nothing is.
+const renamedTo = new Map();
+const formerFolders = new Set();
+// A rehearsal before this one, renamed: its name now, by the folder it was
+// made with.
+const pastNames = new Map();
+const under = (path, folder) => path === folder || path.startsWith(folder + '/');
+function cameIn(path) {
+  for (const [made, now] of renamedTo) if (under(path, now)) return made + path.slice(now.length);
+  for (const former of formerFolders) if (under(path, former)) return '/gone' + path;
+  return path;
+}
+function goesOut(path) {
+  for (const [made, now] of renamedTo) if (under(path, made)) return now + path.slice(made.length);
+  return path;
+}
+function respell(value, spell) {
+  if (typeof value === 'string') return spell(value);
+  if (Array.isArray(value)) return value.map(v => respell(v, spell));
+  if (value && Object.getPrototypeOf(value) === Object.prototype)
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, respell(v, spell)]));
+  return value;
+}
+function spelledNow(api) {
+  for (const [method, call] of Object.entries(api)) {
+    if (typeof call !== 'function') continue;
+    api[method] = async (...args) => {
+      if (!renamedTo.size) return call(...args);
+      return respell(await call(...respell(args, cameIn)), goesOut);
+    };
+  }
+  return api;
+}
+// Everything waiting ends before the recordings folder changes (api.py
+// _end_all), and is answered as ended; what window.__KEPT__ names is what
+// could not be, which stays in the old folder all the same.
+function endEverything() {
+  const ended = Object.keys(heldItems);
+  for (const token of ended) forgetHeld(token);
+  return ended;
 }
 // Takes of the live rehearsal taken out of it, back where they were.
 function backTonight(folder, takes) {
@@ -391,7 +446,8 @@ function retitle(r, t) {
   return o ? {...t, song:o.song, go:o.go, name:`${o.song} ${o.go}`} : t;
 }
 async function libraryNow() {
-  const all = (await library()).filter(r => !deletedRehearsals.has(r.folder)).map(r => ({...r, missing: Boolean(r.missing),
+  const all = (await library()).filter(r => !deletedRehearsals.has(r.folder)).map(r => ({...r,
+    name: pastNames.get(r.folder) ?? r.name, missing: Boolean(r.missing),
     takes: r.takes.filter(t => !deleted.has(`${r.folder}#${t.take_number}`)).map(t => retitle(r, t))}));
   return all.sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
@@ -1128,6 +1184,12 @@ window.__MAKE_API__ = () => ({
     const take = {ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
       duration_sec:TAKE, suggested_name:suggestName(takeCounter), default_name:suggestName(takeCounter, false),
       tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]};
+    // A page can have the draft where Python keeps it, in the rehearsal's
+    // _drafts folder, its files in it: a rename of the rehearsal moves them.
+    if (window.__DRAFTS_IN_REHEARSAL__ && session) {
+      take.temp_dir = `${session.folder}/_drafts/take ${takeCounter}`;
+      take.tracks = take.tracks.map(t => ({...t, file:`${take.temp_dir}/${t.name}.wav`}));
+    }
     if (!band.some(takesNotes)) return take;
     take.tracks = band.filter(takesSound).map(t => ({name:t.name, file:`/rec/${t.name}.wav`}));
     // A port that was there at any point of the take has its notes; one gone
@@ -1138,7 +1200,7 @@ window.__MAKE_API__ = () => ({
   }),
   keep_take: track('keep_take', async (n, dir, name, dur, tracks, markers, _cloud, notes) => {
     // A crop of the draft waiting for its Undo is over once it is kept.
-    endHeld(dir, null, true);
+    const ended = endHeld(dir, null, true);
     const take = {take_number:n, ...resolved(name, session.takes, n), duration_sec:dur, tracks,
                   markers: (markers || []).map(m => ({...m, label_id: labelIdOf(m.label_id)}))};
     // The notes handed back are kept as they are; a track that took notes and
@@ -1149,12 +1211,12 @@ window.__MAKE_API__ = () => ({
     session.takes.push(take);
     if (n === takeCounter) nextName = null;
     cloudQueue = {...cloudQueue, [n]: 'queued'};
-    return {ok:true, take};
+    return {ok:true, take, ended};
   }),
   discard_take: track('discard_take', async (dir) => {
     const folder = session ? session.folder : null;
-    endHeld(dir, null);
-    return {ok:true, undo: hold(() => ({kind:'draft', temp_dir:dir, folder}), {folder:dir})};
+    const ended = endHeld(dir, null);
+    return {ok:true, ended, undo: hold(() => ({kind:'draft', temp_dir:dir, folder}), {folder:dir})};
   }),
   crop_take: track('crop_take', async (folder, n, a, b) => {
     await held('crop_take');
@@ -1178,7 +1240,7 @@ window.__MAKE_API__ = () => ({
       for (const n of take.notes) fileDurations[n.file] = take.duration_sec;
     }
     P = null;   // Python lets go of the files before rewriting them
-    endHeld(folder, [n], true);
+    const ended = endHeld(folder, [n], true);
     const undo = hold(() => {
       Object.assign(take, was);
       P = null;
@@ -1186,7 +1248,7 @@ window.__MAKE_API__ = () => ({
     }, {folder, takes:[n], crop:true});
     // Deep copy, same as rename_take — a live handle would let the interface
     // alias the mock's own state, which the real bridge never allows.
-    return JSON.parse(JSON.stringify({ok:true, take, markers_dropped:dropped, undo}));
+    return JSON.parse(JSON.stringify({ok:true, take, markers_dropped:dropped, undo, ended}));
   }),
   crop_draft: track('crop_draft', async (dir, tracks, a, b, notes) => {
     await held('crop_draft');
@@ -1196,16 +1258,21 @@ window.__MAKE_API__ = () => ({
     const cutNotes = (notes || []).map(n => ({...n, file: n.file + '#' + Math.round(a * 100)}));
     for (const n of cutNotes) fileDurations[n.file] = b - a;
     P = null;
-    endHeld(dir, null, true);
+    const ended = endHeld(dir, null, true);
     const undo = hold(() => {
       P = null;
       return {kind:'crop', temp_dir:dir};
     }, {folder:dir, crop:true});
     return JSON.parse(JSON.stringify(
-      {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, undo}));
+      {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, undo, ended}));
   }),
 
   take_media: track('take_media', async (tracks, _buckets, _from, _to) => tracks.map(t => {
+    // A file under a folder a rename moved away (spelledNow), as Python
+    // answers one that is not on disk.
+    if (t.file.startsWith('/gone/'))
+      return {name:t.name, url:null, error:'Track file not found', frames:0, samplerate:0,
+              duration_sec:0, peaks:[]};
     const dur = fileDurations[t.file] ?? TAKE;
     const row = Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9);
     const {icon} = withIcon({name: t.name});
@@ -1394,10 +1461,19 @@ window.__MAKE_API__ = () => ({
     // hands out the mock's own state.
     return JSON.parse(JSON.stringify({ok:true, take}));
   }),
+  // The folder moves with the name, as Python moves it: the rehearsal is
+  // said under the new folder from now on, its takes, drafts and what waits
+  // for an Undo of it with it (spelledNow).
   rename_rehearsal: track('rename_rehearsal', async (folder, name) => {
-    if (session) session.name = name;
-    return {ok:true, folder:'/rec/' + name, name,
-            takes: session ? session.takes : []};
+    const live = session && folder === session.folder;
+    if (live) session.name = name;
+    else pastNames.set(folder, name);
+    formerFolders.add(renamedTo.get(folder) ?? folder);
+    renamedTo.set(folder, '/rec/' + name);
+    formerFolders.delete('/rec/' + name);
+    const takes = live ? session.takes
+      : ((await libraryNow()).find(r => r.folder === folder)?.takes ?? []);
+    return JSON.parse(JSON.stringify({ok:true, folder, name, takes}));
   }),
 
   // A copy, as the real bridge answers: a live handle would let the list on
@@ -1405,17 +1481,19 @@ window.__MAKE_API__ = () => ({
   list_drafts: async () => JSON.parse(JSON.stringify(drafts)),
   recover_draft: track('recover_draft', async (dir) => {
     await held('recover_draft');
+    // A crop of the draft waiting for its Undo is over, as when it is kept.
+    const ended = endHeld(dir, null, true);
     if (window.__RECOVER_FAILS__)
-      return {ok:false, error:'Could not recover the take: its folder is read-only'};
+      return {ok:false, error:'Could not recover the take: its folder is read-only', ended};
     drafts = drafts.filter(d => d.dir !== dir);
-    return {ok:true, take:{take_number:1, song:'Recovered', go:1, name:'Recovered 1', duration_sec:5, tracks:[], markers:[]}};
+    return {ok:true, ended, take:{take_number:1, song:'Recovered', go:1, name:'Recovered 1', duration_sec:5, tracks:[], markers:[]}};
   }),
   discard_draft: track('discard_draft', async (dir) => {
     const at = drafts.findIndex(d => d.dir === dir);
     if (at < 0) return {ok:false, error:'It is not there any more'};
-    endHeld(dir, null);
+    const ended = endHeld(dir, null);
     const [draft] = drafts.splice(at, 1);
-    return {ok:true, undo: hold(() => {
+    return {ok:true, ended, undo: hold(() => {
       drafts.splice(Math.min(at, drafts.length), 0, draft);
       return {kind:'draft', temp_dir:dir, folder:draft.rehearsal_folder};
     }, {folder:dir})};
@@ -1439,7 +1517,8 @@ window.__MAKE_API__ = () => ({
     {folder:'/rec/older', name:'First rehearsal', created_at:'2026-08-25T19:00:00',
      take_count:2, total_duration_sec:470, disk_bytes:160000000, songs:[{name:'Daroha', takes:2}],
      runs:runsOf(pastRehearsal('/rec/older').takes)},
-    ...(missingRehearsal ? [missingRehearsal] : [])].filter(r => !deletedRehearsals.has(r.folder)))),
+    ...(missingRehearsal ? [missingRehearsal] : [])].filter(r => !deletedRehearsals.has(r.folder))
+    .map(r => ({...r, name: pastNames.get(r.folder) ?? r.name})))),
   forget_rehearsal: track('forget_rehearsal', async (folder) => {
     if (missingRehearsal && folder === missingRehearsal.folder) missingRehearsal = null;
     return {ok:true};
@@ -1455,6 +1534,7 @@ window.__MAKE_API__ = () => ({
       return {ok:false, error:'Could not read the rehearsal: session.json is damaged'};
     // First rehearsal has the songs a page added, as the library has them.
     const r = folder === '/rec/older' ? withExtraSongs(pastRehearsal(folder)) : pastRehearsal(folder);
+    r.name = pastNames.get(folder) ?? r.name;
     r.takes = r.takes.filter(t => !deleted.has(`${folder}#${t.take_number}`));
     for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
     return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes),
@@ -1491,14 +1571,14 @@ window.__MAKE_API__ = () => ({
   }),
   // Out of the live rehearsal too, as Python takes it out of the library.
   delete_take: track('delete_take', async (folder, n) => {
-    endHeld(folder, [n]);
+    const ended = endHeld(folder, [n]);
     const key = `${folder}#${n}`;
     deleted.add(key);
     const live = session && folder === session.folder
       ? session.takes.filter(t => t.take_number === n) : [];
     if (session && live.length) session.takes = session.takes.filter(t => t.take_number !== n);
     return {ok:true, takes_left: session && folder === session.folder ? session.takes.length : 0,
-      undo: hold(() => {
+      ended, undo: hold(() => {
         deleted.delete(key);
         backTonight(folder, live);
         return {kind:'take', folder, take_numbers:[n]};
@@ -1509,14 +1589,14 @@ window.__MAKE_API__ = () => ({
   // to the Trash does.
   delete_takes: track('delete_takes', async (folder, numbers) => {
     if (window.__DELETE_MS__) await new Promise(r => setTimeout(r, window.__DELETE_MS__));
-    endHeld(folder, numbers);
+    const ended = endHeld(folder, numbers);
     for (const n of numbers) deleted.add(`${folder}#${n}`);
     const live = session && folder === session.folder
       ? session.takes.filter(t => numbers.includes(t.take_number)) : [];
     if (session && folder === session.folder)
       session.takes = session.takes.filter(t => !numbers.includes(t.take_number));
     // All of them in one entry, with one Undo.
-    return {ok:true, deleted:[...numbers], failed:[], undo: numbers.length ? hold(() => {
+    return {ok:true, deleted:[...numbers], failed:[], ended, undo: numbers.length ? hold(() => {
       for (const n of numbers) deleted.delete(`${folder}#${n}`);
       backTonight(folder, live);
       return {kind:'takes', folder, take_numbers:[...numbers]};
@@ -1671,9 +1751,9 @@ window.__MAKE_API__ = () => ({
     return {ok:true};
   }),
   delete_rehearsal: track('delete_rehearsal', async (folder) => {
-    endHeld(folder, null);
+    const ended = endHeld(folder, null);
     deletedRehearsals.add(folder);
-    return {ok:true, undo: hold(() => {
+    return {ok:true, ended, undo: hold(() => {
       deletedRehearsals.delete(folder);
       return {kind:'rehearsal', folder};
     }, {folder})};
@@ -1860,11 +1940,12 @@ window.__MAKE_API__ = () => ({
   set_recordings_dir: async (p) => {
     if (p.startsWith('/nope')) return {ok:false, error:'Cannot write to ' + p};
     toOtherFolder();
-    return {ok:true, recordings_dir:p, kept: window.__KEPT__ || []};
+    return {ok:true, recordings_dir:p, kept: window.__KEPT__ || [], ended: endEverything()};
   },
   choose_recordings_dir: track('choose_recordings_dir', async () => {
     toOtherFolder();
-    return {ok:true, recordings_dir:'/Users/alex/Dropbox/Band', kept: window.__KEPT__ || []};
+    return {ok:true, recordings_dir:'/Users/alex/Dropbox/Band', kept: window.__KEPT__ || [],
+            ended: endEverything()};
   }),
   save_mix: track('save_mix', async () => ({ok:true})),
   save_master_volume: track('save_master_volume', async (v) => {
@@ -1876,7 +1957,7 @@ window.__MAKE_API__ = () => ({
     return {ok:true};
   }),
 });
-window.pywebview = { api: window.__MAKE_API__() };
+window.pywebview = { api: spelledNow(window.__MAKE_API__()) };
 // A page can make a call fail the way pywebview fails one whose Python
 // raised: the promise rejects with an Error carrying the exception's name.
 for (const [method, message] of Object.entries(window.__FAIL__ || {})) {

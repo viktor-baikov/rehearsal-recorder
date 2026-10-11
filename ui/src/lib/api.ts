@@ -618,12 +618,17 @@ export type PlayerState = {
  * What a removal answers. It is done at once: what went waits in Python's
  * holding folder, and `undo` is the token its Undo sends back (undo_trash),
  * or that says its notice ended (end_trash) and it goes on to the Trash.
+ * `ended`: the tokens of earlier removals this one ended on its own (an
+ * earlier removal or crop of the same take, everything of a rehearsal), on a
+ * failure too; their notices go (trash.ts endedByPython). So in every
+ * answer below that has it.
  */
 export type DeleteResult = {
   ok: boolean
   error?: string
   undo?: string | null
   takes_left?: number
+  ended?: string[]
 }
 
 /** What an Undo answers: what came back, and where. */
@@ -879,7 +884,7 @@ type PyApi = {
     sendToCloud?: boolean | null,
     /** The .mid files stop_take made, to be kept beside the audio. */
     notes?: NotesFile[]
-  ): Promise<Ok<{ take?: Take }>>
+  ): Promise<Ok<{ take?: Take; ended?: string[] }>>
   discard_take(tempDir: string): Promise<DeleteResult>
   /**
    * Keep only [startSec, endSec) of a saved take. The take as it was waits
@@ -893,7 +898,7 @@ type PyApi = {
     startSec: number,
     endSec: number
   ): Promise<
-    Ok<{ take?: Take; markers_dropped?: number; undo?: string | null }>
+    Ok<{ take?: Take; markers_dropped?: number; undo?: string | null; ended?: string[] }>
   >
   /** The same, for a take that is still on the review screen. */
   crop_draft(
@@ -910,6 +915,7 @@ type PyApi = {
       notes?: NotesFile[]
       duration_sec?: number
       undo?: string | null
+      ended?: string[]
     }>
   >
 
@@ -1015,6 +1021,7 @@ type PyApi = {
       deleted?: number[]
       failed?: { take_number: number; error: string }[]
       undo?: string | null
+      ended?: string[]
     }>
   >
   delete_rehearsal(folder: string): Promise<DeleteResult>
@@ -1067,7 +1074,7 @@ type PyApi = {
   save_next_set(setId: number | null): Promise<Ok>
 
   list_drafts(): Promise<Draft[]>
-  recover_draft(draftDir: string, name?: string): Promise<Ok<{ take?: Take }>>
+  recover_draft(draftDir: string, name?: string): Promise<Ok<{ take?: Take; ended?: string[] }>>
   discard_draft(draftDir: string): Promise<DeleteResult>
 
   get_settings(): Promise<Settings>
@@ -1096,9 +1103,9 @@ type PyApi = {
    *  sent to the Trash before the switch; they stay in the old folder. */
   set_recordings_dir(
     path: string
-  ): Promise<Ok<{ recordings_dir?: string; kept?: string[] }>>
+  ): Promise<Ok<{ recordings_dir?: string; kept?: string[]; ended?: string[] }>>
   choose_recordings_dir(): Promise<
-    Ok<{ recordings_dir?: string; cancelled?: boolean; kept?: string[] }>
+    Ok<{ recordings_dir?: string; cancelled?: boolean; kept?: string[]; ended?: string[] }>
   >
   save_mix(volumes: Record<string, number>): Promise<Ok>
   /** The listening level, kept between takes. Not part of the cloud mix. */

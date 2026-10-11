@@ -28,7 +28,7 @@ import { SCALE_OPTIONS, THEME_LABELS, type Theme } from "@/lib/appearance"
 import { describeRescan, notConnected } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
 import { loadLabels } from "@/lib/labels"
-import { endEveryOffer, keptText } from "@/lib/trash"
+import { endEveryOffer, endedByPython, keptText } from "@/lib/trash"
 import {
   api,
   type CloudFormat,
@@ -268,14 +268,16 @@ export function Settings({
     // Another library: other labels.
     void loadLabels()
     notify({ key: SAID, kind: "done", text: "Folder saved" })
-    switched(res.kept)
+    switched(res)
   }
 
   // Removals waiting for their Undo in the old folder were ended before the
-  // switch, so their notices go. Those that could be neither put back nor
-  // sent to the Trash stay there: nothing will look there again, so they
-  // are named now, and the warning stays until it is closed.
-  const switched = (kept: string[] | undefined) => {
+  // switch (`ended`), so their notices go, and so do the offers of any that
+  // could not end: their Undo would ask the new folder. Those stay in the
+  // old one, where nothing will look again, so they are named now, and the
+  // warning stays until it is closed.
+  const switched = ({ kept, ended }: { kept?: string[]; ended?: string[] }) => {
+    endedByPython(ended)
     endEveryOffer()
     if (kept?.length) notify({ key: "kept", kind: "warning", text: keptText(kept) })
   }
@@ -325,7 +327,7 @@ export function Settings({
     // Another library: other labels.
     void loadLabels()
     notify({ key: SAID, kind: "done", text: "Folder saved" })
-    switched(res.kept)
+    switched(res)
   }
 
   // Whatever the card said, or the usual three while the answer is pending —
