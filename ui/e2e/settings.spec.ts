@@ -267,6 +267,35 @@ test.describe("Under the hood", () => {
     await expect.poll(() => callCount(page, "open_releases")).toBe(1)
   })
 
+  test("the releases link sits under the copy button, flush with its right edge", async ({
+    page,
+  }) => {
+    await underTheHood(page)
+    const about = page.locator("[aria-label='About this copy']")
+    const copy = about.getByRole("button", { name: "Copy details for a bug report" })
+    const link = about.getByRole("button", { name: "All releases on GitHub" })
+    // Where the link's words end, and the line they are set on: a bare link
+    // is its words, with no frame or padding of its own round them.
+    const words = await link.evaluate((e) => {
+      const range = document.createRange()
+      range.selectNodeContents(e)
+      return {
+        left: range.getBoundingClientRect().left,
+        right: range.getBoundingClientRect().right,
+        line: parseFloat(getComputedStyle(e).lineHeight),
+      }
+    })
+    const box = (await link.boundingBox())!
+    const above = (await copy.boundingBox())!
+    // The words end where the copy button does.
+    expect(words.right).toBeCloseTo(above.x + above.width, 1)
+    // The box is the words: as wide, and one line high, 6 px under the button.
+    expect(box.x).toBeCloseTo(words.left, 1)
+    expect(box.x + box.width).toBeCloseTo(words.right, 1)
+    expect(box.height).toBeCloseTo(words.line, 1)
+    expect(box.y - (above.y + above.height)).toBeCloseTo(6, 1)
+  })
+
   test("checks the interface, and says what came of it", async ({ page }) => {
     await underTheHood(page)
     await page.getByRole("button", { name: "Check the interface" }).click()
