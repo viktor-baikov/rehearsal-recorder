@@ -1105,12 +1105,20 @@ type PyApi = {
   interface_check(): Promise<InterfaceCheck>
   stop_interface_check(): Promise<Ok>
   /** `kept`: the folders of removals that could be neither put back nor
-   *  sent to the Trash before the switch; they stay in the old folder. */
+   *  sent to the Trash before the switch; they stay in the old folder.
+   *  `same`: the folder in use, chosen again, which is no switch: nothing
+   *  ended, and the Undos waiting in it stay. */
   set_recordings_dir(
     path: string
-  ): Promise<Ok<{ recordings_dir?: string; kept?: string[]; ended?: string[] }>>
+  ): Promise<Ok<{ recordings_dir?: string; kept?: string[]; ended?: string[]; same?: boolean }>>
   choose_recordings_dir(): Promise<
-    Ok<{ recordings_dir?: string; cancelled?: boolean; kept?: string[]; ended?: string[] }>
+    Ok<{
+      recordings_dir?: string
+      cancelled?: boolean
+      kept?: string[]
+      ended?: string[]
+      same?: boolean
+    }>
   >
   save_mix(volumes: Record<string, number>): Promise<Ok>
   /** The listening level, kept between takes. Not part of the cloud mix. */

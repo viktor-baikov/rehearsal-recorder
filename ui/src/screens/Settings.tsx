@@ -275,8 +275,18 @@ export function Settings({
   // switch (`ended`), so their notices go, and so do the offers of any that
   // could not end: their Undo would ask the new folder. Those stay in the
   // old one, where nothing will look again, so they are named now, and the
-  // warning stays until it is closed.
-  const switched = ({ kept, ended }: { kept?: string[]; ended?: string[] }) => {
+  // warning stays until it is closed. The folder in use chosen again is no
+  // switch (`same`): its offers stay.
+  const switched = ({
+    kept,
+    ended,
+    same,
+  }: {
+    kept?: string[]
+    ended?: string[]
+    same?: boolean
+  }) => {
+    if (same) return
     endedByPython(ended)
     endEveryOffer()
     if (kept?.length) notify({ key: "kept", kind: "warning", text: keptText(kept) })

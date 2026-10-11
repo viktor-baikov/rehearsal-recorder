@@ -212,6 +212,10 @@ function labelRefusal(name, colour, id) {
   return null;
 }
 
+// The recordings folder in use: the one get_settings starts on, then each
+// switched to.
+let recordingsNow = '/Users/alex/RehearsalRecordings';
+
 // Another recordings folder is another library, with labels of its own: a
 // page can give them (window.__OTHER_FOLDER_LABELS__ = [{id, name, colour}, …]).
 function toOtherFolder() {
@@ -1965,12 +1969,18 @@ window.__MAKE_API__ = () => ({
   // window.__KEPT__ is what could not be, which stays there.
   set_recordings_dir: async (p) => {
     if (p.startsWith('/nope')) return {ok:false, error:'Cannot write to ' + p};
+    // The folder in use, however it is spelled, is no switch (api.py): its
+    // Undos stay, and "same" says so.
+    if (p.replace(/\/+$/, '') === recordingsNow)
+      return {ok:true, recordings_dir:recordingsNow, kept:[], ended:[], same:true};
+    recordingsNow = p;
     toOtherFolder();
     return {ok:true, recordings_dir:p, kept: window.__KEPT__ || [], ended: endEverything()};
   },
   choose_recordings_dir: track('choose_recordings_dir', async () => {
+    recordingsNow = '/Users/alex/Dropbox/Band';
     toOtherFolder();
-    return {ok:true, recordings_dir:'/Users/alex/Dropbox/Band', kept: window.__KEPT__ || [],
+    return {ok:true, recordings_dir:recordingsNow, kept: window.__KEPT__ || [],
             ended: endEverything()};
   }),
   save_mix: track('save_mix', async () => ({ok:true})),

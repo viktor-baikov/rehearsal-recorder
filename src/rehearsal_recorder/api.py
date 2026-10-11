@@ -1154,6 +1154,12 @@ class Api:
         folder = Path(path).expanduser()
         if not folder.is_absolute():
             return {"ok": False, "error": "A full path is required"}
+        # The folder in use, chosen again (the picker opens on it): no
+        # switch, so nothing ends. Its Undos stay, and its library too, and
+        # "same" tells the interface to keep their notices.
+        if _same_folder(folder, self._recordings_dir):
+            return {"ok": True, "recordings_dir": str(self._recordings_dir),
+                    "kept": [], "ended": [], "same": True}
         # The rehearsal in progress is kept in the current folder's database;
         # moving to another one under it would leave its next takes nowhere.
         if self._session is not None:
@@ -3703,10 +3709,18 @@ class Api:
                 found = (self._lib.edit_markers(folder, take_number, shift) is not None
                          and self._lib.update_take(
                              folder, take_number, duration_sec=done["duration_sec"]) is not None)
-            except Exception:
+            except Exception as e:  # noqa: BLE001 - the files are cut: answered
                 log.error("crop: the take's record could not follow its crop; "
-                          "the uncut take is in %s", done["aside"])
-                raise
+                          "the uncut take is in %s: %s", done["aside"], e)
+                # The tracks are cut and the record is not, so there is no
+                # Undo to offer: the uncut take stays beside the take, whole,
+                # and the answer names it, as nothing else on screen would.
+                # The player opens again, as for a crop that failed.
+                if playing:
+                    self.player_open(playing)
+                return {"ok": False,
+                        "error": "The crop is done but its marks could not follow; "
+                                 f"the uncut take is in “{done['aside']}”."}
             if not found:
                 # Deleted while it was being cropped: there is no take for an
                 # Undo to put it back into, so its uncut files go the way a

@@ -651,6 +651,24 @@ test("switching the recordings folder ends every offer", async ({ page }) => {
   await expect(take).toHaveCount(0)
 })
 
+test("choosing the folder in use again keeps every offer", async ({ page }) => {
+  const overview = await tuesday(page)
+  await deleteTake(overview, 2, "Pałyn 2")
+  const take = said(page, "“Pałyn 2” went to the Trash.")
+  await expect(take).toHaveCount(1)
+  await page.getByRole("button", { name: "Back", exact: true }).click()
+  await page.getByRole("button", { name: "Settings" }).click()
+  await page.getByRole("button", { name: "Folders", exact: true }).first().click()
+  // The same folder, spelled with a slash at the end: Python says it is the one in use.
+  await page.fill("#recordings-dir", "/Users/alex/RehearsalRecordings/")
+  await page.keyboard.press("Tab")
+  await expect(page.locator("#recordings-dir")).toHaveValue("/Users/alex/RehearsalRecordings")
+  await expect(take).toHaveCount(1)
+  await expect(take.getByRole("button", { name: "Undo" })).toBeVisible()
+  expect(await waiting(page)).toHaveLength(1)
+  expect(await callCount(page, "end_trash")).toBe(0)
+})
+
 test("on Windows it went to the Recycle Bin", async ({ page }) => {
   const overview = await tuesday(page, WINDOWS)
   await deleteTake(overview, 2, "Pałyn 2")

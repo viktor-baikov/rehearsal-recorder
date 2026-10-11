@@ -12053,6 +12053,61 @@ def main():
     g75.shutdown()
     apimod75.move_to_trash = real_trash71
 
+    print("\n[76] The folder in use chosen again; a crop whose marks cannot follow")
+    # Choosing the recordings folder that is in use already is no switch:
+    # the Undos waiting in it stay, and nothing is opened anew. And a crop
+    # whose take's record cannot follow it, the library refusing once the
+    # files are cut, answers where the uncut take is: it is beside the take,
+    # whole, and nothing on screen would name it otherwise.
+    tmp76 = Path(tempfile.mkdtemp())
+    apimod76, h76 = fresh_api(tmp76)
+    rec76 = h76.recordings_dir
+    apimod76.move_to_trash = trash71
+    sun76 = past71(h76, "Sunday", "2026-10-04T19:00:00", ["Polyn", "Vesna"])
+    wait76 = h76.delete_take(str(sun76), 1).get("undo")
+    library76 = h76._library
+    mark76 = len(sent71)
+    same76 = h76.set_recordings_dir(str(rec76))
+    ok("a. choosing the folder in use again ends none of its Undos, and opens nothing anew",
+       same76 == {"ok": True, "recordings_dir": str(rec76), "kept": [], "ended": [],
+                  "same": True}
+       and entries71(rec76) == [wait76] and h76._library is library76 and sent71[mark76:] == [])
+    other76 = h76.set_recordings_dir(str(sun76 / ".."))
+    ok("nor does the same folder spelled another way",
+       other76.get("ok") is True and other76.get("same") is True
+       and other76.get("ended") == [] and other76.get("kept") == []
+       and entries71(rec76) == [wait76] and h76._library is library76)
+    ok("and its Undo still brings the take back", h76.undo_trash(wait76).get("ok") is True)
+
+    folder76 = rec76 / "Cut - 2026-10-12 19-00"
+    h76._lib.create_rehearsal(folder76, "Cut", "2026-10-12T19:00:00", SR, 16, band_c)
+    dir76 = take_c(h76, folder76, 1, "Polyn")
+    uncut76 = bytes71(dir76)
+
+    def locked76(*args, **kwargs):
+        raise RuntimeError("the database is locked")
+
+    h76._library.edit_markers = locked76
+    try:
+        cut76 = h76.crop_take(str(folder76), 1, 1.0, 3.0)
+    except RuntimeError as e:
+        cut76 = {"raised": str(e)}
+    finally:
+        del h76._library.edit_markers
+    beside76 = folder76 / f"{dir76.name} (before crop)"
+    ok("b. a crop whose marks cannot follow answers, naming the folder the uncut take is in",
+       cut76 == {"ok": False, "ended": [],
+                 "error": "The crop is done but its marks could not follow; "
+                          f"the uncut take is in \u201c{beside76}\u201d."})
+    ok("where it is whole, beside the cropped take; nothing of it deleted or sent on",
+       bytes71(beside76) == uncut76
+       and wav_frames(dir76 / "Gtr.wav") == 2 * SR and sent71[mark76:] == []
+       and h76._lib.take(folder76, 1) is not None)
+    ok("and the crop is over: the take can be cropped again",
+       h76._cropping == [])
+    h76.shutdown()
+    apimod76.move_to_trash = real_trash71
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
