@@ -36,6 +36,41 @@ describe("px-text", () => {
     expect(broken(`<p style={{ fontSize: "clamp(1rem, 8cqi, 2rem)" }} />`)).toEqual(["px-text"])
   })
 
+  it("catches a fontSize given a value in any style object", () => {
+    expect(broken(`<p style={{ fontSize: CLOCK_SIZE }} />`)).toEqual(["px-text"])
+    expect(broken("<p style={{ fontSize: `calc(${size} / 2)` }} />")).toEqual(["px-text"])
+    expect(broken(`const look: CSSProperties = { width: 1, fontSize: 14 }`)).toEqual(["px-text"])
+    expect(broken(`<p style="font-size: 12px" />`)).toEqual(["px-text"])
+  })
+
+  it("catches the shorthand property, on one line or several", () => {
+    expect(broken(`<p style={{ fontSize }} />`)).toEqual(["px-text"])
+    expect(broken(`<p style={{ color: "inherit", fontSize }} />`)).toEqual(["px-text"])
+    const text = [`<p`, `  style={{`, `    width: 1,`, `    fontSize,`, `  }}`, `/>`].join("\n")
+    expect(checkText(SCREEN, text)).toEqual([{ rule: "px-text", line: 4, text: "fontSize" }])
+    expect(broken(`const style = { fontSize }`)).toEqual(["px-text"])
+  })
+
+  it("leaves a type annotation alone", () => {
+    expect(broken(`type Props = { fontSize: number }`)).toEqual([])
+    expect(broken(`type Props = { fontSize?: number; width: string }`)).toEqual([])
+    expect(broken(`type Props = { fontSize: string | number }`)).toEqual([])
+    expect(broken([`interface Props {`, `  fontSize: number`, `}`].join("\n"))).toEqual([])
+    expect(broken(`function Box(props: { fontSize: number }) {}`)).toEqual([])
+  })
+
+  it("leaves a read of a variable called fontSize alone", () => {
+    expect(broken(`const size = open ? fontSize : 12`)).toEqual([])
+    expect(broken(`const size = props.fontSize`)).toEqual([])
+    expect(broken(`setFontSize(fontSize)`)).toEqual([])
+    expect(broken(`const { fontSize } = props`)).toEqual([])
+    expect(broken(`const { color, fontSize } = props`)).toEqual([])
+    expect(broken(`function Box({ fontSize }: Props) {}`)).toEqual([])
+    expect(broken(`const Box = ({ fontSize, color }: Props) => null`)).toEqual([])
+    expect(broken([`const {`, `  color,`, `  fontSize,`, `} = props`].join("\n"))).toEqual([])
+    expect(broken([`function Box({`, `  fontSize,`, `  color,`, `}: Props) {}`].join("\n"))).toEqual([])
+  })
+
   it("lets the named sizes through, and padding that merely ends in px", () => {
     expect(classes("px-3 py-2 text-sm")).toEqual([])
     expect(classes("text-xs text-base text-[var(--clock)]")).toEqual([])
@@ -52,6 +87,11 @@ describe("text-size", () => {
   it("catches a size given in rem or em", () => {
     expect(classes("text-[1.25rem]")).toEqual(["text-size"])
     expect(classes("text-[2em]")).toEqual(["text-size"])
+  })
+
+  it("looks at the size, not at a line height after it", () => {
+    expect(classes("text-sm/6 text-xs/5 text-2xl/8")).toEqual([])
+    expect(classes("text-lg/6")).toEqual(["text-size"])
   })
 
   it("lets the five sizes through, and other text- classes", () => {
@@ -83,11 +123,39 @@ describe("raw-colour", () => {
     expect(classes("fill-[oklch(0.5_0.2_30)]")).toEqual(["raw-colour"])
   })
 
-  it("catches a hex or a colour function written in the code", () => {
+  it("catches a colour after an underscore, which is a space in an arbitrary value", () => {
+    expect(classes("shadow-[0_0_0_1px_#fff]")).toEqual(["raw-colour"])
+    expect(classes("border-[1px_solid_#fff]")).toEqual(["raw-colour"])
+    expect(classes("shadow-[0_1px_2px_rgba(0,0,0,.2)]")).toEqual(["raw-colour"])
+    expect(classes("bg-[linear-gradient(to_right,_#fff,_hsl(0_0%_0%))]")).toEqual(["raw-colour", "raw-colour"])
+  })
+
+  it("catches a hex written as a whole string value, or after a CSS property", () => {
     expect(broken(`const stroke = "#1a1a1a"`)).toEqual(["raw-colour"])
     expect(broken(`ctx.fillStyle = '#fff'`)).toEqual(["raw-colour"])
+    expect(broken(`const look = { color: "#1a1a1a" }`)).toEqual(["raw-colour"])
+    expect(broken(`<i style={{ color: "#fff" }} />`)).toEqual(["raw-colour"])
+    expect(broken(`<circle fill="#fff" />`)).toEqual(["raw-colour"])
+    expect(broken("const c = `#fff`")).toEqual(["raw-colour"])
+    expect(broken(`const css = "border: 1px solid #fff"`)).toEqual(["raw-colour"])
+    expect(broken(`const css = "color: red; background: #fff"`)).toEqual(["raw-colour"])
+    expect(broken(`const css = "background: linear-gradient(#fff, #000)"`)).toEqual(["raw-colour", "raw-colour"])
+  })
+
+  it("catches a colour function written in the code", () => {
     expect(broken(`<i style={{ color: "oklch(0.7 0.1 50)" }} />`)).toEqual(["raw-colour"])
     expect(broken(`<i style={{ background: "rgb(0, 0, 0)" }} />`)).toEqual(["raw-colour"])
+  })
+
+  it("catches a colour inside a template literal, and inside a cn() argument", () => {
+    expect(broken("const c = `flex bg-red-500`")).toEqual(["raw-colour"])
+    expect(broken("const c = `flex ${on ? 'text-white' : ''}`")).toEqual(["raw-colour"])
+    expect(broken(`<i className={cn("flex", on && "bg-red-500")} />`)).toEqual(["raw-colour"])
+    const text = [`<i`, `  className={cn(`, `    "flex",`, `    on ? "border-zinc-200" : "text-white",`, `  )}`, `/>`].join("\n")
+    expect(checkText(SCREEN, text)).toEqual([
+      { rule: "raw-colour", line: 4, text: "border-zinc-200" },
+      { rule: "raw-colour", line: 4, text: "text-white" },
+    ])
   })
 
   it("lets the theme's colours through", () => {
@@ -102,10 +170,15 @@ describe("raw-colour", () => {
     expect(broken(`color-mix(in oklab, var(--primary) 20%, transparent)`)).toEqual([])
   })
 
-  it("does not take a number in running text or an entity for a hex", () => {
+  it("does not take a number, an anchor or an entity for a hex", () => {
     expect(broken(`<p>Take #123 of 4</p>`)).toEqual([])
     expect(broken(`<p>It&#39;s here</p>`)).toEqual([])
     expect(broken(`<a href="#main">skip</a>`)).toEqual([])
+    expect(broken(`<a href="#add">skip</a>`)).toEqual([])
+    expect(broken(`<a aria-label="Take #123">go</a>`)).toEqual([])
+    expect(broken(`<a aria-label="Take #fee" title="Note: #add" />`)).toEqual([])
+    expect(broken(`const link = { href: "#add", id: "#bad" }`)).toEqual([])
+    expect(broken(`<use href="url(#abc)" />`)).toEqual([])
   })
 })
 
@@ -142,9 +215,22 @@ describe("uppercase", () => {
     expect(broken(`<p style={{ textTransform: "uppercase" }} />`)).toEqual(["uppercase"])
   })
 
+  it("catches it in any string or template literal", () => {
+    expect(broken(`<i className={cn("flex", on && "uppercase")} />`)).toEqual(["uppercase"])
+    expect(broken("const c = `flex ${a} uppercase`")).toEqual(["uppercase"])
+    expect(broken(`const c = ["flex", 'uppercase']`)).toEqual(["uppercase"])
+  })
+
   it("lets capitalize, normal-case and toUpperCase through", () => {
     expect(classes("capitalize normal-case lowercase")).toEqual([])
     expect(broken(`const key = name.toUpperCase()`)).toEqual([])
+  })
+
+  it("is about the class, not a variable or a word in the text", () => {
+    expect(broken(`const uppercase = name.toUpperCase()`)).toEqual([])
+    expect(broken(`return uppercase ? 1 : 2`)).toEqual([])
+    expect(broken(`<p>Names are shown in uppercase here</p>`)).toEqual([])
+    expect(broken(`<p>uppercase</p>`)).toEqual([])
   })
 })
 
@@ -154,13 +240,20 @@ describe("raw-button", () => {
     expect(broken(`return <button`)).toEqual(["raw-button"])
   })
 
+  it("catches a button under a namespace, such as <motion.button", () => {
+    expect(broken(`<motion.button whileTap={{ scale: 0.9 }}>Go</motion.button>`)).toEqual(["raw-button"])
+    expect(broken(`<Primitive.button onClick={go} />`)).toEqual(["raw-button"])
+  })
+
   it("lets <Button and friends through", () => {
     expect(broken(`<Button onClick={go}>Go</Button>`)).toEqual([])
     expect(broken(`<ButtonGroup><PlayButton /></ButtonGroup>`)).toEqual([])
+    expect(broken(`<motion.div /><Primitive.Button /><buttonish />`)).toEqual([])
   })
 
   it("lets components/ui build its own", () => {
     expect(broken(`<button type="button" />`, SHARED)).toEqual([])
+    expect(broken(`<motion.button />`, SHARED)).toEqual([])
   })
 })
 
@@ -171,6 +264,11 @@ describe("radix", () => {
     expect(broken(`} from "@radix-ui/react-slot"`)).toEqual(["radix"])
     expect(broken(`const m = await import("radix-ui")`)).toEqual(["radix"])
     expect(broken(`import "radix-ui"`)).toEqual(["radix"])
+  })
+
+  it("catches a subpath of radix-ui too", () => {
+    expect(broken(`import { x } from "radix-ui/internal"`)).toEqual(["radix"])
+    expect(broken(`const m = await import('radix-ui/internal')`)).toEqual(["radix"])
   })
 
   it("lets our own wrappers through", () => {
@@ -290,8 +388,39 @@ describe("what counts as code", () => {
     expect(checkText(SCREEN, text)).toEqual([{ rule: "radius", line: 3, text: "rounded-2xl" }])
   })
 
+  it("reads a regular expression as one, not as a comment or a template", () => {
+    expect(broken(`const re = /https?:\\/\\//; return <button />`)).toEqual(["raw-button"])
+    expect(broken(["const re = /`/g", "const s = 1", "const x = <button />"].join("\n"))).toEqual(["raw-button"])
+    expect(broken(`const re = /[/]x/; return <button />`)).toEqual(["raw-button"])
+    expect(broken(`if (/https?:\\/\\//.test(u)) return <button />`)).toEqual(["raw-button"])
+    expect(broken(`const ok = a && !/x\\//.test(u)\nconst b = <button />`)).toEqual(["raw-button"])
+    expect(broken(`/^\\/\\//.test(u) ? <button /> : null`)).toEqual(["raw-button"])
+  })
+
+  it("does not read what is inside a regular expression as code", () => {
+    expect(broken(`const re = /text-lg|uppercase|<button/`)).toEqual([])
+  })
+
+  it("does not take a slash that divides, or closes a tag, for a regular expression", () => {
+    expect(broken(`<p className="a">{n} / {total}</p> <button />`)).toEqual(["raw-button"])
+    expect(broken(`const h = (a + b) / 2; const r = <button className="uppercase" />`)).toEqual(["uppercase", "raw-button"])
+    expect(broken(`const h = a / 2 / c; const r = <button />`)).toEqual(["raw-button"])
+    expect(broken(`<Foo onClick={go} /> <button />`)).toEqual(["raw-button"])
+    expect(broken(`<img src="a" /><p>text-lg</p><button />`)).toEqual(["text-size", "raw-button"])
+  })
+
   it("keeps going after an apostrophe in running text", () => {
     expect(broken(`<p>It's a take</p>\n<button />`)).toEqual(["raw-button"])
+  })
+
+  it("takes a Windows path as well", () => {
+    expect(checkText("src\\screens\\Example.tsx", `<p className="text-lg" />`)).toEqual([
+      { rule: "text-size", line: 1, text: "text-lg" },
+    ])
+    expect(checkText("src\\components\\ui\\card.tsx", `<button />`)).toEqual([])
+    expect(checkText("src\\components\\Other.tsx", `<button />`)).toEqual([
+      { rule: "raw-button", line: 1, text: "<button" },
+    ])
   })
 
   it("checks only src/**/*.tsx", () => {
