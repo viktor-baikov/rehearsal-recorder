@@ -22,7 +22,9 @@ opening.
   and a track that records notes too is one card with a plain line between
   its halves instead of a dashed one. Dialogs, menus and notices come and go
   more smoothly, and with the system's Reduce motion on, or while a take
-  records, they simply appear. A red button is full red in the dark theme
+  records, they simply appear and a spinner stands still. While a take
+  records nothing moves but the meters and the clock: the red dot beside
+  *Recording* no longer pulses. A red button is full red in the dark theme
   too.
 - **Deleting, discarding and cropping happen at once, with Undo for 10 s.**
   Deleting a take or a rehearsal, clearing false starts, discarding a take

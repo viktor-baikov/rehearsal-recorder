@@ -126,12 +126,13 @@ describe("the motion", () => {
     expect(css).toMatch(/--animate-out:[^;]*220ms/)
   })
 
-  it("gives way: off under Reduce motion and while recording, prefixed classes too", () => {
+  it("gives way: off under Reduce motion and while recording, prefixed classes and spinners too", () => {
     const from = (start: string) => ruleAt(css.indexOf(start))
     const rules = [from("@media (prefers-reduced-motion: reduce)"), from("html[data-recording]")]
     for (const rule of rules) {
       expect(rule).toMatch(/animation:\s*none;/)
-      for (const name of ["rise", "in", "out"]) {
+      // Spinners and pulses too: one standing still still says "busy".
+      for (const name of ["rise", "in", "out", "spin", "ping", "pulse"]) {
         // The class, and the same class behind a variant (data-[state=open]:animate-in).
         expect(rule).toContain(`.animate-${name}`)
         expect(rule).toContain(`[class*=":animate-${name}"]`)

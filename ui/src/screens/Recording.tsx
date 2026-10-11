@@ -246,10 +246,9 @@ export function Recording({
       <div className="flex h-full min-h-0 flex-col items-center gap-[2.5vh]">
         <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-1">
           <div data-recording-line className="flex items-center gap-2.5 text-sm">
-            <span className="relative flex size-2.5">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-75" />
-              <span className="relative inline-flex size-2.5 rounded-full bg-destructive" />
-            </span>
+            {/* Still, as nothing else here moves either (F11): a pulse in
+                the corner draws the eye from across the room. */}
+            <span className="flex size-2.5 shrink-0 rounded-full bg-destructive" />
             <span className="font-semibold tracking-wide text-destructive uppercase">
               Recording
             </span>

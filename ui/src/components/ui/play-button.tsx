@@ -89,12 +89,10 @@ function PlayButton({
       {look === "failed" ? (
         <CircleAlert className={icon} />
       ) : spinning ? (
-        // The spinner stands still where motion is off (F11): under Reduce
-        // motion, and while a take is recorded. Still, it is an arc, which
-        // reads as "working" without moving.
-        <LoaderCircle
-          className={cn(icon, "motion-safe:animate-spin [html[data-recording]_&]:animate-none")}
-        />
+        // Stands still where motion is off (F11), as every spinner does:
+        // index.css stops animate-spin under Reduce motion and while a take
+        // records. Still, it is an arc, which reads as "working".
+        <LoaderCircle className={cn(icon, "animate-spin")} />
       ) : look === "playing" ? (
         <Pause className={cn(icon, "fill-current")} />
       ) : (

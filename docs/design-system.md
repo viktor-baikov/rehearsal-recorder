@@ -127,13 +127,13 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   nothing on it should move or draw the eye. That is on purpose: do not add
   an animation to the recording screen. Under Reduce motion, and while a
   take records, `animate-rise`, `animate-in` and `animate-out` do not play:
-  a dialog is simply there. `index.css` turns them off; the recording screen
-  puts `data-recording` on `<html>` while it is up; what CSS cannot reach,
+  a dialog is simply there. Spinners and pulses (`animate-spin`,
+  `animate-ping`, `animate-pulse`) stand still too: a still arc still says
+  "busy". `index.css` turns them off; the recording screen puts
+  `data-recording` on `<html>` while it is up; what CSS cannot reach,
   such as a smooth scroll, asks `motionOff()` in `lib/motion.ts` as it
   moves (a scroll through `scrollBehavior()`). Meters and the clock are
-  readings, not motion, and keep moving. The recording dot still pulses
-  (`animate-ping` in `screens/Recording.tsx`): that is a known gap against
-  this rule, and the recording screen's pull request removes it. Nothing
+  readings, not motion, and keep moving; the record dot is still. Nothing
   takes longer than 400 ms (`lib/theme.test.ts` checks every duration in
   the file).
 

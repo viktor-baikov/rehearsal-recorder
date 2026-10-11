@@ -164,4 +164,34 @@ test.describe("motion", () => {
     await expect(html).not.toHaveAttribute("data-recording")
     expect(await animationOf(page, "animate-rise")).toBe("rise")
   })
+
+  /** The CSS animations playing on the page now, by name: a meter's fill is
+   *  a transition and the clock is text, so neither is one of these. */
+  const playing = (page: Page) =>
+    page.evaluate(() =>
+      document
+        .getAnimations()
+        .filter((a) => a instanceof CSSAnimation && a.playState === "running")
+        .map((a) => (a as CSSAnimation).animationName)
+    )
+
+  test("while a take records, no CSS animation plays on the page", async ({ page }) => {
+    await openApp(page)
+    await startRehearsal(page)
+    await page.getByRole("button", { name: /Record take 1/ }).click()
+    await expect(page.locator("html")).toHaveAttribute("data-recording")
+    await expect(page.locator("[data-recording-line]")).toBeVisible()
+    // The record dot and every spinner included: still, all of it.
+    await expect.poll(() => playing(page)).toEqual([])
+
+    // A spinner put up meanwhile stands still too.
+    expect(await animationOf(page, "animate-spin")).toBe("none")
+  })
+
+  test("a spinner stands still under Reduce motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await openApp(page)
+    await expect(startButton(page)).toBeVisible()
+    expect(await animationOf(page, "animate-spin")).toBe("none")
+  })
 })

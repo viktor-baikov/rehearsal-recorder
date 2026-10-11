@@ -118,7 +118,8 @@
 
 /* Motion gives way (F11). Under the system's Reduce motion, and while a take
    is being recorded (Recording.tsx sets data-recording on <html>), these do
-   not play: a dialog is there at once, and a group is where it belongs.
+   not play: a dialog is there at once, and a group is where it belongs. A
+   spinner stands still: its arc still says "busy" without turning.
    Meters and the clock are readings, not motion, and keep moving.
 
    The ones with a prefix (data-[state=open]:animate-in, which is how every
@@ -131,9 +132,15 @@
       .animate-rise,
       .animate-in,
       .animate-out,
+      .animate-spin,
+      .animate-ping,
+      .animate-pulse,
       [class*=":animate-rise"],
       [class*=":animate-in"],
-      [class*=":animate-out"]
+      [class*=":animate-out"],
+      [class*=":animate-spin"],
+      [class*=":animate-ping"],
+      [class*=":animate-pulse"]
     ) {
     animation: none;
   }
@@ -143,9 +150,15 @@ html[data-recording]
     .animate-rise,
     .animate-in,
     .animate-out,
+    .animate-spin,
+    .animate-ping,
+    .animate-pulse,
     [class*=":animate-rise"],
     [class*=":animate-in"],
-    [class*=":animate-out"]
+    [class*=":animate-out"],
+    [class*=":animate-spin"],
+    [class*=":animate-ping"],
+    [class*=":animate-pulse"]
   ) {
   animation: none;
 }
