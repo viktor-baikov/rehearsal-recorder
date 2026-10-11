@@ -324,7 +324,7 @@ def main():
         page.click("text=Check signal")
         page.wait_for_selector("text=✓ notes")
         page.wait_for_timeout(600)
-        cards = page.locator("[data-track-card]")
+        cards = page.locator("[data-track-row]")
         shoot(page, "midi-card", around([cards.nth(0), cards.nth(1)]))
         page.click("text=Stop checking")
 

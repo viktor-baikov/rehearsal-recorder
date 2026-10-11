@@ -16,7 +16,7 @@
   "src/components/SetPlayed.tsx": ["px-text", "raw-button"],
   "src/components/SetsSettings.tsx": ["raw-button"],
   "src/components/ShareDialog.tsx": ["raw-button"],
-  "src/components/Shell.tsx": ["text-size", "uppercase"],
+  "src/components/Shell.tsx": ["uppercase"],
   "src/components/SongKeys.tsx": ["px-text"],
   "src/components/SongLadder.tsx": ["px-text", "uppercase", "raw-button"],
   "src/components/SongList.tsx": ["raw-button"],
@@ -39,6 +39,5 @@
   "src/components/midi/NotesPlate.tsx": ["px-text"],
   "src/components/midi/PortPicker.tsx": ["px-text", "raw-colour"],
   "src/screens/Recording.tsx": ["uppercase"],
-  "src/screens/Settings.tsx": ["raw-colour", "raw-button"],
-  "src/screens/Setup.tsx": ["px-text", "raw-colour", "raw-button"]
+  "src/screens/Settings.tsx": ["raw-colour", "raw-button"]
 }

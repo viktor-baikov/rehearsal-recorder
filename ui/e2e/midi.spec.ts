@@ -6,13 +6,15 @@ import type { Locator, Page } from "@playwright/test"
 // ports are TD-17 (an e-kit, which plays during a check) and a Launchkey
 // (a keyboard, quiet) unless a test lists others.
 
-/** A track's card, counted from 1. */
-const card = (page: Page, n: number) => page.locator("[data-track-card]").nth(n - 1)
+/** A track's row, counted from 1. */
+const card = (page: Page, n: number) => page.locator("[data-track-row]").nth(n - 1)
 const modes = (page: Page, n: number) => page.getByRole("group", { name: `Track ${n} records` })
 const picker = (page: Page, n: number) => page.getByRole("combobox", { name: `Track ${n} MIDI port` })
 const input = (page: Page, n: number) => page.locator(`[aria-label='Track ${n} input']`)
 const nameField = (page: Page, n: number) => page.getByRole("textbox", { name: `Track ${n} name` })
 const note = (page: Page, text: string) => page.getByRole("status").filter({ hasText: text })
+/** What a track's own line says of its port, beside the picker. */
+const portNote = (page: Page, n: number) => card(page, n).locator("[data-port-note]")
 
 async function setMode(page: Page, n: number, mode: "Audio" | "Both" | "MIDI") {
   await modes(page, n).getByRole("button", { name: mode, exact: true }).click()
@@ -38,8 +40,9 @@ function lines(el: Locator): Promise<number> {
   })
 }
 
-/** Where every card and every control on one stands, to the half pixel. With
- *  `inCard`, the controls are measured from their card's corner. */
+/** Where every row and every control on one stands, to the half pixel, each
+ *  control by its name. With `inCard`, the controls are measured from their
+ *  row's corner. */
 function places(page: Page, inCard = false) {
   return page.evaluate((relative) => {
     const box = (el: Element, from?: DOMRect) => {
@@ -47,16 +50,32 @@ function places(page: Page, inCard = false) {
       const at = [b.x - (from?.x ?? 0), b.y - (from?.y ?? 0), b.width, b.height]
       return at.map((v) => Math.round(v * 2) / 2)
     }
-    return [...document.querySelectorAll("[data-track-card]")].map((c) => {
+    return [...document.querySelectorAll("[data-track-row]")].map((c) => {
       const own = c.getBoundingClientRect()
+      const controls = [
+        ...c.querySelectorAll<HTMLElement>("button, textarea, [role='combobox'], [data-check-slot]"),
+      ]
       return {
         card: relative ? box(c).slice(2) : box(c),
-        controls: [
-          ...c.querySelectorAll("button, textarea, [role='combobox'], [data-check-slot]"),
-        ].map((el) => box(el, relative ? own : undefined)),
+        controls: Object.fromEntries(
+          controls.map((el) => [
+            el.getAttribute("aria-label") ?? el.dataset.checkSlot ?? el.textContent,
+            box(el, relative ? own : undefined),
+          ])
+        ),
       }
     })
   }, inCard)
+}
+
+/** `places` with row `n`'s notes slot gone: a note about its port takes the
+ *  slot's room. Everything else stays where it was. */
+function slotGone(at: Awaited<ReturnType<typeof places>>, n: number) {
+  return at.map((c, i) =>
+    i === n - 1
+      ? { ...c, controls: Object.fromEntries(Object.entries(c.controls).filter(([k]) => k !== "notes")) }
+      : c
+  )
 }
 
 test.describe("setup", () => {
@@ -95,18 +114,17 @@ test.describe("setup", () => {
     await setMode(page, 1, "Both")
     await expect(picker(page, 1)).toHaveText("No port")
     await expect(startButton(page)).toBeDisabled()
-    await expect(
-      note(page, "Guitar has no MIDI port yet. Pick one, or set it to Audio.")
-    ).toHaveCount(1)
+    // Said in the track's own line, beside the picker it is about.
+    await expect(portNote(page, 1)).toHaveText("Pick a port, or set it to Audio.")
     await setMode(page, 2, "MIDI")
-    await expect(
-      note(page, "Guitar, Vocals have no MIDI port yet. Pick one, or set them to Audio.")
-    ).toHaveCount(1)
+    await expect(portNote(page, 1)).toHaveText("Pick a port, or set it to Audio.")
+    await expect(portNote(page, 2)).toHaveText("Pick a port, or set it to Audio.")
     await setMode(page, 2, "Audio")
+    await expect(portNote(page, 2)).toHaveCount(0)
 
     await pickPort(page, 1, "TD-17")
     await expect(picker(page, 1)).toHaveText("TD-17")
-    await expect(page.getByText("no MIDI port yet")).toHaveCount(0)
+    await expect(page.getByText("Pick a port")).toHaveCount(0)
     await expect(startButton(page)).toBeEnabled()
   })
 
@@ -116,11 +134,13 @@ test.describe("setup", () => {
     await pickPort(page, 1, "TD-17")
     await setMode(page, 2, "Both")
     await pickPort(page, 2, "TD-17")
-    await expect(note(page, "Guitar and Vocals both take notes from TD-17.")).toHaveCount(1)
+    // Each says it of the other, in its own line.
+    await expect(portNote(page, 1)).toHaveText("Vocals takes notes from this port too.")
+    await expect(portNote(page, 2)).toHaveText("Guitar takes notes from this port too.")
     await expect(startButton(page)).toBeDisabled()
 
     await pickPort(page, 2, "Launchkey Mini MK3")
-    await expect(page.getByText("both take notes from")).toHaveCount(0)
+    await expect(page.getByText("takes notes from this port too")).toHaveCount(0)
     await expect(startButton(page)).toBeEnabled()
 
     await setMode(page, 1, "MIDI")
@@ -136,18 +156,18 @@ test.describe("setup", () => {
     await nameField(page, 1).fill("Drums")
     await setMode(page, 1, "Both")
     await pickPort(page, 1, "TD-17")
-    await expect(card(page, 1).getByText("not connected")).toBeHidden()
+    await expect(portNote(page, 1)).toHaveCount(0)
 
     await setFake(page, "__MIDI_GONE__", ["TD-17"])
-    // Noticed on its own, within the second the list is read again in.
-    await expect(card(page, 1).getByText("not connected", { exact: true })).toBeVisible({
-      timeout: 2000,
-    })
+    // Noticed on its own, within the second the list is read again in, and
+    // said in the track's own line.
+    await expect(portNote(page, 1)).toHaveText(
+      "Not connected. Records its notes from the moment it is plugged in.",
+      { timeout: 2000 }
+    )
     await expect(picker(page, 1)).toHaveText("TD-17")
     await expect(picker(page, 1)).toHaveClass(/border-amber/)
-    await expect(
-      note(page, "“TD-17” is not connected. Drums records its notes from the moment it is plugged in.")
-    ).toHaveCount(1)
+    await expect(note(page, "Not connected.")).toHaveCount(1)
     await expect(startButton(page)).toBeEnabled()
 
     // The picker still lists it, marked, with the ports that are there.
@@ -161,11 +181,9 @@ test.describe("setup", () => {
 
     // Plugged back in, it is a port like any other again.
     await setFake(page, "__MIDI_GONE__", [])
-    await expect(card(page, 1).getByText("not connected", { exact: true })).toBeHidden({
-      timeout: 2000,
-    })
+    await expect(portNote(page, 1)).toHaveCount(0, { timeout: 2000 })
     await expect(picker(page, 1)).not.toHaveClass(/border-amber/)
-    await expect(note(page, "is not connected.")).toHaveCount(0)
+    await expect(note(page, "Not connected.")).toHaveCount(0)
   })
 
   test("a port another app holds is said so (P5)", async ({ page }) => {
@@ -175,7 +193,9 @@ test.describe("setup", () => {
     await pickPort(page, 1, "TD-17")
     // Only opening it says it is taken: the check does.
     await page.getByRole("button", { name: "Check signal" }).click()
-    await expect(note(page, "“TD-17” is in use by another app.")).toHaveCount(1)
+    await expect(portNote(page, 1)).toHaveText(
+      "In use by another app. Records its notes from the moment it is free."
+    )
     await expect(picker(page, 1)).toHaveClass(/border-amber/)
     await expect(startButton(page)).toBeEnabled()
   })
@@ -301,10 +321,11 @@ test.describe("setup", () => {
       await setMode(page, 2, "Both")
       await pickPort(page, 2, "Launchkey Mini MK3")
       await page.getByRole("button", { name: "Check signal" }).click()
-      // Above the cards, with the other notes: its words name both tracks.
-      const said = "Keys gets the same notes as Synth. Is it one instrument plugged in twice?"
-      await expect(note(page, said)).toBeVisible({ timeout: 3000 })
-      await expect(page.locator("[data-track-card]").getByText("gets the same notes")).toHaveCount(0)
+      // In the line of the track that gets the other's notes, naming it.
+      await expect(portNote(page, 2)).toHaveText("Same notes as Synth. Plugged in twice?", {
+        timeout: 3000,
+      })
+      await expect(portNote(page, 1)).toHaveCount(0)
       // It warns and stops nothing.
       await expect(startButton(page)).toBeEnabled()
     })
@@ -320,10 +341,10 @@ test.describe("setup", () => {
       await setMode(page, 2, "Both")
       await pickPort(page, 2, "Launchkey Mini MK3")
       await page.getByRole("button", { name: "Check signal" }).click()
-      await expect(note(page, "Keys gets the same notes as Synth.")).toBeVisible({ timeout: 3000 })
+      await expect(note(page, "Same notes as Synth.")).toBeVisible({ timeout: 3000 })
       // Synth records sound alone now: there is nothing left to ask about it.
       await setMode(page, 1, "Audio")
-      await expect(note(page, "gets the same notes as")).toHaveCount(0)
+      await expect(note(page, "Same notes as")).toHaveCount(0)
     })
 
     test("the question moves no card while it is the only note (P8)", async ({ page }) => {
@@ -345,15 +366,15 @@ test.describe("setup", () => {
       const before = await places(page)
 
       await page.getByRole("button", { name: "Check signal" }).click()
-      await expect(note(page, "Keys gets the same notes as Synth.")).toBeVisible({ timeout: 3000 })
-      expect(await places(page)).toEqual(before)
+      await expect(note(page, "Same notes as Synth.")).toBeVisible({ timeout: 3000 })
+      expect(await places(page)).toEqual(slotGone(before, 2))
     })
 
     test("a track named again during it keeps what it heard, said in the new names (P8)", async ({
       page,
     }) => {
-      // At 960 px, where the question in the kit's first name takes two lines,
-      // and every note that could come for the names typed since takes one.
+      // At 960 px, with the kit's long first name: the question names the
+      // tracks as they are called now.
       await page.setViewportSize({ width: 960, height: 900 })
       const kit =
         "Drums and pads (Kastuś), the kit by the window, with its second snare and both cowbells"
@@ -377,19 +398,16 @@ test.describe("setup", () => {
       await expect(keysSlot.getByText("no notes")).toBeVisible()
       await page.mouse.move(0, 0)
       const before = await places(page)
-      const strip = page.locator("[data-notes-strip]")
-      const tall = (await strip.boundingBox())!.height
 
-      // The question then comes by itself, no taller than the room kept for
-      // it, and in the names the tracks have now.
+      // The question then comes by itself, in Pad's line, moving no row,
+      // and in the names the tracks have now.
       await setFake(page, "__MIDI_ECHO__", [kit, "Keys"])
-      await expect(note(page, "gets the same notes as")).toBeVisible({ timeout: 3000 })
-      expect((await strip.boundingBox())!.height).toBe(tall)
-      expect(await places(page)).toEqual(before)
-      await expect(note(page, "Pad gets the same notes as Kit.")).toBeVisible()
+      await expect(portNote(page, 2)).toBeVisible({ timeout: 3000 })
+      expect(await places(page)).toEqual(slotGone(before, 2))
+      await expect(portNote(page, 2)).toHaveText("Same notes as Kit. Plugged in twice?")
       // A name taken away reads as it does in every other note.
       await nameField(page, 1).fill("")
-      await expect(note(page, "Pad gets the same notes as An unnamed track.")).toBeVisible()
+      await expect(portNote(page, 2)).toHaveText("Same notes as An unnamed track. Plugged in twice?")
     })
 
     test("a track taken out during it leaves what it heard from the others", async ({ page }) => {
@@ -401,7 +419,7 @@ test.describe("setup", () => {
       await expect(card(page, 2).getByText("✓ notes")).toBeVisible({ timeout: 3000 })
       // The kit's card is the first now, and still says what its port sent.
       await page.getByRole("button", { name: "Remove track Guitar" }).click()
-      await expect(page.locator("[data-track-card]")).toHaveCount(1)
+      await expect(page.locator("[data-track-row]")).toHaveCount(1)
       await expect(card(page, 1).getByText("✓ notes")).toBeVisible()
     })
 
@@ -468,19 +486,16 @@ test.describe("setup", () => {
     await expect(card(page, 1).getByText("✓ notes")).toBeHidden()
     expect(await places(page)).toEqual(before)
 
-    // The note above the cards says it is gone, in a place kept for one note
-    // while any track takes notes: no card moves for it.
+    // The note in the track's own line says it is gone, in the room of the
+    // notes slot it takes: no row moves for it.
     await setFake(page, "__MIDI_GONE__", ["TD-17"])
-    await expect(card(page, 1).getByText("not connected", { exact: true })).toBeVisible({
-      timeout: 2000,
-    })
-    await expect(note(page, "“TD-17” is not connected.")).toHaveCount(1)
-    expect(await places(page)).toEqual(before)
+    await expect(portNote(page, 1)).toHaveText(
+      "Not connected. Records its notes from the moment it is plugged in.",
+      { timeout: 2000 }
+    )
+    expect(await places(page)).toEqual(slotGone(before, 1))
     await setFake(page, "__MIDI_GONE__", [])
-    await expect(card(page, 1).getByText("not connected", { exact: true })).toBeHidden({
-      timeout: 2000,
-    })
-    await expect(note(page, "is not connected.")).toHaveCount(0)
+    await expect(portNote(page, 1)).toHaveCount(0, { timeout: 2000 })
     expect(await places(page)).toEqual(before)
   })
 
@@ -505,20 +520,20 @@ test.describe("setup", () => {
     await page.mouse.move(0, 0)
     const before = await places(page)
 
-    // Each of these takes two lines at this width, and comes by itself.
-    const gone = note(page, `\u201c${port}\u201d is not connected. ${overheads} records its notes`)
+    // Each of these comes by itself, beside a port name that takes two lines.
+    const gone = portNote(page, 1).filter({ hasText: "Not connected." })
     await setFake(page, "__MIDI_GONE__", [port])
     await expect(gone).toBeVisible({ timeout: 2000 })
-    expect(await places(page)).toEqual(before)
+    expect(await places(page)).toEqual(slotGone(before, 1))
     await setFake(page, "__MIDI_GONE__", [])
     await expect(gone).toHaveCount(0, { timeout: 2000 })
     expect(await places(page)).toEqual(before)
 
     await page.getByRole("button", { name: "Check signal" }).click()
-    await expect(note(page, `${overheads} gets the same notes as ${kit}.`)).toBeVisible({
+    await expect(portNote(page, 1)).toHaveText(`Same notes as ${kit}. Plugged in twice?`, {
       timeout: 3000,
     })
-    expect(await places(page)).toEqual(before)
+    expect(await places(page)).toEqual(slotGone(before, 1))
   })
 
   test("two tracks on one port move no card either (P2)", async ({ page }) => {
@@ -534,10 +549,10 @@ test.describe("setup", () => {
     const before = await cards()
 
     await pickPort(page, 2, "TD-17")
-    await expect(note(page, "Guitar and Vocals both take notes from TD-17.")).toHaveCount(1)
+    await expect(portNote(page, 2)).toHaveText("Guitar takes notes from this port too.")
     expect(await cards()).toEqual(before)
     await pickPort(page, 2, "TD-71")
-    await expect(page.getByText("both take notes from")).toHaveCount(0)
+    await expect(page.getByText("takes notes from this port too")).toHaveCount(0)
     expect(await cards()).toEqual(before)
   })
 
@@ -570,8 +585,6 @@ test.describe("setup", () => {
     await expect(input(page, 2)).toHaveText("Input 2")
     await page.waitForTimeout(1500)
     expect(await callCount(page, "list_midi_ports")).toBe(0)
-    // Nor keeps a place for notes it will never have.
-    await expect(page.locator("[data-notes-strip]")).toHaveCount(0)
 
     // Held still from here, a read every second cannot come: any read is the
     // one the first Both makes at once, however long a busy machine takes.
@@ -655,7 +668,7 @@ test.describe("setup", () => {
     expect(await lines(option.getByText(port))).toBe(2)
 
     const cut = await page.evaluate(() =>
-      [...document.querySelectorAll("[data-track-card] *, [role='listbox'] *")]
+      [...document.querySelectorAll("[data-track-row] *, [role='listbox'] *")]
         .filter((el) => {
           const style = getComputedStyle(el)
           return el.scrollWidth > el.clientWidth || style.textOverflow === "ellipsis"

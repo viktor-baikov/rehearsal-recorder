@@ -104,9 +104,10 @@ export async function callCount(page: Page, name: string): Promise<number> {
   return (await calls(page, name)).length
 }
 
-/** The key a button shows it answers to, or null when it shows none. */
+/** The key a button shows it answers to, or null when it shows none: a chip
+ *  kept unseen, holding the button's width, shows none. */
 export async function keyOn(button: Locator): Promise<string | null> {
-  const key = button.locator(":is(kbd, [data-key])")
+  const key = button.locator(":is(kbd, [data-key])").filter({ visible: true })
   return (await key.count()) ? (await key.first().innerText()).trim() : null
 }
 

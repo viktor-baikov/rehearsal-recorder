@@ -25,6 +25,7 @@ export function Shell({
   className,
   activity = true,
   playback = false,
+  air = false,
 }: {
   title?: ReactNode
   subtitle?: ReactNode
@@ -48,6 +49,9 @@ export function Shell({
   /** A take can be played on this screen, so the header has the speaker
    *  that sets how loud (components/ListeningVolume). */
   playback?: boolean
+  /** The room a redone screen gives itself (F8): 32 px at the header's and
+   *  the footer's sides, so they line up with a middle padded by as much. */
+  air?: boolean
 }) {
   // Notices stack above the footer, never on it: the footer holds Start, Stop
   // and Save take, and at a larger scale or in a narrow window its button
@@ -82,7 +86,9 @@ export function Shell({
         </div>
       )}
       {(title || onBack || headerAction) && (
-        <header className="flex shrink-0 items-center gap-3 border-b px-6 py-4">
+        <header
+          className={cn("flex shrink-0 items-center gap-3 border-b py-4", air ? "px-8" : "px-6")}
+        >
           {onBack && (
             <Button
               variant="ghost"
@@ -102,7 +108,7 @@ export function Shell({
               </div>
             )}
             {title && (
-              <h1 className="truncate text-lg leading-tight font-semibold">
+              <h1 className="truncate text-xl leading-tight font-semibold">
                 {title}
               </h1>
             )}
@@ -133,7 +139,10 @@ export function Shell({
       )}
 
       {footer && (
-        <footer ref={footerRef} className="shrink-0 border-t bg-card/40 px-6 py-5">
+        <footer
+          ref={footerRef}
+          className={cn("shrink-0 border-t bg-card/40", air ? "px-8 py-6" : "px-6 py-5")}
+        >
           {footer}
         </footer>
       )}
