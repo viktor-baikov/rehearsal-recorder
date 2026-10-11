@@ -79,8 +79,10 @@ test("two problems while starting are both shown, and one Dismiss puts both away
   // A screen reader says only the problem just added, not the whole list
   // again: an alert is read whole unless told otherwise.
   await expect(bar).toHaveAttribute("aria-atomic", "false")
-  // Where the whole of them is written, once for all.
+  // Where the whole of them is written, once for all. Not spoken each time
+  // its count goes up: it is read with the bar.
   await expect(bar.getByText(/crash\.log/)).toHaveCount(1)
+  await expect(bar.getByText(/crash\.log/)).toHaveAttribute("aria-live", "off")
   await expect(bar.getByRole("button", { name: "Dismiss" })).toHaveCount(1)
 
   await bar.getByRole("button", { name: "Dismiss" }).click()

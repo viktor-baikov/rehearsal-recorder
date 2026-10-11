@@ -24,7 +24,8 @@ import {
  *
  * `aria-atomic="false"`: an alert is read whole by default, and this one
  * would read every earlier problem again with each new one. Only what was
- * added is spoken.
+ * added is spoken. The count line is `aria-live="off"`, so a rising count
+ * is read with the bar, not announced on every change.
  */
 export function ErrorBar() {
   const errors = useBridgeErrors()
@@ -72,5 +73,9 @@ export function ErrorBar() {
  */
 function WhereTheRestIs() {
   const more = useMoreBridgeErrors()
-  return <p className="mt-1 text-xs text-muted-foreground">{whereTheRestIs(more)}</p>
+  return (
+    <p aria-live="off" className="mt-1 text-xs text-muted-foreground">
+      {whereTheRestIs(more)}
+    </p>
+  )
 }
