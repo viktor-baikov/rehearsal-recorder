@@ -5698,7 +5698,10 @@ class Api:
                     "This take is still being copied to the cloud — remove it "
                     "once the copy has finished."}
 
-        result = self._remove_shared(take)
+        # Not a copy another take names too (two rows naming one file, as an
+        # older version could leave): that file is the other take's as well.
+        others = self._lib.others_cloud_paths(folder, take_number)
+        result = self._remove_shared(self._unused(take.get("cloud"), others))
         self._lib.set_cloud_copy(folder, take_number, None, None)
         return {"ok": True, **result}
 
@@ -5810,6 +5813,15 @@ class Api:
                 self._queue_copy(folder, take_number, shape, take)
             return False, None
 
+        # A copy another take names too is that take's as well, and stays
+        # where its row says: this take's copy is made anew instead, which
+        # leaves it (_copy_to_cloud). Putting names right queues nothing.
+        others = self._lib.others_cloud_paths(folder, take_number)
+        if any(self._cloud_in_use(p, others) for p in parts.values()):
+            if requeue:
+                self._queue_copy(folder, take_number, shape, take)
+            return False, None
+
         def lands(name):
             return {k: p.with_name(name + (p.suffix if k == "mix" else ""))
                     for k, p in parts.items()}
@@ -5820,7 +5832,7 @@ class Api:
         base = _free_copy_name(
             self._cloud_base(take_number, take),
             lambda name: [p.resolve().relative_to(home) for p in lands(name).values()],
-            self._lib.others_cloud_paths(folder, take_number))
+            others)
         goes_to = lands(base)
         moved = []
         try:

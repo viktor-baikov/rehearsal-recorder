@@ -12210,6 +12210,24 @@ def main():
     ok("d. sending one of them again takes nothing of the other's out of the cloud folder",
        sound77(mon_three77) == mon_three_sound77 and copy77(mon77, 3) == mon_three77
        and copy77(gig77, 3) == there77 / "03 - Take 3 (2).wav")
+    # Both rows naming Monday's copy again, the gig's own copy gone.
+    copy77(gig77, 3).unlink()
+    h77._lib.set_cloud_copy(gig77, 3, {"mix": str(mon_three77), "mix_format": "wav"}, drive77)
+    h77.rename_take(str(gig77), 3, "Intro")
+    run77()
+    ok("renaming one of them leaves the other's where its row says; it is made again",
+       sound77(mon_three77) == mon_three_sound77 and copy77(mon77, 3) == mon_three77
+       and h77._lib.take(gig77, 3)["name"] == "Intro 1"
+       and copy77(gig77, 3) == there77 / "03 - Intro 1.wav"
+       and sound77(copy77(gig77, 3)) not in (None, mon_three_sound77))
+    copy77(gig77, 3).unlink()
+    h77._lib.set_cloud_copy(gig77, 3, {"mix": str(mon_three77), "mix_format": "wav"}, drive77)
+    mark77 = len(sent71)
+    unshared77 = h77.unshare_take(str(gig77), 3)
+    ok("and Remove from the cloud on one of them sends nothing of the other's to the Trash",
+       unshared77.get("ok") is True and sound77(mon_three77) == mon_three_sound77
+       and mon_three77 not in sent71[mark77:] and h77._lib.take(gig77, 3)["cloud"] == {})
+    h77._copy_to_cloud(str(gig77), 3, "mix")
     ok("and the takes' own files are where they were",
        all(Path(t["file"]).is_file() for f in (mon77, gig77) for n in (1, 2, 3)
            for t in h77._lib.take(f, n)["tracks"]))
@@ -12228,7 +12246,7 @@ def main():
                for n, (path, sound) in mons77.items()))
     ok("and the gig's copies go to its new cloud folder, by their own names there",
        [copy77(gig77, n) for n in (1, 2, 3)]
-       == [again77 / "01 - Take 1.wav", again77 / "02 - Take 2.wav", again77 / "03 - Take 3.wav"]
+       == [again77 / "01 - Take 1.wav", again77 / "02 - Take 2.wav", again77 / "03 - Intro 1.wav"]
        and all(sound77(copy77(gig77, n)) not in (None, mons77[n][1]) for n in (1, 2, 3))
        and sorted(p.name for p in (drive77 / mon77.name).iterdir())
        == ["01 - Take 1.wav", "02 - Take 2.wav", "03 - Take 3.wav"])
