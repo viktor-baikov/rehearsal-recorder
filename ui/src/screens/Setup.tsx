@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import {
   Activity,
   AudioLines,
@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
-import { FigureLine, Figures, Whole } from "@/components/ui/whole"
+import { FigureLine, Figures, WholeTip, useCut } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
 import { IconPicker } from "@/components/IconPicker"
 import { LastTime } from "@/components/LastTime"
@@ -189,9 +189,13 @@ export function Setup({
   // The interface that was chosen and is not plugged in. Not the same as
   // none chosen: the desk is often switched on after the laptop.
   const [missing, setMissing] = useState<SettingsData["missing_device"]>(null)
-  // Every figure beside the interface's name has given way to it: its tip
-  // says them (Q3).
-  const [deviceBare, setDeviceBare] = useState(false)
+  // The interface's name, cut past two lines, and whether a figure beside it
+  // has given way to it: Recording with's button then says them whole in its
+  // tip, on hover and on keyboard focus (Q3).
+  const [deviceRef, deviceCut] = useCut<HTMLSpanElement>()
+  const [deviceDropped, setDeviceDropped] = useState(false)
+  const deviceNameId = useId()
+  const deviceFiguresId = useId()
   // The set Start plays by (S1–S2), kept across restarts, and New set…
   // over this screen (S3), with the band's songs to add.
   const sets = useSets()
@@ -700,24 +704,38 @@ export function Setup({
       className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t px-6 py-4"
     >
       <Label>Recording with</Label>
-      <Button
-        variant="outline"
-        onClick={onOpenSettings}
-        aria-label="Change the interface and quality"
-        className="h-auto min-w-0 items-baseline justify-start gap-2 px-3 py-2 text-left whitespace-normal has-[>svg]:px-3"
+      <WholeTip
+        cut={deviceCut}
+        text={deviceText}
+        figures={deviceDropped ? <FigureLine parts={deviceFigures} /> : null}
       >
-        <Mic className="size-3.5 self-center text-muted-foreground" />
-        <Whole
-          text={deviceText}
-          figures={deviceBare ? <FigureLine parts={deviceFigures} /> : null}
-          className="min-w-0 flex-[0_1_auto] line-clamp-2 break-words"
-        />
-        <Figures
-          parts={deviceFigures}
-          onBare={setDeviceBare}
-          className="tnum text-right text-xs text-muted-foreground"
-        />
-      </Button>
+        <Button
+          variant="outline"
+          onClick={onOpenSettings}
+          aria-label="Change the interface and quality"
+          // What it is now, read after what it does: its label stands for
+          // what is written on it.
+          aria-describedby={`${deviceNameId} ${deviceFiguresId}`}
+          className="h-auto min-w-0 items-baseline justify-start gap-2 px-3 py-2 text-left whitespace-normal has-[>svg]:px-3"
+        >
+          <Mic className="size-3.5 self-center text-muted-foreground" />
+          <span
+            ref={deviceRef}
+            id={deviceNameId}
+            data-cut={deviceCut || undefined}
+            className="block min-w-0 flex-[0_1_auto] line-clamp-2 break-words"
+          >
+            {deviceText}
+          </span>
+          <Figures
+            parts={deviceFigures}
+            id={deviceFiguresId}
+            onDropped={setDeviceDropped}
+            tip={false}
+            className="tnum text-right text-xs text-muted-foreground"
+          />
+        </Button>
+      </WholeTip>
       {!device && missing ? (
         <div className="col-span-2 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">

@@ -22,6 +22,10 @@
     ['Ranica', 205, []], ['Ranica 2', 210, []],
     ['Kupalle', 260, []], ['Žniŭnaja', 233, []], ['Kalada', 248, []]);
 
+  // Earlier: the soundcheck under a name longer than its row, so it wraps
+  // and leaves its figures no room at all.
+  PAST['/rec/soundcheck'][0] = 'Soundcheck at the community hall before the open-air concert';
+
   // Not played last time: seven, so five show and "and 2 more"; one with a
   // long name and a ★ go from another evening, the longest line there is.
   const lastTime = api.last_time;

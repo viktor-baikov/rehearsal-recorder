@@ -1,11 +1,10 @@
 import { ChevronRight, History, Star } from "lucide-react"
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
-import { Button } from "@/components/ui/button"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Item } from "@/components/ui/item"
 import { MarkLine } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FigureLine, Figures, WholeTip, useCut, type FigurePart } from "@/components/ui/whole"
 import { EveningStrip } from "@/components/EveningStrip"
 import { SongName } from "@/components/SongName"
@@ -155,8 +154,8 @@ export function LastTime({
       </Card>
 
       {leftOut.length > 0 && (
-        <section aria-label="Not played last time" className="flex flex-col gap-0.5">
-          <h2 className="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">
+        <section aria-label="Not played last time" className="flex flex-col gap-1">
+          <h2 className="px-1 pb-1 text-xs font-semibold text-muted-foreground">
             Not played last time
           </h2>
           {leftOut.map((s) => (
@@ -177,9 +176,9 @@ export function LastTime({
         </section>
       )}
 
-      <section aria-label="Earlier" className="flex flex-col gap-0.5">
+      <section aria-label="Earlier" className="flex flex-col gap-1">
         {data.earlier.length > 0 && (
-          <h2 className="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">Earlier</h2>
+          <h2 className="px-1 pb-1 text-xs font-semibold text-muted-foreground">Earlier</h2>
         )}
         {data.earlier.map((r) => (
           <EarlierRow key={r.folder} rehearsal={r} onOpen={onOpen} />
@@ -190,7 +189,7 @@ export function LastTime({
           variant="ghost"
           size="row"
           onClick={onAll}
-          className="gap-1.5 self-start px-2 font-semibold has-[>svg]:px-2"
+          className="gap-2 self-start px-2 font-semibold has-[>svg]:px-2"
         >
           <History className="size-3.5" />
           History
@@ -247,7 +246,7 @@ function SongRow({
   const notes = takes.flatMap((t) => (t.markers ?? []).map((m) => ({ take: t, marker: m })))
   // The goes go first, then how long they ran: the columns show both.
   const parts: FigurePart[] = here
-    ? [{ text: `${formatMMSS(here.position)} / ${formatMMSS(target.duration_sec)}`, keep: 9 }]
+    ? [playingPart(here)]
     : [
         { text: unnamed ? takesLabel(takes.length) : goesLabel(takes.length), keep: 1 },
         { text: formatMMSS(total), keep: 0 },
@@ -262,9 +261,7 @@ function SongRow({
         take={target}
         here={here}
         problem={problem}
-        label={
-          unnamed ? target.name : `${target.name}, the ${target.starred ? "starred" : "last"} go at ${name}`
-        }
+        label={unnamed ? target.name : playLabel(target, name)}
         onPlay={onPlay}
       />
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -301,7 +298,7 @@ function SongRow({
           </span>
         )}
       </div>
-      <div aria-hidden data-goes className="flex h-6 items-end gap-[3px]">
+      <div aria-hidden data-goes className="flex h-6 items-end gap-1">
         {takes.map((t) => (
           <span
             key={t.take_number}
@@ -349,7 +346,7 @@ function NotPlayedRow({
   // The ★ go stays longest, then the goes, then the day; how long ago goes
   // first.
   const parts: FigurePart[] = here
-    ? [{ text: `${formatMMSS(here.position)} / ${formatMMSS(target.duration_sec)}`, keep: 9 }]
+    ? [playingPart(here)]
     : [
         ...(starred
           ? [
@@ -372,13 +369,13 @@ function NotPlayedRow({
   return (
     <div
       data-song={s.name}
-      className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 px-1 py-1.5"
+      className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 px-1 py-1"
     >
       <RowPlay
         take={target}
         here={here}
         problem={problem}
-        label={`${target.name}, the ${starred ? "starred" : "last"} go at ${s.name}`}
+        label={playLabel(target, s.name)}
         onPlay={onPlay}
       />
       <NameAndFigures
@@ -407,13 +404,15 @@ function EarlierRow({
   onOpen: (folder: string) => void
 }) {
   const [nameRef, cut] = useCut<HTMLSpanElement>()
-  const [bare, setBare] = useState(false)
+  const [dropped, setDropped] = useState(false)
   const parts: FigurePart[] = [
     ...(r.total_duration_sec >= 30 ? [{ text: formatDuration(r.total_duration_sec / 60), keep: 0 }] : []),
     { text: takesLabel(r.take_count), keep: 1 },
   ]
   return (
-    <WholeTip cut={cut} text={r.name} figures={bare && !r.missing ? <FigureLine parts={parts} /> : null}>
+    // The row is one button, so its one tip says what the row could not
+    // show: the name whole, and the figures whole once any has dropped.
+    <WholeTip cut={cut} text={r.name} figures={dropped ? <FigureLine parts={parts} /> : null}>
       <Item asChild size="sm" className="flex-nowrap items-baseline gap-3 px-2 py-2">
         <Button
           variant="ghost"
@@ -430,7 +429,8 @@ function EarlierRow({
           ) : (
             <Figures
               parts={parts}
-              onBare={setBare}
+              onDropped={setDropped}
+              tip={false}
               className="tnum text-right text-xs text-muted-foreground"
             />
           )}
@@ -443,8 +443,8 @@ function EarlierRow({
 /**
  * A name and its figure line (Q3): the name keeps its width, wrapping only
  * past its whole row, and the figures take what is left, dropping whole.
- * When none has room, there is nothing of them to hover, so the name's own
- * tip says them.
+ * Once any has dropped, the name's tip says the line whole too: the name is
+ * what a keyboard reaches, and with none left there is nothing to hover.
  */
 function NameAndFigures({
   parts,
@@ -454,11 +454,11 @@ function NameAndFigures({
   /** The name, given the figures its tip is to say, or null. */
   name: (figures: ReactNode) => ReactNode
 }) {
-  const [bare, setBare] = useState(false)
+  const [dropped, setDropped] = useState(false)
   return (
     <div className="flex min-w-0 items-baseline gap-2">
-      {name(bare ? <FigureLine parts={parts} /> : null)}
-      <Figures parts={parts} onBare={setBare} className="tnum text-xs text-muted-foreground" />
+      {name(dropped ? <FigureLine parts={parts} /> : null)}
+      <Figures parts={parts} onDropped={setDropped} className="tnum text-xs text-muted-foreground" />
     </div>
   )
 }
@@ -472,6 +472,18 @@ function StarMark() {
       className="inline size-3 fill-current align-text-bottom text-signal"
     />
   )
+}
+
+/** A row's figures while its go plays from here: where it has got to, of
+ *  how long it runs. Kept above every other figure. */
+function playingPart(here: LastTimePlayback): FigurePart {
+  return { text: `${formatMMSS(here.position)} / ${formatMMSS(here.take.duration_sec)}`, keep: 9 }
+}
+
+/** What a song's ▶ is called after "Play" or "Pause": the go and which one
+ *  it is. reha.stream finds Pałyn 7's by the start of it. */
+function playLabel(take: Take, song: string) {
+  return `${take.name}, the ${take.starred ? "starred" : "last"} go at ${song}`
 }
 
 /** The small player on a row (C2), its look worked out from what plays. */
@@ -508,8 +520,11 @@ function RowPlay({
 /**
  * Last time's head: the day, the rehearsal's name, its figures, and Open.
  * The name keeps its width (Q3): Open gives up its word first, becoming a
- * chevron with a tip, and only then does the name wrap, to two lines, cut
- * past that and whole on hover.
+ * chevron, and only then does the name wrap, to two lines, cut past that.
+ *
+ * Open's tip says what its button cannot: where it goes once it is a
+ * chevron, and the name whole while the name is cut, since a keyboard
+ * reaches Open and not the name. The name shows whole on hover as well.
  */
 function CardHead({
   day,
@@ -523,38 +538,39 @@ function CardHead({
   onOpen: () => void
 }) {
   const row = useRef<HTMLDivElement>(null)
-  const open = useRef<HTMLButtonElement>(null)
-  const openWide = useRef(0)
   const [iconOnly, setIconOnly] = useState(false)
   const [nameRef, cut] = useCut<HTMLDivElement>()
-  // The name on one line, unseen, for how wide it wants to be.
+  // Unseen and on one line: the name, for how wide it wants to be, and Open
+  // with its word, for how wide that is. Each is watched as the row is, so a
+  // new Appearance size or a font coming in is measured afresh.
   const natural = useRef<HTMLSpanElement>(null)
-  // Open with its word is measured while it has it; the word goes when the
-  // name is wider than the room Open with its word would leave.
-  useLayoutEffect(() => {
-    if (open.current && !iconOnly) openWide.current = open.current.offsetWidth
-  })
+  const openWide = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     const r = row.current
-    if (!r) return
+    const n = natural.current
+    const o = openWide.current
+    if (!r || !n || !o) return
+    // Open gives up its word when the name is wider than the room Open with
+    // its word would leave.
     const look = () => {
-      const n = natural.current
-      if (!n) return
       const gap = parseFloat(getComputedStyle(r).columnGap) || 0
-      setIconOnly(n.offsetWidth > r.clientWidth - openWide.current - gap)
+      setIconOnly(n.offsetWidth > r.clientWidth - o.offsetWidth - gap)
     }
     look()
     const watch = new ResizeObserver(look)
-    watch.observe(r)
+    for (const el of [r, n, o]) watch.observe(el)
     return () => watch.disconnect()
-  }, [name])
+  }, [])
 
-  const label = `Open ${name} in history`
   return (
     <div ref={row} className="relative flex items-start gap-2">
-      <span aria-hidden className="pointer-events-none absolute top-0 left-0 size-0 overflow-hidden">
-        <span ref={natural} className="invisible absolute text-base font-semibold whitespace-nowrap">
+      <span aria-hidden className="pointer-events-none invisible absolute top-0 left-0 size-0 overflow-hidden">
+        <span ref={natural} className="absolute text-base font-semibold whitespace-nowrap">
           {name}
+        </span>
+        <span ref={openWide} className={cn(buttonVariants({ variant: "outline", size: "row" }), "absolute")}>
+          Open
+          <ChevronRight />
         </span>
       </span>
       <div className="min-w-0 flex-1">
@@ -571,28 +587,26 @@ function CardHead({
         </WholeTip>
         <div className="tnum mt-0.5 text-xs text-muted-foreground">{meta}</div>
       </div>
-      {iconOnly ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              ref={open}
-              variant="outline"
-              size="icon-row"
-              onClick={onOpen}
-              aria-label={label}
-              className="shrink-0"
-            >
-              <ChevronRight />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Open in History</TooltipContent>
-        </Tooltip>
-      ) : (
-        <Button ref={open} variant="outline" size="row" onClick={onOpen} aria-label={label} className="shrink-0">
-          Open
+      <WholeTip
+        cut={cut || iconOnly}
+        text={
+          <>
+            {cut && <span className="block">{name}</span>}
+            {iconOnly && <span className="block">Open in History</span>}
+          </>
+        }
+      >
+        <Button
+          variant="outline"
+          size={iconOnly ? "icon-row" : "row"}
+          onClick={onOpen}
+          aria-label={`Open ${name} in history`}
+          className="shrink-0"
+        >
+          {!iconOnly && "Open"}
           <ChevronRight />
         </Button>
-      )}
+      </WholeTip>
     </div>
   )
 }

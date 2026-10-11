@@ -876,6 +876,8 @@ test.describe("the left part behind a button in a narrow window", () => {
 test.describe("Last time and long names on the shared pieces", () => {
   const KALYCHANKA = "Kalychanka (slow version for the wedding, with the long intro the bride asked for)"
   const DANCING = "Dancing barefoot on the roof of the old brewery"
+  const SOUNDCHECK = "Soundcheck at the community hall before the open-air concert"
+  const TUESDAY = "Tuesday jam at the old brewery, with the horn section and the choir from upstairs"
 
   /** Last time, beside the setup. */
   const beside = (page: Page) =>
@@ -902,6 +904,16 @@ test.describe("Last time and long names on the shared pieces", () => {
   /** A song's name in a row of Last time: the button that opens its page. */
   const songName = (past: Locator, title: string) =>
     past.getByRole("button", { name: `Open the song ${title}`, exact: true })
+  /** Last time's day line, the card's heading: a place to start Tabbing from. */
+  const dayLine = (past: Locator) => past.getByRole("heading", { name: /^Last time · / })
+
+  /** Tab on from where focus is until `target` has it, as a keyboard gets
+   *  there. */
+  async function tabTo(page: Page, target: Locator) {
+    for (let i = 0; i < 120 && !(await target.evaluate((el) => el === document.activeElement)); i++)
+      await page.keyboard.press("Tab")
+    await expect(target).toBeFocused()
+  }
 
   test("Not played keeps the song name whole and drops figures", async ({ page }) => {
     await openBandApp(page, { stress: true })
@@ -935,7 +947,17 @@ test.describe("Last time and long names on the shared pieces", () => {
         "",
       ].map((line) => line.replace("★ ", ""))
       const shown = (await figures.locator("[data-shown]").innerText()).trim()
-      expect(kept.slice(1), `${where}: "${shown}"`).toContain(shown)
+      // The card leaves the line room for some of it, beside the setup and in
+      // the panel alike: not none.
+      expect(kept.slice(1, -1), `${where}: "${shown}"`).toContain(shown)
+
+      // What dropped is a keyboard's too: the name's tip says the line whole.
+      await dayLine(past).click()
+      await tabTo(page, songName(past, "Dym"))
+      await expect(tip(page), where).toBeVisible()
+      await expect(tip(page), where).toContainText(`${star.replace("★ ", "")} · Sat 19 Sep, ${ago} · 4 goes`)
+      await dayLine(past).click()
+      await expect(tip(page), where).toHaveCount(0)
     }
 
     await check(beside(page), "beside the setup")
@@ -974,9 +996,7 @@ test.describe("Last time and long names on the shared pieces", () => {
     expect(await scroller.evaluate((el) => el.scrollTop)).toBe(0)
     // Tab down the panel to the name, as a keyboard does: getting there
     // scrolls the panel.
-    for (let i = 0; i < 80 && !(await name.evaluate((el) => el === document.activeElement)); i++)
-      await page.keyboard.press("Tab")
-    await expect(name).toBeFocused()
+    await tabTo(page, name)
     expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
     await expect(name).toBeInViewport()
 
@@ -1027,11 +1047,60 @@ test.describe("Last time and long names on the shared pieces", () => {
       await away(page)
       await expect(tip(page), where).toHaveCount(0)
 
+      // And by keyboard, which reaches the name and not the figures.
+      await dayLine(past).click()
+      await tabTo(page, songName(past, DANCING))
+      await expect(tip(page), where).toBeVisible()
+      await expect(tip(page), where).toContainText(DANCING)
+      await expect(tip(page), where).toContainText("2 goes · 10:10")
+      // The tip is for the eyes: a screen reader reads the name, and the
+      // figures in their own line, once each.
+      await expect(songName(past, DANCING), where).toHaveAccessibleDescription("")
+      await expect(past.locator(`[data-song='${DANCING}'] [data-figures] .sr-only`), where).toHaveText(
+        "2 goes · 10:10"
+      )
+      await dayLine(past).click()
+      await expect(tip(page), where).toHaveCount(0)
+
       // A name with room beside it shows no tip of its own.
       await songName(past, "Zorka").hover()
       await page.waitForTimeout(700)
       await expect(tip(page), where).toHaveCount(0)
       await away(page)
+    }
+    await check(beside(page), "beside the setup")
+    await check(await openPanel(page), "in the panel")
+  })
+
+  test("an Earlier rehearsal whose name takes its row carries its figures in its tip", async ({
+    page,
+  }) => {
+    // Its name wraps and leaves its figures no room at all. The row is one
+    // button, and its one tip says them, on hover and on keyboard focus; a
+    // screen reader hears them once, in the row's name.
+    await openBandApp(page, { stress: true })
+    const check = async (past: Locator, where: string) => {
+      const earlier = past.getByRole("region", { name: "Earlier" })
+      const row = earlier.locator("[data-earlier='/rec/soundcheck']")
+      await expect(row.locator("[data-figures]"), where).toHaveAttribute("data-dropped")
+      await expect(row.locator("[data-figures] [data-shown]"), where).toHaveText("")
+
+      await row.hover()
+      await expect(tip(page), where).toBeVisible()
+      await expect(tip(page), where).toContainText(SOUNDCHECK)
+      await expect(tip(page), where).toContainText("5 min · 2 takes")
+      await away(page)
+      await expect(tip(page), where).toHaveCount(0)
+
+      await earlier.getByRole("heading", { name: "Earlier" }).click()
+      await tabTo(page, row)
+      await expect(tip(page), where).toBeVisible()
+      await expect(tip(page), where).toContainText(SOUNDCHECK)
+      await expect(tip(page), where).toContainText("5 min · 2 takes")
+      await expect(row, where).toHaveAccessibleName(/^Sat 12 Sep ?Soundcheck at .+ concert ?5 min · 2 takes$/)
+      await expect(row, where).toHaveAccessibleDescription("")
+      await earlier.getByRole("heading", { name: "Earlier" }).click()
+      await expect(tip(page), where).toHaveCount(0)
     }
     await check(beside(page), "beside the setup")
     await check(await openPanel(page), "in the panel")
@@ -1054,6 +1123,100 @@ test.describe("Last time and long names on the shared pieces", () => {
     await expect(tip(page)).toBeVisible()
     await expect(tip(page)).toContainText("Universal Audio Apollo Twin X DUO Heritage Edition")
     await expect(tip(page)).toContainText("18 inputs · 48 kHz · 24 bit")
+    await away(page)
+    await expect(tip(page)).toHaveCount(0)
+
+    // The tip is the button's, so Tab shows it too.
+    const button = row.getByRole("button", { name: "Change the interface and quality" })
+    await row.getByText("Recording with", { exact: true }).click()
+    await page.keyboard.press("Tab")
+    await expect(button).toBeFocused()
+    await expect(tip(page)).toBeVisible()
+    await expect(tip(page)).toContainText("Universal Audio Apollo Twin X DUO Heritage Edition")
+    await expect(tip(page)).toContainText("18 inputs · 48 kHz · 24 bit")
+    // What it is now is read once, after what it does.
+    await expect(button).toHaveAccessibleDescription(
+      /^Universal Audio Apollo Twin X DUO Heritage Edition ?18 inputs · 48 kHz · 24 bit$/
+    )
+  })
+
+  test("a cut rehearsal name shows whole in Open's tip, by keyboard", async ({ page }) => {
+    // The card's name is cut past two lines. It is not a control, so the
+    // keyboard reaches Open beside it, whose tip says the name whole.
+    await openBandApp(page, { stress: true })
+    const check = async (past: Locator, where: string) => {
+      const name = past.locator("[data-card-name]")
+      await expect(name, where).toHaveAttribute("data-cut")
+      const open = past.getByRole("button", { name: `Open ${TUESDAY} in history`, exact: true })
+      // A chevron: its word given up to the name.
+      await expect(open, where).toHaveText("")
+      // In the panel a click there puts focus on the panel, so Tab first
+      // reaches its ✕.
+      await dayLine(past).click()
+      await tabTo(page, open)
+      await expect(tip(page), where).toBeVisible()
+      await expect(tip(page), where).toHaveText(`${TUESDAY}Open in History`)
+      await expect(open, where).toHaveAccessibleDescription("")
+      await dayLine(past).click()
+      await expect(tip(page), where).toHaveCount(0)
+      // The pointer finds it on the name as well.
+      await name.hover()
+      await expect(tip(page), where).toHaveText(TUESDAY)
+      await away(page)
+      await expect(tip(page), where).toHaveCount(0)
+    }
+    await check(beside(page), "beside the setup")
+    await check(await openPanel(page), "in the panel")
+  })
+
+  test("Open gives up its word for a long name, and its tip says where it goes", async ({ page }) => {
+    // Longer than the room Open with its word leaves, shorter than two lines.
+    const name = "Tuesday jam at the old brewery with the horns"
+    await page.setViewportSize({ width: 1600, height: 900 })
+    await openApp(page, {
+      after: `
+        const api = window.pywebview.api; const lastTime = api.last_time;
+        api.last_time = async () => {
+          const r = await lastTime(); r.last.name = ${JSON.stringify(name)}; return r; };
+      `,
+    })
+    const past = page.getByRole("complementary", { name: "Last time" })
+    const open = past.getByRole("button", { name: `Open ${name} in history`, exact: true })
+    const check = async (at: string) => {
+      await expect(open, at).toHaveText("")
+      await expect(past.locator("[data-card-name]"), at).not.toHaveAttribute("data-cut")
+      await open.hover()
+      await expect(tip(page), at).toHaveText("Open in History")
+      await away(page)
+      await expect(tip(page), at).toHaveCount(0)
+      await dayLine(past).click()
+      await page.keyboard.press("Tab")
+      await expect(open, at).toBeFocused()
+      await expect(tip(page), at).toHaveText("Open in History")
+      await dayLine(past).click()
+      await expect(tip(page), at).toHaveCount(0)
+    }
+    await check("at 100 %")
+    // A new Appearance size, set live: Open and the name are measured afresh.
+    await page.evaluate(() => (document.documentElement.style.fontSize = "20.8px"))
+    await expect.poll(() => past.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(400)
+    await check("at 130 %")
+  })
+
+  test("a short rehearsal name keeps Open's word, and Open needs no tip", async ({ page }) => {
+    await openApp(page)
+    const past = page.getByRole("complementary", { name: "Last time" })
+    const open = past.getByRole("button", { name: "Open Tuesday jam in history", exact: true })
+    await expect(open).toHaveText("Open")
+    await open.hover()
+    await page.waitForTimeout(700)
+    await expect(tip(page)).toHaveCount(0)
+    await away(page)
+    await dayLine(past).click()
+    await page.keyboard.press("Tab")
+    await expect(open).toBeFocused()
+    await page.waitForTimeout(300)
+    await expect(tip(page)).toHaveCount(0)
   })
 
   test("the small play button shows a spinner after one second", async ({ page }) => {
@@ -1068,6 +1231,7 @@ test.describe("Last time and long names on the shared pieces", () => {
     })
     const button = past.locator("[data-song='Pałyn'] button[data-look]")
     const spinner = button.locator(".animate-spin")
+    const box = await button.boundingBox()
     const since = Date.now()
     const at = (ms: number) => page.waitForTimeout(Math.max(0, ms - (Date.now() - since)))
     await play.click()
@@ -1076,6 +1240,8 @@ test.describe("Last time and long names on the shared pieces", () => {
     expect(await spinner.count(), "a spinner at 0.5 s").toBe(0)
     await at(1500)
     expect(await spinner.count(), "a spinner at 1.5 s").toBe(1)
+    // The spinner takes the ▶'s place, in the same box: nothing round it moves.
+    expect(await button.boundingBox(), "the ▶'s box with the spinner").toEqual(box)
 
     await page.evaluate(() => (window as unknown as { __LET_GO__: () => void }).__LET_GO__())
     await expect(past.getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })).toBeVisible()

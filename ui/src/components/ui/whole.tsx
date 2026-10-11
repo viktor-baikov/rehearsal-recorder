@@ -17,8 +17,9 @@ import { cn } from "@/lib/utils"
   B6's pieces for a long name: a cut name shows whole on hover and on
   keyboard focus (`useCut` and `WholeTip`; `Whole` is both for a plain text),
   and the figures beside a name give way to it, whole figure by whole figure
-  (`Figures`, the arithmetic in lib/figures.ts). Figures that have all given
-  way have nothing left to hover, so the name's own tip says them (Q3).
+  (`Figures`, the arithmetic in lib/figures.ts). The figures' own tip is for
+  the pointer; the name's tip, which a keyboard reaches too, says the line
+  whole as well once any of it has given way (Q3).
 */
 
 /** Whether an element's text is cut: wider or taller than its own box. The
@@ -53,9 +54,14 @@ export function useCut<T extends HTMLElement>() {
  * well as from Radix: only Esc, a press or a click, or focus leaving, closes
  * it then. A focus that comes with a press opens nothing, as in Radix.
  *
- * `figures` is the figure line beside the name when none of it has room to
- * show there (Figures' `onBare`): the tip then says it under the name, cut
- * or not, since there is nothing else to hover for it.
+ * `figures` is the figure line beside the name when some of it has given
+ * way (Figures' `onDropped`): the tip then says it whole under the name, cut
+ * or not. The figures' own tip is on a box the keys never reach, and one
+ * with nothing left in it has no width to hover.
+ *
+ * The tip is for the eyes. What it says is in the page already, the name in
+ * full and the figures in their read-out line, so a screen reader is not
+ * told it a second time as the child's description.
  */
 export function WholeTip({
   cut,
@@ -113,33 +119,28 @@ export function WholeTip({
         // in the tip: muted grey on the tip's ground does not read.
         className="[&_.text-muted-foreground]:text-inherit"
       >
-        {figures ? (
-          <>
-            <span className="block">{text}</span>
-            <span className="tnum block">{figures}</span>
-          </>
-        ) : (
-          text
-        )}
+        {/* Radix points the child's aria-describedby at this content; what
+            is aria-hidden in it is left out of that description. */}
+        <span aria-hidden className="block">
+          {figures ? (
+            <>
+              <span className="block">{text}</span>
+              <span className="tnum block">{figures}</span>
+            </>
+          ) : (
+            text
+          )}
+        </span>
       </TooltipContent>
     </Tooltip>
   )
 }
 
-/** A text that may be cut, shown whole on hover when it is; `figures` as
- *  WholeTip's. */
-export function Whole({
-  text,
-  figures,
-  className,
-}: {
-  text: string
-  figures?: ReactNode
-  className?: string
-}) {
+/** A text that may be cut, shown whole on hover when it is. */
+export function Whole({ text, className }: { text: string; className?: string }) {
   const [ref, cut] = useCut<HTMLSpanElement>()
   return (
-    <WholeTip cut={cut} text={text} figures={figures}>
+    <WholeTip cut={cut} text={text}>
       <span ref={ref} data-cut={cut || undefined} className={cn("block", className)}>
         {text}
       </span>
@@ -148,8 +149,8 @@ export function Whole({
 }
 
 /** A figure as Figures takes it: drawn as `node` where it is more than its
- *  words (an icon in it), and read, measured into the tip's words and kept
- *  apart by `text` all the same. */
+ *  words (an icon in it), and measured as drawn, but read out as `text`.
+ *  Figures goes by `text` too to know when its line has changed. */
 export type FigurePart = Part & { node?: ReactNode }
 
 /** The figures, drawn and joined as the line beside a name draws them, the
@@ -170,22 +171,31 @@ export function FigureLine({ parts, shown }: { parts: FigurePart[]; shown?: bool
  * A figure line that gives way to the name beside it: it takes the room the
  * name leaves (flex 1 1 0), drops whole figures in the order of `keep` until
  * the rest fits, and shows the whole line on hover when it has dropped some.
+ * A screen reader reads the whole line, whatever shows.
  *
- * Once it has dropped them all there is nothing of it to hover: a name wider
- * than its row leaves it no width at all. `onBare` hears when that starts and
- * stops, so the name beside it can say the line in its own tip (WholeTip's
- * `figures`).
+ * That tip is for the pointer only, and once every figure has dropped there
+ * is no width left to hover. `onDropped` hears when figures start and stop
+ * dropping, so the name beside it, which a keyboard reaches, can say the line
+ * in its own tip (WholeTip's `figures`). Where that name's tip is the whole
+ * row's, the line needs no tip of its own: `tip={false}`.
  */
 export function Figures({
   parts,
+  id,
   className,
-  onBare,
+  onDropped,
+  tip = true,
 }: {
   parts: FigurePart[]
+  /** On the line's box, for a control that is described by the line: it
+   *  reads as the whole line. */
+  id?: string
   className?: string
-  /** Told true while every figure has dropped, false otherwise; a state
+  /** Told true while any figure has dropped, false otherwise; a state
    *  setter, or anything that keeps its identity. */
-  onBare?: (bare: boolean) => void
+  onDropped?: (dropped: boolean) => void
+  /** Its own tip on hover, with the whole line, when it has dropped some. */
+  tip?: boolean
 }) {
   const box = useRef<HTMLSpanElement>(null)
   const measure = useRef<HTMLSpanElement>(null)
@@ -219,33 +229,37 @@ export function Figures({
   // Until the new figures have been fitted, all of them.
   const shown = fitted.length === parts.length ? fitted : every
   const dropped = shown.some((on) => !on)
-  const bare = parts.length > 0 && !shown.some(Boolean)
   useEffect(() => {
-    onBare?.(bare)
-  }, [bare, onBare])
+    onDropped?.(dropped)
+  }, [dropped, onDropped])
+  const line = (
+    <span
+      ref={box}
+      id={id}
+      data-figures
+      data-dropped={dropped || undefined}
+      // min-h-lh: a line tall even when every figure has dropped, so what
+      // width the box has left can still be hovered.
+      className={cn("relative block min-h-lh min-w-0 flex-[1_1_0%] truncate", className)}
+    >
+      {/* Read whole, whatever shows. */}
+      <span className="sr-only">{all}</span>
+      <span aria-hidden data-shown>
+        <FigureLine parts={parts} shown={shown} />
+      </span>
+      <span ref={measure} aria-hidden className="invisible absolute top-0 left-0 whitespace-pre">
+        {parts.map((p, i) => (
+          <span key={i}>{p.node ?? p.text}</span>
+        ))}
+        <span>{" · "}</span>
+        <span>{", "}</span>
+      </span>
+    </span>
+  )
+  if (!tip) return line
   return (
     <WholeTip cut={dropped} text={<FigureLine parts={parts} />}>
-      <span
-        ref={box}
-        data-figures
-        data-dropped={dropped || undefined}
-        // min-h-lh: a line tall even when every figure has dropped, so what
-        // width the box has left can still be hovered.
-        className={cn("relative block min-h-lh min-w-0 flex-[1_1_0%] truncate", className)}
-      >
-        {/* Read whole, whatever shows: the tip is for the pointer only. */}
-        <span className="sr-only">{all}</span>
-        <span aria-hidden data-shown>
-          <FigureLine parts={parts} shown={shown} />
-        </span>
-        <span ref={measure} aria-hidden className="invisible absolute top-0 left-0 whitespace-pre">
-          {parts.map((p, i) => (
-            <span key={i}>{p.node ?? p.text}</span>
-          ))}
-          <span>{" · "}</span>
-          <span>{", "}</span>
-        </span>
-      </span>
+      {line}
     </WholeTip>
   )
 }

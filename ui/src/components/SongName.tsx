@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils"
  * colour, size and weight of the heading or row it sits in. The title is a
  * block inside it, so it can wrap (`textClassName`, such as line-clamp-2)
  * and be cut past that: a cut title shows whole on hover and on keyboard
- * focus (B6), and its tip says the row's figures as well when none of them
- * has room beside it (`figures`, see Figures' onBare).
+ * focus (B6), and its tip says the row's figures whole as well once any of
+ * them has given way beside it (`figures`, see Figures' onDropped).
  */
 export function SongName({
   title,

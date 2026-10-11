@@ -28,6 +28,20 @@ describe("Figures", () => {
   it("keeps one line of height even when every figure has dropped, so it can still be hovered", () => {
     expect(out).toContain("min-h-lh")
   })
+
+  it("is its own tip's trigger, unless the row round it says the line in its tip", () => {
+    const box = (markup: string) => markup.slice(0, markup.indexOf(">") + 1)
+    expect(box(out)).toContain("data-figures")
+    expect(box(out)).toContain('data-slot="tooltip-trigger"')
+    const bare = renderToStaticMarkup(createElement(Figures, { parts, tip: false }))
+    expect(box(bare)).toContain("data-figures")
+    expect(bare).not.toContain("tooltip-trigger")
+  })
+
+  it("can be what a control is described by: its box, which reads as the whole line", () => {
+    const described = renderToStaticMarkup(createElement(Figures, { parts, id: "figs", tip: false }))
+    expect(described).toMatch(/^<span id="figs" data-figures="true"/)
+  })
 })
 
 describe("Whole", () => {
@@ -43,7 +57,7 @@ describe("Whole", () => {
 })
 
 describe("a figure drawn as more than its text", () => {
-  // A ★ go: drawn with the star icon, read and measured as its words.
+  // A ★ go: drawn with the star icon, measured as drawn, read as its words.
   const drawn = [
     { text: "★ Dym 2", keep: 3, node: createElement("b", null, "Dym 2") },
     { text: "Sat 19 Sep", keep: 1 },
@@ -54,6 +68,8 @@ describe("a figure drawn as more than its text", () => {
     const out = renderToStaticMarkup(createElement(Figures, { parts: drawn }))
     expect(out).toContain('<span class="sr-only">★ Dym 2 · Sat 19 Sep, 3 weeks ago</span>')
     expect(out).toMatch(/data-shown="true"><b>Dym 2<\/b> · Sat 19 Sep, 3 weeks ago<\/span>/)
+    // The unseen copy each figure is measured by is the drawing.
+    expect(out).toContain('whitespace-pre"><span><b>Dym 2</b></span><span>Sat 19 Sep</span>')
   })
 
   it("is drawn the same in the line a tip carries", () => {
