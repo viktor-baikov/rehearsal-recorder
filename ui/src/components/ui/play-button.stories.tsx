@@ -56,7 +56,8 @@ export const Loading: Story = { render: () => <LoadingDemo /> }
 /* Hover and focus cannot be switched on for six buttons at once, so each
    button here wears what its state adds, the same classes Button and the look
    give it (hover: a fill; focus: the shared ring). Move the pointer over the
-   ones in "Looks", or press Tab, for the real thing. */
+   ones in "Looks", or press Tab, for the real thing. They are copies: a fill
+   changed in LOOKS (play-button.tsx) or in buttonVariants changes here too. */
 type Shown = "rest" | "hover" | "focus"
 const FORCED: Record<Shown, (look: PlayLook) => string> = {
   rest: () => "",
