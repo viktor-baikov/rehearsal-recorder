@@ -93,7 +93,7 @@ from rehearsal_recorder.midi.smf import crop_mid
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
 from rehearsal_recorder.store.library import (
-    LabelRefused, Library, SetRefused, SongRefused, as_marker,
+    LabelRefused, Library, SetRefused, SongRefused, as_marker, paths_overlap,
 )
 from rehearsal_recorder.store.db import DB_NAME
 from rehearsal_recorder import diagnostics
@@ -613,7 +613,8 @@ class Api:
         # the cloud copies its record names; one the app died in the middle
         # of goes back, or its Undo is finished (see _end). Before the cleanup
         # below, which leaves alone a rehearsal something of which is waiting.
-        self._end_all()
+        # One that can do neither is kept, and said once.
+        self._end_all(at_start=True)
 
         # Clear out leftovers from previous runs (rehearsal started, nothing
         # recorded, app closed).
@@ -2666,14 +2667,16 @@ class Api:
         if not self._inside_recordings(draft_dir):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
         with self._files_lock:
+            ref = self._draft_rehearsal(draft_dir)
+            ident = self._draft_identity(draft_dir, ref)
+            self._end_before([ident] if ident is not None else [])
             if not draft_dir.exists():
                 return {"ok": False, "error": "It is not there any more"}
             self._release_player_in(draft_dir)
-            ref = self._draft_rehearsal(draft_dir)
             record = {"kind": "draft", "reason": "discard", "rows": "none",
-                      "item": self._draft_identity(draft_dir, ref), "rehearsal": ref}
+                      "item": ident, "rehearsal": ref}
             try:
-                token = self._hold(record, [draft_dir])
+                token = holding.hold(self._recordings_dir, record, [draft_dir])
             except (OSError, ValueError) as e:
                 return {"ok": False, "error": f"Could not remove it: {e}"}
             self._cleanup_drafts_dir(draft_dir)
@@ -3685,11 +3688,7 @@ class Api:
     # ---------- deleting ----------
 
     def _inside_recordings(self, path):
-        try:
-            Path(path).resolve().relative_to(self._recordings_dir.resolve())
-            return True
-        except ValueError:
-            return False
+        return self._recordings_key(path) is not None
 
     def delete_take(self, folder, take_number):
         """
@@ -3743,13 +3742,18 @@ class Api:
     def _hold_takes(self, folder, numbers, kind):
         """
         Takes of one rehearsal into one holding entry, then their rows out:
-        {"undo", "deleted", "failed", "takes_left"}. In this order: the player
-        lets go of their files, earlier entries this ends go on (_hold), the
-        files move, and only then do the rows go, so a take whose files will
-        not all move (Windows refuses a folder holding a file another
-        program has open) keeps its rows and its files where they were, and
-        is said in "failed". The others go all the same.
+        {"undo", "deleted", "failed", "takes_left"}. In this order: earlier
+        entries of these takes end (_end_before), before anything of them is
+        read, since an end can put files of them back; the player lets go of
+        their files; the files move; and only then do the rows go, so a take
+        whose files will not all move (Windows refuses a folder holding a
+        file another program has open) keeps its rows and its files where
+        they were, and is said in "failed". The others go all the same.
         """
+        ref = self._lib.rehearsal_ref(folder)
+        if ref is not None:
+            self._end_before([{"kind": "take", "rehearsal_id": ref["id"], "take_number": int(n)}
+                              for n in numbers])
         rehearsal = self._lib.rehearsal(folder) or {"takes": []}
         by_number = {t["take_number"]: t for t in rehearsal["takes"]}
         todo = [n for n in dict.fromkeys(int(n) for n in numbers) if n in by_number]
@@ -3775,7 +3779,7 @@ class Api:
                 "shared": _shared_of(by_number[n] for n in todo),
             }
             try:
-                token = self._hold(record, paths)
+                token = holding.hold(self._recordings_dir, record, paths)
             except (OSError, ValueError) as e:
                 stuck = self._stuck_take(e, paths_of)
                 if stuck is None or len(todo) == 1:
@@ -3789,7 +3793,9 @@ class Api:
                 left = self._lib.delete_takes(folder, todo)
             except Exception:
                 # The rows are all still there: their files go back to them.
-                self._back_or_keep(token, paths)
+                kept = self._back_or_keep(token, paths)
+                if not kept["ok"]:
+                    self._kept(token, kept["error"])
                 raise
             self._rows_dropped(token, record)
             return {"undo": token, "deleted": todo, "failed": failed, "takes_left": left}
@@ -3858,28 +3864,33 @@ class Api:
             return {"ok": False, "error": "Cannot delete the rehearsal in progress"}
         with self._files_lock:
             self._release_player_in(folder)
-            rows = self._lib.rehearsal_record(folder)
             ref = self._lib.rehearsal_ref(folder)
+            item = {"kind": "rehearsal", "folder": self._recordings_key(folder),
+                    "rehearsal_id": None if ref is None else ref["id"]}
+            # Before its rows are read: an end can put a take of it back.
+            self._end_before([item])
+            rows = self._lib.rehearsal_record(folder)
             takes = (self._lib.rehearsal(folder) or {}).get("takes", [])
             record = {
                 "kind": "rehearsal",
                 "reason": "delete",
                 # A folder the library has no record of has no rows to drop.
                 "rows": "kept" if rows is not None else "none",
-                "item": {"kind": "rehearsal", "folder": self._recordings_key(folder),
-                         "rehearsal_id": None if ref is None else ref["id"]},
+                "item": item,
                 "rehearsal": rows,
                 "shared": _shared_of(takes),
             }
             try:
-                token = self._hold(record, [folder])
+                token = holding.hold(self._recordings_dir, record, [folder])
             except (OSError, ValueError) as e:
                 return {"ok": False, "error": f"Could not remove it: {e}"}
             if rows is not None:
                 try:
                     self._lib.forget_rehearsal(folder)
                 except Exception:
-                    self._back_or_keep(token, [folder])
+                    kept = self._back_or_keep(token, [folder])
+                    if not kept["ok"]:
+                        self._kept(token, kept["error"])
                     raise
                 self._rows_dropped(token, record)
             return {"ok": True, "undo": token}
@@ -3907,13 +3918,6 @@ class Api:
     # too (_rows_there), for a crash between the drop and the record saying
     # so: rows that are gone are gone, whatever the record says.
 
-    def _hold(self, record, paths):
-        """The ends a new removal brings (_end_before), then `paths` into a
-        new entry with `record` (holding.hold): its token. Raises OSError or
-        ValueError with nothing moved when they could not all move."""
-        self._end_before(_identities(record))
-        return holding.hold(self._recordings_dir, record, paths)
-
     def _rows_dropped(self, token, record):
         """The entry's record says its rows are out of the library now, so
         its end is the Trash. Should that not be written, _rows_there finds
@@ -3921,7 +3925,7 @@ class Api:
         try:
             holding.update(self._recordings_dir, token, {**record, "rows": "dropped"})
         except OSError as e:
-            print(f"[delete] {token}: could not say its rows were dropped: {e}")
+            log.error("removal %s: could not record that its rows were dropped: %s", token, e)
 
     def _back_or_keep(self, token, places):
         """An entry's items back to `places`, then the entry gone: {"ok":
@@ -3933,10 +3937,15 @@ class Api:
         except holding.Gone:
             return {"ok": True}
         except (OSError, ValueError) as e:
-            print(f"[trash] {token} could not be put back, and waits for the next end: {e}")
             return {"ok": False, "error": f"Could not put it back: {e}"}
         holding.drop(self._recordings_dir, token)
         return {"ok": True}
+
+    def _kept(self, token, error):
+        """Says, in the log a windowed build keeps, that an entry stays in the
+        holding folder for the next end, and why."""
+        log.error("removal %s stays in %s for the next end: %s",
+                  token, self._recordings_dir / holding.HOLDING_DIR / token, error)
 
     def _end_before(self, idents, stale=True, reasons=None):
         """Ends every waiting entry of the same item as any of `idents`
@@ -3957,9 +3966,11 @@ class Api:
                 same = same and isinstance(record, dict) and record.get("reason") in reasons
             if (stale and age > holding.STALE_SEC) or same:
                 try:
-                    self._end(token)
+                    result = self._end(token)
                 except Exception as e:  # noqa: BLE001 - it waits for the next end
-                    print(f"[trash] {token} stays for the next end: {e}")
+                    result = {"ok": False, "error": str(e)}
+                if not result.get("ok"):
+                    self._kept(token, result.get("error"))
 
     def _end(self, token):
         """
@@ -3967,41 +3978,61 @@ class Api:
         record names out of the cloud folder; or back where it came from,
         when its rows were never dropped (see above). {"ok": True}, also for
         an entry that is not there; {"ok": False, "error"} leaves it, copies
-        and all, for the next end. Raises LibraryUnavailable, the entry left,
-        when what to do needs the library and it is not open.
+        and all, for the next end: so does a record that cannot be read,
+        since whether its rows were dropped cannot be told. Raises
+        LibraryUnavailable, the entry left, when what to do needs the library
+        and it is not open.
         """
         data = holding.read(self._recordings_dir, token)
-        record = (data or {}).get("record")
+        if data is None:
+            # Not there, or nothing in it but a record that cannot be read:
+            # gone. Anything of the person's in it stays, record and all.
+            if holding.drop(self._recordings_dir, token):
+                return {"ok": True}
+            return {"ok": False, "error": holding.UNREADABLE}
+        record = data.get("record")
         record = record if isinstance(record, dict) else {}
         rows = record.get("rows")
-        if data is not None and rows == "restoring":
+        if rows == "restoring":
             return self._finish_undo(token, data)
-        if data is not None and rows not in ("dropped", "none") \
-                and self._rows_there(record) is not False:
+        if rows not in ("dropped", "none") and self._rows_there(record) is not False:
             return self._back_or_keep(token, self._places(record, data.get("items") or []))
         shared = [c for c in record.get("shared") or [] if isinstance(c, dict)]
-        live = self._live_cloud() if shared else []
+        if shared:
+            # Which copies stay is the library's to say: with none open, the
+            # entry waits, copies and all.
+            self._lib.cloud_paths()
         result = holding.send_on(self._recordings_dir, token, move_to_trash)
         if not result.get("ok"):
-            print(f"[trash] {token} stays for the next start: {result.get('error')}")
             return result
-        for copy in shared:
-            # A take that came after it under the same name (recover_draft
-            # gives the next number, and "Take 7" is "Take 7" again) has its
-            # own copy in that place now: that one stays.
-            self._remove_shared({"cloud": {
-                k: copy[k] for k in ("mix", "tracks")
-                if copy.get(k) and not any(_is_inside(copy[k], p) or _is_inside(p, copy[k])
-                                           for p in live)}})
+        if shared:
+            # Asked again now, not before the files went: the copy worker
+            # runs outside _files_lock, and a copy it finished meanwhile may
+            # be in that very place.
+            live = self._lib.cloud_paths()
+            for copy in shared:
+                # A take that came after it under the same name
+                # (recover_draft gives the next number, and "Take 7" is "Take
+                # 7" again) has its own copy in that place now: that one stays.
+                self._remove_shared({"cloud": {
+                    k: copy[k] for k in ("mix", "tracks")
+                    if copy.get(k) and not self._cloud_in_use(copy[k], live)}})
         return {"ok": True}
 
-    def _live_cloud(self):
-        """Every path in the cloud folder a take in the library names as its
-        copy, absolute."""
+    def _cloud_in_use(self, path, live):
+        """Whether a take in the library names `path` as its copy, or a path
+        inside it or around it: `live` is every copy they name, relative to
+        the cloud folder (Library.cloud_paths), compared as the library
+        compares them (paths_overlap, blind to case). A path outside the
+        cloud folder counts as in use: nothing outside it is touched."""
         cloud = self._cloud_dir
         if cloud is None:
-            return []
-        return [Path(cloud) / rel for rel in self._lib.cloud_paths()]
+            return True
+        try:
+            rel = Path(path).resolve().relative_to(Path(cloud).resolve())
+        except ValueError:
+            return True
+        return any(paths_overlap(rel, p) for p in live)
 
     def _rows_there(self, record):
         """Whether the rows a removal's record names are in the library: True
@@ -4029,15 +4060,28 @@ class Api:
         was = PurePosixPath(ref["folder"])
         return [self._back_in(folder, was, i) for i in items]
 
-    def _end_all(self):
+    def _end_all(self, at_start=False):
         """Every entry waiting goes on to the Trash, or back: at quit, at
         start, and before the recordings folder changes. One that fails stays
-        for the next start, and the others still go."""
+        for the next start, and the others still go. At start, each that
+        stays is also said once to the person (startup_problems): it is what
+        nothing else would ever show them."""
         for token in holding.tokens(self._recordings_dir):
             try:
-                self._end(token)
+                result = self._end(token)
             except Exception as e:  # noqa: BLE001 - starting and quitting go on
-                print(f"[trash] {token} stays for the next start: {e}")
+                result = {"ok": False, "error": str(e)}
+            if result.get("ok"):
+                continue
+            self._kept(token, result.get("error"))
+            if at_start:
+                where = self._recordings_dir / holding.HOLDING_DIR / token
+                self._problems.append({
+                    "name": "RemovalKept",
+                    "message": "Something that was being removed could not be put back or "
+                               f"moved to the Trash ({result.get('error')}). It is kept, as "
+                               f"it is, in “{where}”, and will be tried again next time.",
+                })
 
     def end_trash(self, token):
         """
@@ -4049,10 +4093,12 @@ class Api:
         """
         with self._files_lock:
             try:
-                return self._end(token)
+                result = self._end(token)
             except (LibraryUnavailable, OSError, ValueError) as e:
-                print(f"[trash] {token} stays for the next start: {e}")
-                return {"ok": False, "error": str(e)}
+                result = {"ok": False, "error": str(e)}
+            if not result.get("ok"):
+                self._kept(token, result.get("error"))
+            return result
 
     def undo_trash(self, token):
         """
@@ -4144,14 +4190,10 @@ class Api:
         items = data.get("items") or []
         resuming = places is None
         if resuming:
-            keys = record.get("places")
-            places = ([rec / Path(*PurePosixPath(k).parts) for k in keys]
-                      if isinstance(keys, list) and len(keys) == len(items)
-                      and all(isinstance(k, str) for k in keys)
-                      else self._places(record, items))
+            # Where they go now: the rehearsal may have been renamed since.
+            places = self._places(record, items)
         else:
-            holding.update(rec, token, {**record, "rows": "restoring",
-                                        "places": [self._recordings_key(p) for p in places]})
+            holding.update(rec, token, {**record, "rows": "restoring"})
         try:
             holding.put_back(rec, token, places)
         except holding.Stuck:
@@ -4173,7 +4215,8 @@ class Api:
         holding.drop(rec, token)
         if error is not None:
             if resuming:
-                print(f"[trash] {token}: its files are back, its rows could not be: {error}")
+                log.error("removal %s: its files are back, its rows could not be: %s",
+                          token, error)
             return {"ok": False, "error": error}
         if kind in ("take", "takes"):
             folder = self._lib.rehearsal_folder(record.get("rehearsal") or {})

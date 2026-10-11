@@ -12,7 +12,7 @@ to the rehearsal folder, and a cloud copy is relative to the cloud folder;
 see models.py for why.
 """
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from sqlalchemy import Integer, cast, func, select, update
 from sqlalchemy import inspect as sa_inspect
@@ -80,11 +80,13 @@ def _relative(path, root):
     return Path(path).resolve().relative_to(Path(root).resolve()).as_posix()
 
 
-def _overlap(a, b):
-    """Whether two relative paths are one place, or one is inside the other.
-    Blind to case, as a Mac's and Windows' folders are: two that might be one
-    place are taken for one."""
-    a, b = [p.casefold() for p in a.parts], [p.casefold() for p in b.parts]
+def paths_overlap(a, b):
+    """Whether two paths relative to one folder (the cloud folder's copies,
+    as stored) are one place, or one is inside the other. Blind to case, as
+    a Mac's and Windows' folders are: two that might be one place are taken
+    for one."""
+    a = [p.casefold() for p in PurePosixPath(Path(a).as_posix()).parts]
+    b = [p.casefold() for p in PurePosixPath(Path(b).as_posix()).parts]
     n = min(len(a), len(b))
     return n > 0 and a[:n] == b[:n]
 
@@ -1165,11 +1167,11 @@ class Library:
         """Whether a take in the library names a path of this cloud copy (or
         one inside it, or one it is inside): a take that came after it, under
         the same name, whose copy is in that place now."""
-        mine = [Path(copy[k]) for k in ("mix", "tracks") if copy.get(k)]
+        mine = [copy[k] for k in ("mix", "tracks") if copy.get(k)]
         for row in db.scalars(select(CloudCopy)):
             for k in ("mix", "tracks"):
                 theirs = getattr(row, k)
-                if theirs and any(_overlap(Path(theirs), m) for m in mine):
+                if theirs and any(paths_overlap(theirs, m) for m in mine):
                     return True
         return False
 

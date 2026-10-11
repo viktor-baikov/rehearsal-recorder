@@ -54,6 +54,10 @@ _TOKEN = re.compile(r"[0-9a-f]{8}")
 GONE_TO_TRASH = "It has already gone to the Trash."
 
 
+# Why an entry whose record cannot be read is kept as it is.
+UNREADABLE = "its record cannot be read"
+
+
 class Gone(FileNotFoundError):
     """The entry is not there any more: it has gone on (GONE_TO_TRASH)."""
 
@@ -99,10 +103,14 @@ def _relative(path, recordings):
 
 
 def _write(entry, data):
-    """record.json, written beside itself and moved into place, so a crash
-    mid-write leaves the old record or none, never half of one."""
+    """record.json, written beside itself, on the disk, and only then moved
+    into place, so a crash mid-write (or a power cut just after) leaves the
+    old record or none, never half of one."""
     writing = entry / (RECORD_FILE + ".writing")
-    writing.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    with open(writing, "w", encoding="utf-8") as f:
+        f.write(json.dumps(data, ensure_ascii=False, indent=1))
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(writing, entry / RECORD_FILE)
 
 
@@ -321,20 +329,17 @@ def send_on(recordings: Path, token: str, trash) -> dict:
     gone counts as sent, so an entry a failure left part way is finished
     where it stopped. {"ok": True}, or {"ok": False, "error"} with the entry
     left as it is for the next start. An entry that is not there is nothing
-    to do.
+    to do. One whose record cannot be read is never sent on: whether its
+    rows were dropped cannot be told, and the Trash is the wrong way if not.
     """
     recordings = Path(recordings)
     entry = _entry(recordings, token)
     if entry is None or not entry.is_dir():
         return {"ok": True}
     data = read(recordings, token)
-    if data is not None:
-        slots = [entry / str(i) for i in range(len(data.get("items") or []))]
-    else:
-        # A record that cannot be read: what the numbered folders hold is
-        # still what was held.
-        slots = sorted((p for p in entry.iterdir() if p.name.isdigit() and p.is_dir()),
-                       key=lambda p: int(p.name))
+    if data is None:
+        return {"ok": False, "error": UNREADABLE}
+    slots = [entry / str(i) for i in range(len(data.get("items") or []))]
     for slot in slots:
         try:
             inside = sorted(slot.iterdir()) if slot.is_dir() else []
