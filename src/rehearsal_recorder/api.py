@@ -27,7 +27,7 @@ import sys
 import threading
 import time
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import sounddevice as sd
 
@@ -72,6 +72,7 @@ from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
 from rehearsal_recorder.midi.notes import read_notes
 from rehearsal_recorder import activity as activitymod
 from rehearsal_recorder import cloud as cloudmod
+from rehearsal_recorder import holding
 from rehearsal_recorder.names_pass import NamesPass
 from rehearsal_recorder import layouts
 from rehearsal_recorder import updates
@@ -209,6 +210,61 @@ def _unique_path(path):
         if not candidate.exists():
             return candidate
         counter += 1
+
+
+# What Undo says once the item it was for has gone on: to the Trash, or the
+# _deleted folder where there is none, by the end of its notice or another.
+GONE_TO_TRASH = "It has already gone to the Trash."
+
+
+def _identities(record):
+    """
+    What a holding entry's record says it holds, as a list of identities: a
+    take {"kind": "take", "rehearsal_id", "take_number"}, a rehearsal
+    {"kind": "rehearsal", "rehearsal_id", "folder"}, a draft {"kind":
+    "draft", "draft", "rehearsal_id"}. One, or for takes removed together
+    a list of them. A rehearsal is known by its id, which a rename does not
+    change; "folder" and "draft" are relative to the recordings folder.
+    """
+    item = (record or {}).get("item") if isinstance(record, dict) else None
+    if isinstance(item, list):
+        return [i for i in item if isinstance(i, dict)]
+    return [item] if isinstance(item, dict) else []
+
+
+def _same_draft(a, b):
+    """Two draft identities are one draft: the same folder name in the same
+    rehearsal, wherever a rename has put it; with no rehearsal to go by, the
+    same path."""
+    rehearsal = a.get("rehearsal_id")
+    if rehearsal is not None and rehearsal == b.get("rehearsal_id"):
+        return PurePosixPath(a.get("draft") or "").name == PurePosixPath(b.get("draft") or "").name
+    return bool(a.get("draft")) and a.get("draft") == b.get("draft")
+
+
+def _ends(new, was):
+    """
+    Whether removing `new` ends a waiting entry of `was`, both identities.
+    Two entries of one item could each be undone over the other, so the
+    older goes on to the Trash first: a take ends its own earlier entries (a
+    crop of it among them, which carries the take's identity); a rehearsal
+    every entry of it, its takes' and its drafts'; a draft its own.
+    """
+    kind = new.get("kind")
+    if kind == "take":
+        return (was.get("kind") == "take" and new.get("rehearsal_id") is not None
+                and was.get("rehearsal_id") == new.get("rehearsal_id")
+                and was.get("take_number") == new.get("take_number"))
+    if kind == "rehearsal":
+        rehearsal = new.get("rehearsal_id")
+        if rehearsal is not None and was.get("rehearsal_id") == rehearsal:
+            return True
+        folder = (new.get("folder") or "").rstrip("/")
+        draft = was.get("draft") or ""
+        return was.get("kind") == "draft" and bool(folder) and draft.startswith(folder + "/")
+    if kind == "draft":
+        return was.get("kind") == "draft" and _same_draft(new, was)
+    return False
 
 
 def _take_dir_name(take_number, name):
@@ -549,6 +605,12 @@ class Api:
             UI_DIR, self._recordings_dir, api=self, port=server_port
         )
 
+        # A removal still waiting for its Undo when the app last stopped (it
+        # died, or the Trash refused at quit) goes on to the Trash now, with
+        # the cloud copies its record names. Before the cleanup below, which
+        # leaves alone a rehearsal something of which is waiting.
+        self._end_all()
+
         # Clear out leftovers from previous runs (rehearsal started, nothing
         # recorded, app closed).
         self.cleanup_empty_rehearsals()
@@ -599,6 +661,12 @@ class Api:
         # A rename the pass had under way finishes before the library closes.
         held = self._files_lock.acquire(timeout=10)
         try:
+            # The notice offering Undo closes with the window, so whatever
+            # waits for one goes on to the Trash now. Not without the lock:
+            # whatever holds it is moving files, and the next start sends
+            # them on instead.
+            if held:
+                self._end_all()
             if self._library is not None:
                 self._library.close()
         finally:
@@ -986,7 +1054,11 @@ class Api:
         if error is not None:
             return {"ok": False, "error": error}
 
-        self._recordings_dir = folder
+        # What waits for its Undo is in the old folder's _deleting, which no
+        # Undo can reach from the new one: it goes on to the Trash first.
+        with self._files_lock:
+            self._end_all()
+            self._recordings_dir = folder
         self._config["recordings_dir"] = str(folder)
         self._write_config()
         # The server hands files to the player, so it has to look at the new
@@ -1888,9 +1960,12 @@ class Api:
             print(f"[finish] letting go of the MIDI ports: {e}")
 
         # A rehearsal where nothing was saved should not leave a folder behind.
+        # One whose last take or draft waits for its Undo is not empty yet.
         removed = False
         if rehearsal is not None and self._is_empty(rehearsal):
-            removed = self._remove_empty(folder)
+            with self._files_lock:
+                if not self._waits(folder, self._waiting_rehearsals()):
+                    removed = self._remove_empty(folder)
 
         return {
             "ok": True,
@@ -1921,13 +1996,41 @@ class Api:
 
         live = Path(self._session["folder"]) if self._session is not None else None
         removed = 0
-        for rehearsal in self._lib.rehearsals():
-            folder = Path(rehearsal["folder"])
-            if rehearsal["missing"] or folder == live:
-                continue
-            if self._is_empty(rehearsal) and self._remove_empty(folder):
-                removed += 1
+        # Under the lock that removals hold, so a take deleted meanwhile is
+        # either still listed here or already waiting in its entry.
+        with self._files_lock:
+            waiting = None
+            for rehearsal in self._lib.rehearsals():
+                folder = Path(rehearsal["folder"])
+                if rehearsal["missing"] or folder == live or not self._is_empty(rehearsal):
+                    continue
+                # Its last take deleted a moment ago, waiting for its Undo:
+                # without the rehearsal, Undo would have nowhere to go back.
+                if waiting is None:
+                    waiting = self._waiting_rehearsals()
+                if self._waits(folder, waiting):
+                    continue
+                if self._remove_empty(folder):
+                    removed += 1
         return {"ok": True, "removed": removed}
+
+    def _waiting_rehearsals(self):
+        """The ids of the rehearsals something of which waits in the holding
+        folder for its Undo: a take or a draft (or a crop of one)."""
+        ids = set()
+        for token in holding.tokens(self._recordings_dir):
+            record = (holding.read(self._recordings_dir, token) or {}).get("record")
+            for ident in _identities(record):
+                if ident.get("kind") != "rehearsal" and ident.get("rehearsal_id") is not None:
+                    ids.add(ident["rehearsal_id"])
+        return ids
+
+    def _waits(self, folder, waiting):
+        """Whether the rehearsal in `folder` is one of `waiting`."""
+        if not waiting:
+            return False
+        ref = self._lib.rehearsal_ref(folder)
+        return ref is not None and ref["id"] in waiting
 
     def _remove_empty(self, folder):
         """
@@ -2227,6 +2330,14 @@ class Api:
         if self._session is None:
             return {"ok": False, "error": "No rehearsal in progress"}
 
+        # Anything of this draft still waiting for its Undo (a crop's uncut
+        # files) is over once it is saved: Undo would put it back into a
+        # draft that is no longer there. It goes on to the Trash first.
+        with self._files_lock:
+            ident = self._draft_identity(Path(temp_dir))
+            if ident is not None:
+                self._end_before([ident], stale=False)
+
         s = self._session
         # Named as it will be kept: the song and go the name resolves to, not
         # what was typed — "polyn" for the third go is "Polyn 3".
@@ -2406,10 +2517,11 @@ class Api:
         """
         A take dropped on the review screen and a draft rescued after a crash
         are the same thing on disk — an unfinished take folder — so they leave
-        the same way, into the Trash. This used to be an rmtree of whatever
-        path it was handed: the one place in the app where a recording was
-        really destroyed, and the one that needed it least, because the take
-        was recorded seconds earlier and cannot be played again.
+        the same way, towards the Trash (discard_draft). This used to be an
+        rmtree of whatever path it was handed: the one place in the app where
+        a recording was really destroyed, and the one that needed it least,
+        because the take was recorded seconds earlier and cannot be played
+        again.
         """
         return self.discard_draft(temp_dir)
 
@@ -2525,13 +2637,49 @@ class Api:
         return {"ok": True, "take": kept, "folder": str(folder)}
 
     def discard_draft(self, draft_dir):
+        """
+        Moves a draft into the holding folder, where it waits for its Undo
+        (undo_trash puts it back at _drafts/take N, in its rehearsal's folder
+        as it is by then) or for its notice to end (end_trash sends it to the
+        Trash). {"ok": True, "undo": token}, or {"ok": False, "error"} with
+        the draft where it was.
+        """
         draft_dir = Path(draft_dir)
         if not self._inside_recordings(draft_dir):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
-        self._release_player_in(draft_dir)
-        result = move_to_trash(draft_dir, self._recordings_dir)
-        self._cleanup_drafts_dir(draft_dir)
-        return result
+        with self._files_lock:
+            if not draft_dir.exists():
+                return {"ok": False, "error": "It is not there any more"}
+            self._release_player_in(draft_dir)
+            ref = self._draft_rehearsal(draft_dir)
+            record = {"kind": "draft", "item": self._draft_identity(draft_dir, ref),
+                      "rehearsal": ref}
+            try:
+                token = self._hold(record, [draft_dir])
+            except (OSError, ValueError) as e:
+                return {"ok": False, "error": f"Could not remove it: {e}"}
+            self._cleanup_drafts_dir(draft_dir)
+            return {"ok": True, "undo": token}
+
+    def _draft_rehearsal(self, draft_dir):
+        """The rehearsal a draft at <rehearsal>/_drafts/<name> belongs to, as
+        a record names it (Library.rehearsal_ref), or None."""
+        draft_dir = Path(draft_dir)
+        if draft_dir.parent.name != DRAFTS_DIR or self._library is None:
+            return None
+        return self._lib.rehearsal_ref(draft_dir.parent.parent)
+
+    def _draft_identity(self, draft_dir, ref=None):
+        """A draft's identity (see _identities), or None for a folder outside
+        the recordings folder."""
+        try:
+            key = Path(draft_dir).resolve().relative_to(self._recordings_dir.resolve()).as_posix()
+        except ValueError:
+            return None
+        if ref is None:
+            ref = self._draft_rehearsal(draft_dir)
+        return {"kind": "draft", "draft": key,
+                "rehearsal_id": None if ref is None else ref["id"]}
 
     # ---------- history ----------
 
@@ -3519,48 +3667,165 @@ class Api:
             return False
 
     def delete_take(self, folder, take_number):
+        """
+        Moves the take into the holding folder and drops its rows, asking
+        nothing: {"ok": True, "undo": token, "takes_left"}. The token is what
+        the interface's Undo sends back (undo_trash); the take reaches the
+        Trash when that notice ends (end_trash), and its copy in the cloud
+        folder leaves with it then. {"ok": False, "error"} leaves the take,
+        rows and files, as it was.
+        """
         folder = Path(folder)
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
         with self._files_lock:
-            target = self._lib.take(folder, take_number)
-            if target is None:
+            if self._lib.take(folder, take_number) is None:
                 if not self._lib.has(folder):
                     return {"ok": False, "error": "Rehearsal not found"}
                 return {"ok": False, "error": "Take not found"}
-
-            # Find the take folder from its files rather than its name: the name
-            # could have been changed by hand. Its notes are files too: a take
-            # of nothing but notes has no audio to find it by.
-            take_dirs = {str(d) for d in _dirs_of(target)}
-            result = {"ok": True, "trashed": False, "location": None}
-            for d in take_dirs:
-                if Path(d).exists() and self._inside_recordings(d):
-                    self._release_player_in(d)
-                    result = move_to_trash(d, self._recordings_dir)
-
-            # Its copy in the cloud goes the same way: a take deleted here must
-            # not stay in the band's folder looking like one worth keeping. A copy
-            # still being made cleans up after itself when it finds the take gone.
-            self._remove_shared(target)
-            left = self._lib.delete_take(folder, take_number)
-            return {**result, "takes_left": left}
+            held = self._hold_takes(folder, [take_number], "take")
+            if held["failed"]:
+                return {"ok": False, "error": held["failed"][0]["error"]}
+            return {"ok": True, "undo": held["undo"], "takes_left": held["takes_left"]}
 
     def delete_takes(self, folder, take_numbers):
-        """Several takes at once, each as delete_take deletes one: Clear
-        false starts. The ones that could not be deleted are said, and the
-        rest are deleted all the same."""
-        deleted, failed = [], []
-        for n in take_numbers:
-            res = self.delete_take(folder, n)
-            if res.get("ok"):
-                deleted.append(n)
+        """Several takes at once, as delete_take deletes one: Clear false
+        starts. All of them wait in one holding entry, with one Undo
+        ("undo", None when none went). The ones that could not be deleted are
+        said, and the rest are deleted all the same."""
+        folder = Path(folder)
+        numbers = list(dict.fromkeys(take_numbers))
+        refused = {}
+        found = []
+        with self._files_lock:
+            for n in numbers:
+                if not self._inside_recordings(folder):
+                    refused[n] = "Folder is outside the recordings directory"
+                elif self._lib.take(folder, n) is not None:
+                    found.append(n)
+                else:
+                    refused[n] = ("Take not found" if self._lib.has(folder)
+                                  else "Rehearsal not found")
+            held = (self._hold_takes(folder, found, "takes") if found
+                    else {"undo": None, "deleted": [], "failed": []})
+        refused.update({f["take_number"]: f["error"] for f in held["failed"]})
+        return {"ok": True, "deleted": held["deleted"],
+                "failed": [{"take_number": n, "error": refused[n]}
+                           for n in numbers if n in refused],
+                "undo": held["undo"]}
+
+    def _hold_takes(self, folder, numbers, kind):
+        """
+        Takes of one rehearsal into one holding entry, then their rows out:
+        {"undo", "deleted", "failed", "takes_left"}. In this order: the player
+        lets go of their files, earlier entries this ends go on (_hold), the
+        files move, and only then do the rows go, so a take whose files will
+        not all move (Windows refuses a folder holding a file another
+        program has open) keeps its rows and its files where they were, and
+        is said in "failed". The others go all the same.
+        """
+        rehearsal = self._lib.rehearsal(folder) or {"takes": []}
+        by_number = {t["take_number"]: t for t in rehearsal["takes"]}
+        todo = [n for n in dict.fromkeys(int(n) for n in numbers) if n in by_number]
+        failed = []
+        while todo:
+            others = [t for n, t in by_number.items() if n not in todo]
+            paths_of = {n: self._held_paths(folder, by_number[n], others) for n in todo}
+            paths = self._outermost([p for n in todo for p in paths_of[n]])
+            for path in paths:
+                self._release_player_in(path)
+            records = [self._lib.take_record(folder, n) for n in todo]
+            idents = [{"kind": "take", "rehearsal_id": r["rehearsal"]["id"],
+                       "take_number": n} for n, r in zip(todo, records)]
+            record = {
+                "kind": kind,
+                "item": idents if kind == "takes" else idents[0],
+                "rehearsal": records[0]["rehearsal"],
+                "takes": records,
+                # Its copies in the cloud stay until the end, so Undo has
+                # nothing to send again; the end takes them out.
+                "shared": [{k: by_number[n]["cloud"][k] for k in ("mix", "tracks")
+                            if (by_number[n].get("cloud") or {}).get(k)}
+                           for n in todo if _shape_of(by_number[n].get("cloud"))],
+            }
+            try:
+                token = self._hold(record, paths)
+            except (OSError, ValueError) as e:
+                stuck = self._stuck_take(e, paths_of)
+                if stuck is None or len(todo) == 1:
+                    failed += [{"take_number": n, "error": f"Could not remove it: {e}"}
+                               for n in todo]
+                    break
+                failed.append({"take_number": stuck, "error": f"Could not remove it: {e}"})
+                todo.remove(stuck)
+                continue
+            try:
+                left = self._lib.delete_takes(folder, todo)
+            except Exception:
+                # The rows are all still there: their files go back to them.
+                try:
+                    holding.put_back(self._recordings_dir, token, paths)
+                except OSError as e:
+                    print(f"[delete] putting the takes back after the library refused: {e}")
+                raise
+            return {"undo": token, "deleted": todo, "failed": failed, "takes_left": left}
+        return {"undo": None, "deleted": [], "failed": failed, "takes_left": len(by_number)}
+
+    def _held_paths(self, folder, take, others):
+        """
+        What of a take moves into the holding folder: each folder its files
+        are in, found from its files rather than its name (the name could
+        have been changed by hand, and a take of nothing but notes has no
+        audio to find it by). A folder goes whole when it is inside the
+        rehearsal's folder and holds nothing of `others`, the rehearsal's
+        other takes; otherwise only the take's own files in it go, so a
+        folder shared with another take, or the rehearsal's own folder, is
+        never carried off with it. Only what is on disk.
+        """
+        files = [Path(f["file"]) for f in [*take["tracks"], *(take.get("notes") or [])]
+                 if f.get("file")]
+        theirs = [Path(f["file"]) for t in others
+                  for f in [*t["tracks"], *(t.get("notes") or [])] if f.get("file")]
+        paths = []
+        for d in sorted({f.parent for f in files}):
+            if not os.path.lexists(d):
+                continue
+            whole = (_is_inside(d, folder) and not _same_folder(d, folder)
+                     and not any(_is_inside(f, d) for f in theirs))
+            if whole:
+                paths.append(d)
             else:
-                failed.append({"take_number": n, "error": res.get("error")})
-        return {"ok": True, "deleted": deleted, "failed": failed}
+                paths += [f for f in files if f.parent == d and os.path.lexists(f)
+                          and self._inside_recordings(f)]
+        return paths
+
+    @staticmethod
+    def _outermost(paths):
+        """Each path once, less any inside another: moving the outer one moves
+        it already."""
+        paths = list(dict.fromkeys(paths))
+        return [p for p in paths if not any(q != p and _is_inside(p, q) for q in paths)]
+
+    @staticmethod
+    def _stuck_take(error, paths_of):
+        """Which take's file or folder would not move, from the error the
+        move raised; None when it does not say."""
+        where = getattr(error, "filename", None)
+        if not where:
+            return None
+        for n, paths in paths_of.items():
+            if any(str(p) == str(where) for p in paths):
+                return n
+        return None
 
     def delete_rehearsal(self, folder):
+        """
+        Moves the whole folder into the holding folder and drops the
+        rehearsal's rows, asking nothing: {"ok": True, "undo": token}. Undo
+        brings back the folder and every row; when the notice ends, the folder
+        goes to the Trash and its takes' copies leave the cloud folder.
+        """
         folder = Path(folder)
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
@@ -3570,14 +3835,213 @@ class Api:
             return {"ok": False, "error": "Cannot delete the rehearsal in progress"}
         with self._files_lock:
             self._release_player_in(folder)
-            result = move_to_trash(folder, self._recordings_dir)
-            if result.get("ok"):
-                # And its copies in the cloud, take by take — only what the app
-                # put there, then the folder they were in once nothing is left.
-                for take in (self._lib.rehearsal(folder) or {}).get("takes", []):
-                    self._remove_shared(take)
-                self._lib.forget_rehearsal(folder)
+            rows = self._lib.rehearsal_record(folder)
+            ref = self._lib.rehearsal_ref(folder)
+            takes = (self._lib.rehearsal(folder) or {}).get("takes", [])
+            try:
+                key = folder.resolve().relative_to(self._recordings_dir.resolve()).as_posix()
+            except ValueError:
+                key = None
+            record = {
+                "kind": "rehearsal",
+                "item": {"kind": "rehearsal", "folder": key,
+                         "rehearsal_id": None if ref is None else ref["id"]},
+                "rehearsal": rows,
+                "shared": [{k: t["cloud"][k] for k in ("mix", "tracks")
+                            if (t.get("cloud") or {}).get(k)}
+                           for t in takes if _shape_of(t.get("cloud"))],
+            }
+            try:
+                token = self._hold(record, [folder])
+            except (OSError, ValueError) as e:
+                return {"ok": False, "error": f"Could not remove it: {e}"}
+            if rows is not None:
+                try:
+                    self._lib.forget_rehearsal(folder)
+                except Exception:
+                    try:
+                        holding.put_back(self._recordings_dir, token, [folder])
+                    except OSError as e:
+                        print(f"[delete] putting the rehearsal back after the library refused: {e}")
+                    raise
+            return {"ok": True, "undo": token}
+
+    # ---------- removals waiting for their Undo ----------
+    #
+    # A take, a rehearsal or a draft removed waits in the holding folder
+    # (holding.py) with a record of its rows, and its rows are dropped: every
+    # screen stops showing it at once. The interface offers Undo (undo_trash)
+    # and says when that notice has ended (end_trash), which sends the item
+    # on to the Trash. Python ends entries of its own accord too: all of them
+    # at quit, at start (after a crash) and before the recordings folder
+    # changes; and before each new removal, any that has waited longer than
+    # holding.STALE_SEC (the window was reloaded, say) and any of the same
+    # item (_ends). Every end is the Trash, or back where it was.
+
+    def _hold(self, record, paths):
+        """The ends a new removal brings (_end_before), then `paths` into a
+        new entry with `record` (holding.hold): its token. Raises OSError or
+        ValueError with nothing moved when they could not all move."""
+        self._end_before(_identities(record))
+        return holding.hold(self._recordings_dir, record, paths)
+
+    def _end_before(self, idents, stale=True):
+        """Ends every waiting entry of the same item as any of `idents`
+        (_ends), and with `stale` every entry older than STALE_SEC."""
+        now = time.time()
+        for token in holding.tokens(self._recordings_dir):
+            data = holding.read(self._recordings_dir, token)
+            try:
+                age = now - float((data or {}).get("time"))
+            except (TypeError, ValueError):
+                # No record to undo it with: nothing is waiting for it.
+                age = holding.STALE_SEC + 1
+            theirs = _identities((data or {}).get("record"))
+            if ((stale and age > holding.STALE_SEC)
+                    or any(_ends(new, was) for new in idents for was in theirs)):
+                self._end(token)
+
+    def _end(self, token):
+        """One entry on to the Trash, and then the cloud copies its record
+        names out of the cloud folder. {"ok": True}, also for an entry that
+        is not there; {"ok": False, "error"} leaves it, copies and all, for
+        the next start."""
+        data = holding.read(self._recordings_dir, token)
+        shared = ((data or {}).get("record") or {}).get("shared") or []
+        result = holding.send_on(self._recordings_dir, token, move_to_trash)
+        if not result.get("ok"):
+            print(f"[trash] {token} stays for the next start: {result.get('error')}")
             return result
+        for copy in shared:
+            if isinstance(copy, dict):
+                self._remove_shared({"cloud": copy})
+        return {"ok": True}
+
+    def _end_all(self):
+        """Every entry waiting goes on to the Trash: at quit, at start, and
+        before the recordings folder changes. One that fails stays for the
+        next start, and the others still go."""
+        for token in holding.tokens(self._recordings_dir):
+            try:
+                self._end(token)
+            except Exception as e:  # noqa: BLE001 - starting and quitting go on
+                print(f"[trash] {token} stays for the next start: {e}")
+
+    def end_trash(self, token):
+        """
+        The Undo's notice has ended: the item goes on to the Trash, or the
+        _deleted folder where there is none, and its copies leave the cloud
+        folder. {"ok": True}, also when it is no longer waiting (another end
+        sent it on, or Undo brought it back); {"ok": False, "error"} when the
+        Trash refused, the entry then left for the next start.
+        """
+        with self._files_lock:
+            return self._end(token)
+
+    def undo_trash(self, token):
+        """
+        Undo: the item back where it came from, and its rows back in the
+        library. {"ok": True, "kind"} with what came back: "take" or "takes"
+        with "folder" and "take_numbers", "rehearsal" with "folder", "draft"
+        with "temp_dir" and "folder". {"ok": False, "error"} when it cannot
+        come back: it has gone on to the Trash already, something else is in
+        its place, its number is taken, or its rehearsal is gone. Those are
+        asked before anything moves. Should the library still refuse once the
+        files are back, the files stay back, as they are the person's, and
+        the entry is gone.
+        """
+        with self._files_lock:
+            data = holding.read(self._recordings_dir, token)
+            if data is None:
+                return {"ok": False, "error": GONE_TO_TRASH}
+            record = data.get("record") or {}
+            kind = record.get("kind")
+            items = data.get("items") or []
+            try:
+                if kind in ("take", "takes"):
+                    return self._undo_takes(token, record, items)
+                if kind == "rehearsal":
+                    return self._undo_rehearsal(token, record, items)
+                if kind == "draft":
+                    return self._undo_draft(token, record, items)
+            except FileExistsError as e:
+                return {"ok": False, "error": str(e)}
+            except (OSError, ValueError) as e:
+                return {"ok": False, "error": f"Could not put it back: {e}"}
+            return {"ok": False, "error": f"Cannot undo a removal of {kind!r}"}
+
+    def _back_in(self, folder, was, item):
+        """Where an item that came from a rehearsal then at `was` (relative to
+        the recordings folder) goes back to, the rehearsal being at `folder`
+        now."""
+        source = PurePosixPath(item["from"])
+        try:
+            return folder / Path(*source.relative_to(was).parts)
+        except ValueError:
+            return self._recordings_dir / Path(*source.parts)
+
+    def _undo_takes(self, token, record, items):
+        ref = record.get("rehearsal") or {}
+        folder = self._lib.rehearsal_folder(ref)
+        if folder is None:
+            return {"ok": False, "error": "Its rehearsal is gone."}
+        # Only files need the folder: a take whose files were not on disk
+        # (its drive unplugged) held none, and its rows come back all the same.
+        if items and not folder.is_dir():
+            return {"ok": False, "error": "The rehearsal's folder is not on disk"}
+        takes = record.get("takes") or []
+        numbers = [int(t["take"]["take_number"]) for t in takes]
+        for n in numbers:
+            if self._lib.take(folder, n) is not None:
+                return {"ok": False, "error": f"Take {n} is taken by another take now."}
+        was = PurePosixPath(ref["folder"])
+        holding.put_back(self._recordings_dir, token,
+                         [self._back_in(folder, was, item) for item in items])
+        for take in takes:
+            try:
+                self._lib.restore_take(take)
+            except ValueError as e:
+                return {"ok": False, "error": str(e)}
+        # A copy asked for while it was gone discarded itself; ask again.
+        for n in numbers:
+            self._enqueue_publish(folder, n)
+        # Its song renamed meanwhile: its folder follows its name.
+        self._names_pass.request()
+        return {"ok": True, "kind": record["kind"], "folder": str(folder),
+                "take_numbers": numbers}
+
+    def _undo_rehearsal(self, token, record, items):
+        if not items:
+            return {"ok": False, "error": GONE_TO_TRASH}
+        place = self._recordings_dir / Path(*PurePosixPath(items[0]["from"]).parts)
+        rows = record.get("rehearsal")
+        if rows is not None and self._lib.has(place):
+            return {"ok": False, "error": f"Something else is in its place now: {place}"}
+        holding.put_back(self._recordings_dir, token, [place])
+        if rows is not None:
+            try:
+                self._lib.restore_rehearsal(rows)
+            except ValueError as e:
+                return {"ok": False, "error": str(e)}
+        return {"ok": True, "kind": "rehearsal", "folder": str(place)}
+
+    def _undo_draft(self, token, record, items):
+        if not items:
+            return {"ok": False, "error": GONE_TO_TRASH}
+        ref = record.get("rehearsal")
+        if ref is not None:
+            folder = self._lib.rehearsal_folder(ref)
+            if folder is None or not folder.is_dir():
+                return {"ok": False, "error": "Its rehearsal is gone."}
+            place = self._back_in(folder, PurePosixPath(ref["folder"]), items[0])
+        else:
+            place = self._recordings_dir / Path(*PurePosixPath(items[0]["from"]).parts)
+            home = place.parent.parent if place.parent.name == DRAFTS_DIR else place.parent
+            if not home.is_dir():
+                return {"ok": False, "error": "Its rehearsal is gone."}
+            folder = home
+        holding.put_back(self._recordings_dir, token, [place])
+        return {"ok": True, "kind": "draft", "temp_dir": str(place), "folder": str(folder)}
 
     # ---------- a rehearsal whose folder went missing ----------
 
@@ -3617,11 +4081,13 @@ class Api:
 
         # Where deleted things go is not a rehearsal's to have either: the
         # next thing sent there would land inside it, and the next cleanup
-        # would carry the rehearsal's own files away with it.
+        # would carry the rehearsal's own files away with it. Nor where they
+        # wait for their Undo: that goes to the Trash with its entry.
         target = new_folder.resolve()
-        trash = (self._recordings_dir / FALLBACK_TRASH).resolve()
-        if _same_folder(target, trash) or _folder_within(target, trash):
-            return {"ok": False, "error": "That folder is where deleted things go"}
+        for kept in (FALLBACK_TRASH, holding.HOLDING_DIR):
+            place = (self._recordings_dir / kept).resolve()
+            if _same_folder(target, place) or _folder_within(target, place):
+                return {"ok": False, "error": "That folder is where deleted things go"}
 
         rehearsals = self._lib.rehearsals()
         me = next((r for r in rehearsals if Path(r["folder"]) == folder), None)
@@ -4360,6 +4826,37 @@ class Api:
                     shared[k] = str(goes_to / Path(shared[k]).name)
             shared["source"] = {**(shared.get("source") or {}), "dir": target}
             self._lib.set_cloud_copy(new_folder, t["take_number"], shared, cloud)
+        self._follow_held_copies(cloud, was, goes_to, target)
+
+    def _follow_held_copies(self, cloud, was, goes_to, target):
+        """
+        The copies of this rehearsal's takes that wait in the holding folder
+        for their Undo were in its cloud folder too, and moved with it: their
+        records follow them, so the end of the notice takes them out where
+        they are, and Undo puts back a record of a copy that is there.
+        """
+        for token in holding.tokens(self._recordings_dir):
+            record = (holding.read(self._recordings_dir, token) or {}).get("record")
+            if not isinstance(record, dict):
+                continue
+            changed = False
+            for shared in record.get("shared") or []:
+                for k in ("mix", "tracks"):
+                    if shared.get(k) and Path(shared[k]).parent == was:
+                        shared[k] = str(goes_to / Path(shared[k]).name)
+                        changed = True
+            for take in record.get("takes") or []:
+                copy = take.get("cloud_copy") or {}
+                moved = False
+                for k in ("mix", "tracks"):
+                    if copy.get(k) and (cloud / copy[k]).parent == was:
+                        copy[k] = (goes_to / Path(copy[k]).name).relative_to(cloud).as_posix()
+                        moved = True
+                if moved:
+                    copy["source"] = {**(copy.get("source") or {}), "dir": target}
+                    changed = True
+            if changed:
+                holding.update(self._recordings_dir, token, record)
 
     # ---------- putting names right ----------
 

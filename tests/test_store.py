@@ -1468,6 +1468,190 @@ def main():
                   "(SELECT id FROM rehearsal)") == [(0,)])
     lib.close()
 
+    print("\n[17] A take and a rehearsal come back whole")
+    # A removal waits in the holding folder with a record of its rows, read
+    # just before they were dropped (api.py, holding.py). Undo puts the rows
+    # back from it: the same take by the same name, wherever its rehearsal
+    # and its song are by then.
+    rec17 = tmp / "Undo"
+    rec17.mkdir()
+    cloud17 = tmp / "Undo cloud"
+    lib = Library(rec17, cloud_dir=lambda: cloud17)
+    night17 = rec17 / "Night - 2026-09-30 19-00"
+    band17 = [{"name": "Drums", "channel": 1, "mode": "both", "midi_port": {"name": "TD-17"}},
+              {"name": "Bass", "channel": 3}]
+    lib.create_rehearsal(night17, "Night", "2026-09-30T19:00:00", 48000, 24, band17,
+                         set_copy={"name": "Tuesday", "songs": ["Polyn", "Vesna"]})
+    first17 = lib.labels()[0]["id"]
+    spare17 = next(lb["id"] for lb in lib.add_label("Spare", "teal") if lb["name"] == "Spare")
+
+    def add17(number, name, **more):
+        here = night17 / f"{number:02d} - {name}"
+        return lib.add_take(night17, {
+            "take_number": number, "name": name, "duration_sec": 4.0 + number,
+            "tracks": [{"name": "Drums", "file": str(here / "Drums.wav")},
+                       {"name": "Bass", "file": str(here / "Bass.wav")}],
+            "notes": [{"name": "Drums", "file": str(here / "Drums.mid")}],
+            "markers": [{"at": 1.0, "label_id": spare17, "note": "fill"},
+                        {"at": 2.5, "label_id": first17, "note": ""}],
+            **more})
+
+    def round_trip(record):
+        """As it comes back from record.json."""
+        return json.loads(json.dumps(record))
+
+    add17(1, "Polyn")
+    add17(2, "Polyn", cloud_send=True)
+    add17(3, "Vesna", cloud_skip=True)
+    lib.set_starred(night17, 2, True)
+    sub17 = cloud17 / night17.name
+    lib.set_cloud_copy(night17, 2, {
+        "mix": str(sub17 / "02 - Polyn 2.mp3"), "mix_format": "mp3", "gain": 0.8,
+        "tracks": str(sub17 / "02 - Polyn 2"), "tracks_format": "wav",
+        "source": {"dir": night17.name, "what": "both"}}, cloud17)
+    lib.set_cloud_error(night17, 3, "the folder was gone")
+
+    before17 = lib.take(night17, 2)
+    record17 = lib.take_record(night17, 2)
+    ok("a take's record is plain data that comes back from JSON as it went in",
+       record17 is not None and round_trip(record17) == record17)
+    ok("there is no record of a take that is not there",
+       lib.take_record(night17, 9) is None and lib.take_record(rec17 / "Nowhere", 1) is None)
+    lib.delete_take(night17, 2)
+    lib.restore_take(round_trip(record17))
+    after17 = lib.take(night17, 2)
+    ok("put back, a take is what it was: its name, go, song, star and length",
+       after17 is not None
+       and (after17["name"], after17["song"], after17["go"], after17["starred"],
+            after17["duration_sec"]) == ("Polyn 2", "Polyn", 2, True, 6.0))
+    ok("its audio and notes files, its marks with their labels and notes",
+       after17["tracks"] == before17["tracks"] and after17["notes"] == before17["notes"]
+       and after17["markers"] == [{"at": 1.0, "label_id": spare17, "note": "fill"},
+                                  {"at": 2.5, "label_id": first17, "note": ""}])
+    ok("its cloud copy and its own cloud answers",
+       after17["cloud"] == before17["cloud"] and after17["cloud"]["gain"] == 0.8
+       and after17["cloud_send"] is True and after17["cloud_skip"] is False)
+    ok("all of it, the same take as before", after17 == before17)
+    ok("and the song's count of goes has not moved on", lib.next_goes()["Polyn"] == 3)
+
+    errored17 = lib.take(night17, 3)
+    record17 = lib.take_record(night17, 3)
+    lib.delete_take(night17, 3)
+    lib.restore_take(round_trip(record17))
+    ok("a take's cloud failure and its 'not this one' come back too",
+       lib.take(night17, 3) == errored17
+       and lib.take(night17, 3)["cloud_error"] == "the folder was gone"
+       and lib.take(night17, 3)["cloud_skip"] is True)
+
+    print("  the song renamed, merged or gone meanwhile")
+    record17 = lib.take_record(night17, 1)
+    lib.delete_take(night17, 1)
+    lib.rename_song(lib.song_id("Polyn"), "Polin")
+    lib.restore_take(round_trip(record17))
+    back17 = lib.take(night17, 1)
+    ok("a song renamed while the take waited: it comes back under the new title, with its go",
+       (back17["name"], back17["song"], back17["go"]) == ("Polin 1", "Polin", 1))
+
+    record17 = lib.take_record(night17, 3)
+    lib.delete_take(night17, 3)
+    vesna17 = lib.song_id("Vesna")
+    lib.merge_songs(vesna17, lib.song_id("Polin"))
+    # SQLite gives the merged song's id to the next new song when it was the
+    # newest: the record's id is then another song's, which must not be it.
+    add17(4, "Etude")
+    reused17 = lib.song_id("Etude") == vesna17
+    lib.restore_take(round_trip(record17))
+    back17 = lib.take(night17, 3)
+    ok("a song merged away: the take goes to the song its title now leads to, at the next go",
+       (back17["song"], back17["go"]) == ("Polin", 3))
+    ok("not to whatever song has its old id now", reused17 and back17["song"] != "Etude")
+
+    print("  a label deleted, a number taken, a rehearsal gone or renamed")
+    record17 = lib.take_record(night17, 1)
+    lib.delete_take(night17, 1)
+    lib.delete_label(spare17, marks_to=first17)
+    lib.restore_take(round_trip(record17))
+    marks17 = lib.take(night17, 1)["markers"]
+    ok("a mark whose label was deleted comes back with its note, on the first label, "
+       "since a mark always has one",
+       marks17 == [{"at": 1.0, "label_id": first17, "note": "fill"},
+                   {"at": 2.5, "label_id": first17, "note": ""}])
+
+    record17 = lib.take_record(night17, 4)
+    lib.delete_take(night17, 4)
+    lib.add_take(night17, {"take_number": 4, "name": "Sonca", "tracks": []})
+    try:
+        lib.restore_take(round_trip(record17))
+        refused17 = None
+    except ValueError as e:
+        refused17 = str(e)
+    ok("a number another take has now is refused, saying so",
+       refused17 == "Take 4 is taken by another take now.")
+    ok("and the take that has it is left as it is", lib.take(night17, 4)["name"] == "Sonca 1")
+
+    record17 = lib.take_record(night17, 1)
+    lib.delete_take(night17, 1)
+    moved17 = rec17 / "Friday - 2026-09-30 19-00"
+    lib.move_rehearsal(night17, moved17, "Friday")
+    lib.restore_take(round_trip(record17))
+    ok("a take goes back into its rehearsal by its id, wherever its folder is now",
+       lib.take(moved17, 1) is not None
+       and lib.take(moved17, 1)["tracks"][0]["file"]
+       == str(moved17 / "01 - Polyn" / "Drums.wav"))
+    lib.move_rehearsal(moved17, night17, "Night")
+
+    lost17 = rec17 / "Lost - 2026-09-01 19-00"
+    lib.create_rehearsal(lost17, "Lost", "2026-09-01T19:00:00", 48000, 24, band17)
+    lib.add_take(lost17, {"take_number": 1, "name": "Polin", "tracks": []})
+    record17 = lib.take_record(lost17, 1)
+    lib.forget_rehearsal(lost17)
+    try:
+        lib.restore_take(round_trip(record17))
+        refused17 = None
+    except ValueError as e:
+        refused17 = str(e)
+    ok("a take whose rehearsal is gone is refused, saying so",
+       refused17 == "Its rehearsal is gone.")
+    # Its id given to a rehearsal made since: not the same rehearsal.
+    lib.create_rehearsal(lost17, "Lost again", "2026-10-01T19:00:00", 48000, 24, band17)
+    try:
+        lib.restore_take(round_trip(record17))
+        refused17 = None
+    except ValueError as e:
+        refused17 = str(e)
+    ok("and so is one whose rehearsal's id is another rehearsal's now",
+       lib.rehearsal_ref(lost17)["id"] == record17["rehearsal"]["id"]
+       and refused17 == "Its rehearsal is gone." and lib.rehearsal(lost17)["takes"] == [])
+
+    print("  a whole rehearsal")
+    whole17 = lib.rehearsal(night17)
+    record17 = lib.rehearsal_record(night17)
+    ok("a rehearsal's record is plain data too",
+       record17 is not None and round_trip(record17) == record17
+       and lib.rehearsal_record(rec17 / "Nowhere") is None)
+    lib.forget_rehearsal(night17)
+    lib.restore_rehearsal(round_trip(record17))
+    again17 = lib.rehearsal(night17)
+    ok("forgotten and put back, a rehearsal is what it was: its name, tracks and set",
+       again17 is not None and again17["name"] == "Night"
+       and again17["tracks"] == whole17["tracks"] and again17["set"] == whole17["set"]
+       and again17["set"]["name"] == "Tuesday")
+    ok("and every take of it", again17["takes"] == whole17["takes"]
+       and [t["take_number"] for t in again17["takes"]] == [1, 2, 3, 4])
+    ok("all of it", again17 == whole17)
+
+    lib.forget_rehearsal(night17)
+    lib.create_rehearsal(night17, "Someone else", "2026-10-02T19:00:00", 48000, 24, band17)
+    try:
+        lib.restore_rehearsal(round_trip(record17))
+        refused17 = None
+    except ValueError as e:
+        refused17 = str(e)
+    ok("a rehearsal whose folder is another rehearsal's now is refused, saying so",
+       refused17 == f"Something else is in its place now: {night17}"
+       and lib.rehearsal(night17)["name"] == "Someone else")
+    lib.close()
+
     print()
     if problems:
         print(f"{len(problems)} problem(s):")
