@@ -43,7 +43,9 @@ pixels. After changing either, run
 and commit what it writes: `packaging/icon.ico` for Windows, `icon.icns` for
 macOS, and for the interface the small drawing as `ui/public/favicon.svg`
 (the tab, and the setup screen's header) and the full one as `logo.svg` (the
-screen shown while the app starts). It draws the sizes
+screen shown while the app starts). For reha.stream it draws the small one
+as `ui/public/icon-192.png`, the icon Google's results show (they take no
+SVG), and as `ui/public/favicon.ico`. It draws the sizes
 with the Chromium Playwright installs for the interface tests, and both icon
 formats hold PNGs as they are, so no image library is needed. The build reads
 the finished files, so building needs nothing it does. Run from source on
