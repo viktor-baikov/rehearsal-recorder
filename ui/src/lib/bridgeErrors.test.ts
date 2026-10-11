@@ -2,8 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   dismissBridgeErrors,
   getBridgeErrors,
+  getMoreBridgeErrors,
+  KEPT,
   reportBridgeError,
   subscribeBridgeErrors,
+  TOLD_APART,
+  whereTheRestIs,
 } from "@/lib/bridgeErrors"
 
 // Every report is written to the console as an error, which is the point in
@@ -55,6 +59,73 @@ describe("the bridge's errors", () => {
     // And the same report, said again after that, shows again.
     reportBridgeError("startup", fail("RemovalKept", "Two folders were kept."))
     expect(getBridgeErrors()).toHaveLength(1)
+  })
+
+  it("lists the first 20 and counts the rest", () => {
+    for (let i = 1; i <= 25; i++) {
+      reportBridgeError("startup", fail("OperationalError", `Could not read rehearsal ${i}.`))
+    }
+    expect(KEPT).toBe(20)
+    const listed = getBridgeErrors()
+    expect(listed).toHaveLength(20)
+    // The first ones, which in a cascade are the cause.
+    expect(listed[0].message).toBe("Could not read rehearsal 1.")
+    expect(listed[19].message).toBe("Could not read rehearsal 20.")
+    expect(getMoreBridgeErrors()).toBe(5)
+    expect(whereTheRestIs(getMoreBridgeErrors())).toBe(
+      "and 5 more; all of them are in ~/.rehearsal-recorder/crash.log."
+    )
+  })
+
+  it("counts each of the rest once, and adds nothing for a listed one said again", () => {
+    for (let i = 1; i <= 22; i++) {
+      reportBridgeError("get_levels", fail("IndexError", `index ${i} out of range`))
+    }
+    const full = getBridgeErrors()
+    reportBridgeError("get_levels", fail("IndexError", "index 3 out of range"))
+    reportBridgeError("get_levels", fail("IndexError", "index 21 out of range"))
+    reportBridgeError("get_levels", fail("IndexError", "index 22 out of range"))
+    expect(getMoreBridgeErrors()).toBe(2)
+    // A full list stays the same list: only the count moves.
+    expect(getBridgeErrors()).toBe(full)
+    reportBridgeError("get_levels", fail("IndexError", "index 23 out of range"))
+    expect(getBridgeErrors()).toBe(full)
+    expect(getMoreBridgeErrors()).toBe(3)
+  })
+
+  it("stops telling the rest apart past a thousand, so it does not keep them all", () => {
+    const levels = (i: number) =>
+      reportBridgeError("get_levels", fail("IndexError", `index ${i} out of range`))
+    for (let i = 1; i <= KEPT + TOLD_APART; i++) levels(i)
+    expect(getMoreBridgeErrors()).toBe(1000)
+    // One it told apart, said again, still adds nothing.
+    levels(KEPT + 1)
+    expect(getMoreBridgeErrors()).toBe(1000)
+    // Past that, each report counts, even a repeat.
+    levels(KEPT + TOLD_APART + 1)
+    levels(KEPT + TOLD_APART + 1)
+    expect(getMoreBridgeErrors()).toBe(1002)
+  })
+
+  it("puts the count away with the list", () => {
+    for (let i = 1; i <= 21; i++) {
+      reportBridgeError("startup", fail("OperationalError", `Could not read rehearsal ${i}.`))
+    }
+    expect(getMoreBridgeErrors()).toBe(1)
+    dismissBridgeErrors()
+    expect(getBridgeErrors()).toEqual([])
+    expect(getMoreBridgeErrors()).toBe(0)
+    // The one that was counted, said again, is listed now.
+    reportBridgeError("startup", fail("OperationalError", "Could not read rehearsal 21."))
+    expect(getBridgeErrors().map((e) => e.message)).toEqual(["Could not read rehearsal 21."])
+    expect(getMoreBridgeErrors()).toBe(0)
+  })
+
+  it("says where the whole error is when none are left out", () => {
+    expect(whereTheRestIs(0)).toBe("The full error is in ~/.rehearsal-recorder/crash.log.")
+    expect(whereTheRestIs(1)).toBe(
+      "and 1 more; all of them are in ~/.rehearsal-recorder/crash.log."
+    )
   })
 
   it("names what was thrown when it is not an Error", () => {

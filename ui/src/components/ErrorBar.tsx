@@ -1,6 +1,12 @@
 import { TriangleAlert, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { dismissBridgeErrors, useBridgeErrors } from "@/lib/bridgeErrors"
+import {
+  dismissBridgeErrors,
+  keyOf,
+  useBridgeErrors,
+  useMoreBridgeErrors,
+  whereTheRestIs,
+} from "@/lib/bridgeErrors"
 
 /**
  * Says so when a call into Python raised, over whatever screen is open.
@@ -11,9 +17,10 @@ import { dismissBridgeErrors, useBridgeErrors } from "@/lib/bridgeErrors"
  * It stays until put away, because the reason it exists is that the last
  * two such failures were silent.
  *
- * Every problem said since it was last put away is in it, oldest first, and
- * one Dismiss puts them all away. A long list scrolls inside the bar, which
- * stops at about 40% of the window, so the screen under it stays usable.
+ * Every problem said since it was last put away is in it, oldest first, up
+ * to the first 20; the line under them counts the rest. One Dismiss puts them
+ * all away. A long list scrolls inside the bar, which stops at about 40% of
+ * the window, so the screen under it stays usable.
  */
 export function ErrorBar() {
   const errors = useBridgeErrors()
@@ -28,7 +35,7 @@ export function ErrorBar() {
       <div className="min-w-0 flex-1">
         <ul className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto">
           {errors.map((error) => (
-            <li key={`${error.method}\n${error.name}\n${error.message}`}>
+            <li key={keyOf(error)}>
               <p className="font-medium text-destructive">
                 Something went wrong
                 <span className="font-normal text-muted-foreground"> in {error.method}</span>
@@ -39,9 +46,7 @@ export function ErrorBar() {
             </li>
           ))}
         </ul>
-        <p className="mt-1 text-xs text-muted-foreground">
-          The full error is in ~/.rehearsal-recorder/crash.log.
-        </p>
+        <WhereTheRestIs />
       </div>
       <Button
         variant="ghost"
@@ -53,4 +58,14 @@ export function ErrorBar() {
       </Button>
     </div>
   )
+}
+
+/**
+ * Where the whole of each problem is written, and how many are not listed.
+ * Its own component, so that a count that keeps going up draws this line
+ * again and not the list.
+ */
+function WhereTheRestIs() {
+  const more = useMoreBridgeErrors()
+  return <p className="mt-1 text-xs text-muted-foreground">{whereTheRestIs(more)}</p>
 }

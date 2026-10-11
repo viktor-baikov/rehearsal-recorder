@@ -211,8 +211,10 @@ piece of its own moves onto the shared one when it is redone.
   across the top (`components/ErrorBar.tsx`, from `lib/bridgeErrors.ts`),
   which lists every problem said until it is put away, oldest first and the
   same one once, so a second problem at start no longer hides the first.
-  One Dismiss puts them all away; a long list scrolls inside the bar, which
-  stops at 40% of the window.
+  It lists the first 20 and counts the rest under them, each once ("and 5
+  more"): in a cascade the first is the cause, and a full list stops
+  changing while only the count moves. One Dismiss puts them all away; a
+  long list scrolls inside the bar, which stops at 40% of the window.
 - **C5. Kbd**, `kbd.tsx`: one key chip, in the colour of the text round it,
   so the same chip reads on a page and on a filled button. Its ⌘ or Ctrl is
   `words().mod`. On a button the chip is `aria-hidden`, and the button names

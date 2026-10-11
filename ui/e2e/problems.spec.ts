@@ -85,7 +85,7 @@ test("two problems while starting are both shown, and one Dismiss puts both away
   expectedError(pageErrors, /startup failed/)
 })
 
-test("a long list of problems scrolls inside the bar, which never covers the window", async ({
+test("a long list of problems lists the first 20, counts the rest, and scrolls inside the bar", async ({
   page,
   pageErrors,
 }) => {
@@ -95,7 +95,15 @@ test("a long list of problems scrolls inside the bar, which never covers the win
   )
   await openApp(page, { before: `window.__STARTUP_PROBLEM__ = [${many.join(",")}];` })
   const bar = problemBar(page)
-  await expect(bar.getByRole("listitem")).toHaveCount(30)
+  const said = bar.getByRole("listitem")
+  // The first 20, since in a cascade the first is the cause; the other 10
+  // are counted under them.
+  await expect(said).toHaveCount(20)
+  await expect(said.first()).toContainText("Could not read rehearsal 1.")
+  await expect(said.last()).toContainText("Could not read rehearsal 20.")
+  await expect(bar).toContainText(
+    "and 10 more; all of them are in ~/.rehearsal-recorder/crash.log."
+  )
   const view = page.viewportSize()!
   const box = (await bar.boundingBox())!
   // About 40% of the window at most, the crash.log line and Dismiss in it.
@@ -103,10 +111,13 @@ test("a long list of problems scrolls inside the bar, which never covers the win
   await expect(bar.getByText(/crash\.log/)).toBeInViewport()
   await expect(bar.getByRole("button", { name: "Dismiss" })).toBeInViewport()
   // The last one is reached by scrolling the list, not the page.
-  const last = bar.getByRole("listitem").last()
+  const last = said.last()
   await expect(last).not.toBeInViewport()
   await last.scrollIntoViewIfNeeded()
   await expect(last).toBeInViewport()
+  // One Dismiss puts the list and the count away.
+  await bar.getByRole("button", { name: "Dismiss" }).click()
+  await expect(bar).toHaveCount(0)
   expectedError(pageErrors, /startup failed/)
 })
 
