@@ -100,8 +100,8 @@ is the first-time part. After that:
 3. `.github/workflows/release.yml` builds on a real Mac and a real Windows
    machine, runs every suite plus `--selftest` on the built app, and attaches
    the zips to the release.
-4. Then it puts the website up for that release (`site.yml`), unless it is
-   a pre-release. The page's news line is the bold start of the first item
+4. Then the same workflow puts the website up for that release (its `site`
+   and `site · deploy` jobs), unless it is a pre-release. The page's news line is the bold start of the first item
    in that version's section of `CHANGELOG.md`; without one it just says
    which version is new.
 

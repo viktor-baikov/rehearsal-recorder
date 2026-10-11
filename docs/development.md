@@ -105,8 +105,9 @@ cd ui && npm run test:e2e            # the interface in a browser (build first)
 
 What each is for: [tests/README.md](../tests/README.md).
 
-CI runs the Python suites on macOS and on Windows, on every push and every
-pull request. Both, because the two systems disagree about the things this
+CI (`.github/workflows/checks.yml`) runs the Python suites on macOS and on
+Windows, on every push to main and every pull request that changes more than
+the website. Both, because the two systems disagree about the things this
 app does most: a filesystem that ignores case, a file that cannot be moved
 while it is open, a code page with no Cyrillic. The interface's tests run
 once, on Linux: they run in a browser against a faked Python side, and

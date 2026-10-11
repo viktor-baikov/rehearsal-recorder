@@ -6,10 +6,11 @@
 
 version: 2
 updates:
-  # The actions in .github/workflows. These are what actually go stale
-  # here: GitHub retires a Node runtime and every run starts warning.
+  # The actions in .github/workflows and in the two shared steps under
+  # .github/actions. These are what actually go stale here: GitHub retires
+  # a Node runtime and every run starts warning.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: "weekly"
     groups:

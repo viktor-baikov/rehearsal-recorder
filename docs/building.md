@@ -93,8 +93,10 @@ double-click, and it is a purchase, not code.
 **Builds for both systems** are in `.github/workflows/release.yml`. Publish a
 release on GitHub and it builds on a real Mac and a real Windows machine,
 runs every test suite plus `--selftest` on the app it just made, and attaches
-the zips to that release. `workflow_dispatch` runs the same thing without
-cutting a release, leaving the builds as workflow artifacts.
+the zips to that release, then puts the website up for it. Run by hand, it
+asks what to do: **Rehearse the builds** (the default) runs the same builds
+without cutting a release, leaving them as workflow artifacts; **Put the site
+up again** deploys the latest release's website once more.
 
 This is also the only way this app has ever been built on Windows — there is
 no Windows in the environment it was written in, so the first real Windows
