@@ -214,6 +214,25 @@ def _unique_path(path):
         counter += 1
 
 
+def _free_copy_name(base, lands, taken):
+    """
+    What a take's copies in the cloud folder are called: `base` ("03 - Polyn"),
+    or `base` with " (2)", " (3)"… after it, as _unique_path names a folder,
+    the first whose copies (`lands(name)`, relative to the cloud folder) are
+    on no path another take names as its copy (`taken`, Library.cloud_paths).
+    Compared as the library compares them, paths_overlap, blind to case.
+
+    Within one rehearsal two takes never get one name, their numbers being
+    different. Two rehearsals can be filed under one folder name, though (one
+    pointed by Locate at a folder named like the other's), and a take nobody
+    named in each, "Take 1", would then be written onto the other's copy.
+    """
+    name, counter = base, 2
+    while any(paths_overlap(p, t) for p in lands(name) for t in taken):
+        name, counter = f"{base} ({counter})", counter + 1
+    return name
+
+
 def _identities(record):
     """
     What a holding entry's record says it holds, as a list of identities: a
@@ -5534,15 +5553,25 @@ class Api:
         if not tracks:
             return {"ok": False, "error": "The take has no files left on disk"}
 
-        self._remove_shared(take)
+        # Never onto a copy another take names: an old copy of this take
+        # that another take names now stays (_unused), and this copy takes
+        # the next free name (_free_copy_name). Copies only.
+        others = self._lib.others_cloud_paths(folder, take_number)
+        self._remove_shared(self._unused(take.get("cloud"), others))
 
         # From the folder settled on above, not from the setting again: it can
         # be cleared from the interface while this runs.
         target = _cloud_subfolder(cloud, folder)
-        base = f"{take_number:02d} - {_safe_name(take.get('name', '') or f'Take {take_number}')}"
+        fmt = normalize_format(self._config.get("cloud_format"))
+        # The tracks go in a folder of that name, the mix is it with the
+        # format's ending, or .wav when the encoder could not compress it.
+        base = _free_copy_name(
+            self._cloud_base(take_number, take),
+            lambda name: [PurePosixPath(target.name, name + end)
+                          for end in ("", extension(fmt), ".wav")],
+            others)
         shared = {}
 
-        fmt = normalize_format(self._config.get("cloud_format"))
         # Taken once, before anything is written. A mixdown is seconds long
         # and a fader can move during it; reading the balance again afterwards
         # would fingerprint the copy with a balance it was never rendered
@@ -5774,15 +5803,25 @@ class Api:
         shape = _shape_of(shared)
         if shape is None:
             return False, None
-        base = self._cloud_base(take_number, take)
         parts = {k: Path(shared[k]) for k in ("mix", "tracks") if shared.get(k)}
-        goes_to = {k: p.with_name(base + (p.suffix if k == "mix" else ""))
-                   for k, p in parts.items()}
         if (self._copy_busy(folder, take_number)
                 or not all(p.exists() and _is_inside(p, cloud) for p in parts.values())):
             if requeue:
                 self._queue_copy(folder, take_number, shape, take)
             return False, None
+
+        def lands(name):
+            return {k: p.with_name(name + (p.suffix if k == "mix" else ""))
+                    for k, p in parts.items()}
+
+        # Not onto a copy another take names, as a copy made anew is not
+        # (_copy_to_cloud): the next free name instead.
+        home = Path(cloud).resolve()
+        base = _free_copy_name(
+            self._cloud_base(take_number, take),
+            lambda name: [p.resolve().relative_to(home) for p in lands(name).values()],
+            self._lib.others_cloud_paths(folder, take_number))
+        goes_to = lands(base)
         moved = []
         try:
             for k, p in parts.items():
@@ -5911,9 +5950,12 @@ class Api:
         # and looked at again next open) and one of them has another name.
         shared = take.get("cloud") or {}
         base = self._cloud_base(take["take_number"], take)
+        # " (2)" after it carries it too: the next free name, which a copy
+        # takes when another take's has that name (_free_copy_name).
         recorded = [(key, Path(shared[key])) for key in ("mix", "tracks") if shared.get(key)]
         if recorded and all(p.exists() for _, p in recorded) and any(
-                (p.stem if key == "mix" else p.name) != base for key, p in recorded):
+                not _carries(p.stem if key == "mix" else p.name, base)
+                for key, p in recorded):
             wrong.add("cloud")
         return wrong
 

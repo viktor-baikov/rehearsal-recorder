@@ -1671,6 +1671,10 @@ def main():
     ok("a take put back whose cloud copy another take names now comes back without it",
        lib.take(night17, 2)["cloud"] == {}
        and lib.take(night17, 3)["cloud"].get("mix") == str(copy17))
+    ok("and the paths the other takes name leave out the take asked about, not the rest",
+       "Night - 2026-09-30 19-00/02 - Polyn.wav" not in lib.others_cloud_paths(night17, 3)
+       and "Night - 2026-09-30 19-00/02 - Polyn.wav" in lib.others_cloud_paths(night17, 2)
+       and lib.others_cloud_paths(night17, 99) == lib.cloud_paths())
     lib.set_cloud_copy(night17, 3, None, None)
 
     print("  a whole rehearsal")

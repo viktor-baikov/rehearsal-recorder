@@ -12108,6 +12108,114 @@ def main():
     h76.shutdown()
     apimod76.move_to_trash = real_trash71
 
+    print("\n[77] A copy never lands where another take's copy is")
+    # A copy is filed under its rehearsal's folder name as "NN - name"
+    # (_copy_to_cloud). Within one rehearsal two takes never share that:
+    # their numbers differ, and Undo refuses a number taken meanwhile. Across
+    # rehearsals a song's go is never given twice, so two takes of songs are
+    # never named alike either. Two takes nobody named are, though ("Take 1"
+    # in each), and two rehearsals can be filed under one folder name: Locate
+    # points a missing one at any folder in the recordings folder, one in a
+    # subfolder named like another rehearsal's included. Their takes 1 were
+    # then written onto one file, and an Undo that dropped a restored copy
+    # because the other take named it sent it again onto that same file. Now
+    # a copy takes the next free name, " (2)" as a take's folder does, and
+    # the other take's copy is left as it was. Copies only.
+    tmp77 = Path(tempfile.mkdtemp())
+    apimod77, h77 = fresh_api(tmp77)
+    rec77 = h77.recordings_dir
+    drive77 = tmp77 / "Drive"
+    apimod77.move_to_trash = trash71
+    h77.set_cloud_dir(str(drive77))
+    h77.set_auto_publish(True, "mix")
+    mon77 = past71(h77, "Monday", "2026-09-28T19:00:00", ["", "", ""])
+    gig77 = past71(h77, "Gig", "2026-09-30T19:00:00", ["", "Ogon", ""])
+    # The gig's takes sound unlike Monday's, so a copy shows whose it is.
+    for n77 in (1, 2, 3):
+        write_wav(Path(h77._lib.take(gig77, n77)["tracks"][0]["file"]), 3000 + n77,
+                  seconds=1.0)
+    (rec77 / "Old").mkdir()
+    moved77 = rec77 / "Old" / mon77.name
+    gig77.rename(moved77)
+    located77 = h77.locate_rehearsal(str(gig77), str(moved77))
+    gig77 = moved77
+    there77 = drive77 / mon77.name
+    ok("(the gig, found again in a folder named like Monday's, is filed under the same "
+       "cloud folder name, and its take 1 is named as Monday's is)",
+       located77.get("ok") is True and gig77.name == mon77.name
+       and h77._lib.take(gig77, 1)["name"] == h77._lib.take(mon77, 1)["name"] == "Take 1")
+
+    def run77():
+        while h77._cloud_queue.run_next():
+            pass
+
+    def copy77(folder, n):
+        mix = ((h77._lib.take(folder, n) or {}).get("cloud") or {}).get("mix")
+        return Path(mix) if mix else None
+
+    def sound77(path):
+        return path.read_bytes() if path is not None and path.is_file() else None
+
+    print("  Undo of a take whose copy the other take names now")
+    h77._copy_to_cloud(str(gig77), 1, "mix")
+    held77 = h77.delete_take(str(gig77), 1).get("undo")
+    # Monday's take 1 is sent while the gig's waits for its Undo: nothing
+    # live names that path, so it lands there, on the waiting copy.
+    h77._copy_to_cloud(str(mon77), 1, "mix")
+    mon_copy77 = copy77(mon77, 1)
+    mon_sound77 = sound77(mon_copy77)
+    back77 = h77.undo_trash(held77)
+    dropped77 = h77._lib.take(gig77, 1)["cloud"] == {}
+    run77()
+    gig_copy77 = copy77(gig77, 1)
+    ok("a. Undo brings the take back without the copy the other take names now",
+       mon_copy77 == there77 / "01 - Take 1.wav" and back77.get("ok") is True and dropped77)
+    ok("and sends it again beside it, leaving the other take's copy as it was",
+       sound77(mon_copy77) == mon_sound77 and copy77(mon77, 1) == mon_copy77
+       and gig_copy77 == there77 / "01 - Take 1 (2).wav"
+       and sound77(gig_copy77) not in (None, mon_sound77))
+    h77._copy_to_cloud(str(gig77), 1, "mix")
+    ok("sent again, a copy at ' (2)' stays there, and the other take's is left",
+       copy77(gig77, 1) == gig_copy77 and sound77(gig_copy77) is not None
+       and sound77(mon_copy77) == mon_sound77)
+    ok("and the pass that puts names right takes ' (2)' for its name, as on disk",
+       "cloud" not in h77._out_of_line(h77._lib.take(gig77, 1)))
+
+    print("  sent with no Undo, and renamed")
+    h77._copy_to_cloud(str(mon77), 3, "mix")
+    h77._copy_to_cloud(str(gig77), 3, "mix")
+    ok("b. two takes 3 nobody named, filed under one folder name, each keep their own copy",
+       copy77(mon77, 3) == there77 / "03 - Take 3.wav"
+       and copy77(gig77, 3) == there77 / "03 - Take 3 (2).wav"
+       and sound77(copy77(mon77, 3)) not in (None, sound77(copy77(gig77, 3))))
+    h77._copy_to_cloud(str(mon77), 2, "mix")
+    h77._copy_to_cloud(str(gig77), 2, "mix")
+    mon_two77 = copy77(mon77, 2)
+    mon_two_sound77 = sound77(mon_two77)
+    h77.rename_take(str(gig77), 2, "Take 2")
+    run77()
+    gig_two77 = copy77(gig77, 2)
+    ok("c. a take renamed to the other's name: its copy goes beside the other's, not onto it",
+       copy77(gig77, 2) is not None and h77._lib.take(gig77, 2)["name"] == "Take 2"
+       and mon_two77 == there77 / "02 - Take 2.wav" and sound77(mon_two77) == mon_two_sound77
+       and gig_two77 == there77 / "02 - Take 2 (2).wav"
+       and sound77(gig_two77) not in (None, mon_two_sound77))
+
+    print("  a copy two takes name already")
+    # As one left from before this was fixed: both rows name Monday's copy.
+    h77._lib.set_cloud_copy(gig77, 3, {"mix": str(copy77(mon77, 3)), "mix_format": "wav"},
+                            drive77)
+    mon_three77, mon_three_sound77 = copy77(mon77, 3), sound77(copy77(mon77, 3))
+    h77._copy_to_cloud(str(gig77), 3, "mix")
+    ok("d. sending one of them again takes nothing of the other's out of the cloud folder",
+       sound77(mon_three77) == mon_three_sound77 and copy77(mon77, 3) == mon_three77
+       and copy77(gig77, 3) == there77 / "03 - Take 3 (2).wav")
+    ok("and the takes' own files are where they were",
+       all(Path(t["file"]).is_file() for f in (mon77, gig77) for n in (1, 2, 3)
+           for t in h77._lib.take(f, n)["tracks"]))
+    h77.shutdown()
+    apimod77.move_to_trash = real_trash71
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

@@ -591,8 +591,10 @@ running in the background: "1 working · 64%" while a copy is made, then
 a copy that failed. The same list shows takes being cropped, saved or
 recovered.
 
-Sending a take again replaces its earlier copy. **Remove from the cloud**
-deletes the copies but not the recording.
+Sending a take again replaces its earlier copy. It never replaces another
+take's: where a copy would land on one (two takes nobody named, in two
+rehearsals whose folders have the same name), it gets " (2)" after its name.
+**Remove from the cloud** deletes the copies but not the recording.
 
 A take that is in the cloud stays the same there as on the laptop, in any
 rehearsal, however it was sent, and whether automatic sending is on or not:

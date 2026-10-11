@@ -1191,6 +1191,15 @@ class Library:
                     if but is None or row.take_id != but
                     for p in (row.mix, row.tracks) if p}
 
+    def others_cloud_paths(self, folder, take_number):
+        """cloud_paths but the take `take_number` of the rehearsal in
+        `folder`: every copy the other takes name, where a copy of this one
+        must not land. Every copy, when there is no such take."""
+        with self._session() as db:
+            row = self._find_take(db, folder, int(take_number))
+            but = None if row is None else row.id
+        return self.cloud_paths(but=but)
+
     def take_there(self, record):
         """
         Whether the take a record (take_record) was read from is in the
