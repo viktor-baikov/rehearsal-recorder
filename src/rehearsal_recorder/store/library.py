@@ -1211,6 +1211,32 @@ class Library:
                 Rehearsal.folder == columns.get("folder"))).first()
             return row is not None and row.created_at == columns.get("created_at")
 
+    def uncrop_take(self, ref, take_id, take_number, fn, duration_sec):
+        """
+        A crop undone, in one transaction: the take (its row by id, number
+        `take_number`, in the rehearsal `ref` names, wherever that is now)
+        gets back its length, and the marks fn(its marks as they are) gives,
+        each on a label there is (_labelled); and has no cloud copy, the one
+        it has being of the cropped take. Returns the marks as kept. Raises
+        ValueError, saying why, when its rehearsal or the take is gone.
+        """
+        with self._session.begin() as db:
+            rehearsal = self._rehearsal_of(db, ref)
+            if rehearsal is None:
+                raise ValueError("Its rehearsal is gone.")
+            row = db.get(Take, take_id) if take_id is not None else None
+            if (row is None or row.rehearsal_id != rehearsal.id
+                    or row.take_number != int(take_number)):
+                raise ValueError("Its take is gone.")
+            current = [{"at": m.at, "label_id": m.label_id, "note": m.note}
+                       for m in row.markers]
+            kept = sorted(self._labelled(db, fn(current)), key=lambda m: m["at"])
+            row.markers = [Marker(**m) for m in kept]
+            row.duration_sec = float(duration_sec)
+            row.cloud_error = None
+            row.cloud_copy = None
+            return kept
+
     def _marks_back(self, db, markers):
         """Recorded marks as rows, every column kept, each on a label there
         is (_labelled)."""
