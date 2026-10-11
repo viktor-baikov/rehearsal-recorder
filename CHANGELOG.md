@@ -11,6 +11,15 @@ opening.
   Deleting a take or a rehearsal, clearing false starts, discarding a take
   and cropping one no longer ask first: a notice says what went, and its
   **Undo**, or ⌘Z / Ctrl+Z, puts it back for 10 seconds.
+
+## 0.11.1
+
+- Nothing changed in the app. Its website, reha.stream, now measures how
+  fast it loads for its visitors, with Vercel's Speed Insights, and its 404
+  page leaves the addresses Vercel counts visits at to Vercel.
+
+## 0.11.0
+
 - **Record what the e-kit plays, or the keyboard.** Every track card has an
   **Audio / Both / MIDI** switch, and a track on *Both* or *MIDI* has a MIDI
   port to pick under it: an e-kit, a keyboard, several at once. The notes are
