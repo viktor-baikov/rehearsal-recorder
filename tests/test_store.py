@@ -1569,13 +1569,17 @@ def main():
     print("  a label deleted, a number taken, a rehearsal gone or renamed")
     record17 = lib.take_record(night17, 1)
     lib.delete_take(night17, 1)
-    lib.delete_label(spare17, marks_to=first17)
+    # The other takes' marks go to a label that is not the first, so the
+    # restored mark is told apart from them.
+    other17 = next(lb["id"] for lb in lib.add_label("Other", "amber") if lb["name"] == "Other")
+    lib.delete_label(spare17, marks_to=other17)
     lib.restore_take(round_trip(record17))
     marks17 = lib.take(night17, 1)["markers"]
     ok("a mark whose label was deleted comes back with its note, on the first label, "
        "since a mark always has one",
-       marks17 == [{"at": 1.0, "label_id": first17, "note": "fill"},
-                   {"at": 2.5, "label_id": first17, "note": ""}])
+       first17 != other17
+       and marks17 == [{"at": 1.0, "label_id": first17, "note": "fill"},
+                       {"at": 2.5, "label_id": first17, "note": ""}])
 
     record17 = lib.take_record(night17, 4)
     lib.delete_take(night17, 4)
@@ -1623,14 +1627,64 @@ def main():
        lib.rehearsal_ref(lost17)["id"] == record17["rehearsal"]["id"]
        and refused17 == "Its rehearsal is gone." and lib.rehearsal(lost17)["takes"] == [])
 
+    print("  several takes at once, and whether a record's rows are still there")
+    record2 = lib.take_record(night17, 2)
+    record3 = lib.take_record(night17, 3)
+    there2 = lib.take_there
+    ok("a take's rows are there while they are", there2(record2) is True)
+    lib.delete_takes(night17, [2, 3])
+    ok("and not once they are dropped", there2(record2) is False)
+    lib.add_take(night17, {"take_number": 3, "name": "Sonca", "tracks": []})
+    try:
+        lib.restore_takes([round_trip(record2), round_trip(record3)])
+        refused17 = None
+    except ValueError as e:
+        refused17 = str(e)
+    ok("takes put back together go all or none: one whose number is taken keeps the others out",
+       refused17 == "Take 3 is taken by another take now."
+       and lib.take(night17, 2) is None and lib.take(night17, 3)["name"].startswith("Sonca"))
+    lib.delete_take(night17, 3)
+    lib.restore_takes([round_trip(record2), round_trip(record3)])
+    ok("and once it is free, they all come back",
+       lib.take(night17, 2) is not None and lib.take(night17, 3) is not None
+       and there2(record2) is True and there2(record3) is True)
+    # The same number given again (recover_draft gives one past the highest):
+    # another row, with other files, is not the recorded take.
+    lib.delete_take(night17, 3)
+    lib.add_take(night17, {"take_number": 3, "name": "Vesna", "tracks": [
+        {"name": "Drums", "file": str(night17 / "03 - Vesna 9" / "Drums.wav")}]})
+    ok("a take given the same number since, with other files, is not the recorded take",
+       there2(record3) is False)
+    lib.delete_take(night17, 3)
+    lib.restore_takes([round_trip(record3)])
+
+    print("  a cloud copy a live take has now")
+    copy17 = cloud17 / "Night - 2026-09-30 19-00" / "02 - Polyn.wav"
+    lib.set_cloud_copy(night17, 2, {"mix": str(copy17), "mix_format": "wav"}, cloud17)
+    record2 = lib.take_record(night17, 2)
+    lib.delete_take(night17, 2)
+    lib.set_cloud_copy(night17, 3, {"mix": str(copy17), "mix_format": "wav"}, cloud17)
+    ok("the library says which cloud paths its takes name",
+       "Night - 2026-09-30 19-00/02 - Polyn.wav"
+       in lib.cloud_paths())
+    lib.restore_take(round_trip(record2))
+    ok("a take put back whose cloud copy another take names now comes back without it",
+       lib.take(night17, 2)["cloud"] == {}
+       and lib.take(night17, 3)["cloud"].get("mix") == str(copy17))
+    lib.set_cloud_copy(night17, 3, None, None)
+
     print("  a whole rehearsal")
     whole17 = lib.rehearsal(night17)
     record17 = lib.rehearsal_record(night17)
+    rehearsal_there17 = lib.rehearsal_there
+    ok("a rehearsal's rows are there while they are", rehearsal_there17(record17) is True)
     ok("a rehearsal's record is plain data too",
        record17 is not None and round_trip(record17) == record17
        and lib.rehearsal_record(rec17 / "Nowhere") is None)
     lib.forget_rehearsal(night17)
+    ok("and not once it is forgotten", rehearsal_there17(record17) is False)
     lib.restore_rehearsal(round_trip(record17))
+    ok("and there again once it is put back", rehearsal_there17(record17) is True)
     again17 = lib.rehearsal(night17)
     ok("forgotten and put back, a rehearsal is what it was: its name, tracks and set",
        again17 is not None and again17["name"] == "Night"

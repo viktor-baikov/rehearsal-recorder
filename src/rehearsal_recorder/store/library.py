@@ -80,6 +80,15 @@ def _relative(path, root):
     return Path(path).resolve().relative_to(Path(root).resolve()).as_posix()
 
 
+def _overlap(a, b):
+    """Whether two relative paths are one place, or one is inside the other.
+    Blind to case, as a Mac's and Windows' folders are: two that might be one
+    place are taken for one."""
+    a, b = [p.casefold() for p in a.parts], [p.casefold() for p in b.parts]
+    n = min(len(a), len(b))
+    return n > 0 and a[:n] == b[:n]
+
+
 _WITH_TAKES = (
     selectinload(Rehearsal.tracks),
     selectinload(Rehearsal.takes).selectinload(Take.song),
@@ -1096,22 +1105,30 @@ class Library:
     def restore_take(self, record):
         """
         Puts a take back from its record (take_record), in one transaction,
-        into the rehearsal the record names, wherever its folder is now.
-        Its song is the song of the recorded id when that is still the song
-        (its title or an old name is the recorded title); else the song that
-        title leads to now, as an old name too; else a new song of that
-        title. It keeps its go when no other take of that song has it, and
-        takes the next otherwise. A mark whose label is gone gets the first
-        label, as any mark does (_labelled).
+        into the rehearsal the record names, wherever its folder is now, with
+        its row's id when no take has that id since. Its song is the song of
+        the recorded id when that is still the song (its title or an old name
+        is the recorded title); else the song that title leads to now, as an
+        old name too; else a new song of that title. It keeps its go when no
+        other take of that song has it, and takes the next otherwise. A mark
+        whose label is gone gets the first label, as any mark does
+        (_labelled). Its cloud copy comes back only when no take names that
+        copy now (_cloud_named): the file there is that take's.
 
         Raises ValueError, saying why, when its number is another take's now
         or its rehearsal is gone.
         """
+        self.restore_takes([record])
+
+    def restore_takes(self, records):
+        """Takes put back as restore_take puts one, all in one transaction: a
+        ValueError for any of them puts none back."""
         with self._session.begin() as db:
-            rehearsal = self._rehearsal_of(db, record.get("rehearsal"))
-            if rehearsal is None:
-                raise ValueError("Its rehearsal is gone.")
-            self._put_take_back(db, rehearsal, record)
+            for record in records:
+                rehearsal = self._rehearsal_of(db, record.get("rehearsal"))
+                if rehearsal is None:
+                    raise ValueError("Its rehearsal is gone.")
+                self._put_take_back(db, rehearsal, record)
 
     def _put_take_back(self, db, rehearsal, record):
         columns = record["take"]
@@ -1122,8 +1139,16 @@ class Library:
             raise ValueError(f"Take {number} is taken by another take now.")
         song, go = self._song_back(db, record.get("song"), columns.get("go"))
         copy = record.get("cloud_copy")
+        if copy is not None and self._cloud_named(db, copy):
+            copy = None
+        # Its own id while it is free, so the row is the one its record names
+        # (take_there) once it is back.
+        row_id = columns.get("id")
+        if row_id is not None and db.get(Take, row_id) is not None:
+            row_id = None
         db.add(Take(
             **self._known(Take, columns, "id", "rehearsal_id", "song_id", "go"),
+            id=row_id,
             rehearsal_id=rehearsal.id,
             song=song,
             go=go,
@@ -1134,6 +1159,55 @@ class Library:
                         else CloudCopy(**self._known(CloudCopy, copy, "take_id"))),
         ))
         db.flush()
+
+    @staticmethod
+    def _cloud_named(db, copy):
+        """Whether a take in the library names a path of this cloud copy (or
+        one inside it, or one it is inside): a take that came after it, under
+        the same name, whose copy is in that place now."""
+        mine = [Path(copy[k]) for k in ("mix", "tracks") if copy.get(k)]
+        for row in db.scalars(select(CloudCopy)):
+            for k in ("mix", "tracks"):
+                theirs = getattr(row, k)
+                if theirs and any(_overlap(Path(theirs), m) for m in mine):
+                    return True
+        return False
+
+    def cloud_paths(self):
+        """Every path in the cloud folder a take in the library names as its
+        copy, relative to the cloud folder."""
+        with self._session() as db:
+            return {p for row in db.scalars(select(CloudCopy))
+                    for p in (row.mix, row.tracks) if p}
+
+    def take_there(self, record):
+        """
+        Whether the take a record (take_record) was read from is in the
+        library, as it was: its row (by id) in its rehearsal (by id and when
+        it was made), with its number and its files. A take given the same
+        number since is another row, or has other files.
+        """
+        columns = record.get("take") or {}
+        with self._session() as db:
+            rehearsal = self._rehearsal_of(db, record.get("rehearsal"))
+            row = db.get(Take, columns.get("id")) if columns.get("id") is not None else None
+            if rehearsal is None or row is None:
+                return False
+            files = sorted(f.file for f in row.files)
+            return (row.rehearsal_id == rehearsal.id
+                    and row.take_number == columns.get("take_number")
+                    and files == sorted(f.get("file") for f in record.get("files") or []))
+
+    def rehearsal_there(self, record):
+        """Whether the rehearsal a record (rehearsal_record) was read from is
+        in the library: by its id, or at its folder, as made when it was."""
+        columns = record.get("rehearsal") or {}
+        with self._session() as db:
+            if self._rehearsal_of(db, columns) is not None:
+                return True
+            row = db.scalars(select(Rehearsal).where(
+                Rehearsal.folder == columns.get("folder"))).first()
+            return row is not None and row.created_at == columns.get("created_at")
 
     def _marks_back(self, db, markers):
         """Recorded marks as rows, every column kept, each on a label there

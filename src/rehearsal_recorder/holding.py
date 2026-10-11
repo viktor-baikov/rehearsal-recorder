@@ -23,9 +23,13 @@ neither mistaken for one nor lost track of.
 Every way out of here ends in one of two places: back where it came from
 (put_back), or the Trash, or the _deleted folder where there is no Trash
 (send_on). Nothing in this module deletes a file, and a folder is only
-removed with rmdir, which refuses one that is not empty.
+removed with rmdir, which refuses one that is not empty. An entry's record
+is removed only once nothing is left in it, so whatever is in an entry is
+always said by its record.
 
-File mechanics only: the database is api.py's.
+File mechanics only: the database is api.py's, and so is which way an entry
+goes. The record says whether the item's rows were dropped yet, and an entry
+whose rows were never dropped goes back, never to the Trash (Api._end).
 """
 
 import json
@@ -44,6 +48,22 @@ STALE_SEC = 120
 # Eight hex characters: plenty for the handful waiting at once, and short,
 # because a take's path inside it still has to fit under Windows' limit.
 _TOKEN = re.compile(r"[0-9a-f]{8}")
+
+# What Undo says once the item it was for has gone on: to the Trash, or the
+# _deleted folder where there is none, by the end of its notice or another.
+GONE_TO_TRASH = "It has already gone to the Trash."
+
+
+class Gone(FileNotFoundError):
+    """The entry is not there any more: it has gone on (GONE_TO_TRASH)."""
+
+    def __init__(self):
+        super().__init__(GONE_TO_TRASH)
+
+
+class Stuck(OSError):
+    """put_back failed part way, and what it had put back would not all go
+    back in: some of the entry is in its places now, the rest in the entry."""
 
 
 def _entry(recordings, token):
@@ -87,30 +107,38 @@ def _write(entry, data):
 
 
 def _remove(entry):
-    """The entry once nothing of the user's is in it: its record, then its
-    empty folders. rmdir only, so anything still in it stays."""
+    """The entry once nothing of the user's is in it: its empty folders, then
+    its record, then itself. rmdir only, so anything still in it stays, and
+    so does the record saying what it is. Returns whether it is gone."""
+    try:
+        inside = [p for p in entry.iterdir()
+                  if p.name not in (RECORD_FILE, RECORD_FILE + ".writing")]
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False  # what is in it cannot be told: the record stays
+    left = False
+    for p in inside:
+        try:
+            p.rmdir()  # a file, or a folder with anything in it, refuses
+        except OSError:
+            left = True
+    if left:
+        return False
     for name in (RECORD_FILE, RECORD_FILE + ".writing"):
         try:
             (entry / name).unlink()
         except FileNotFoundError:
             pass
     try:
-        slots = list(entry.iterdir())
-    except OSError:
-        slots = []
-    for slot in slots:
-        try:
-            slot.rmdir()
-        except OSError:
-            pass
-    try:
         entry.rmdir()
     except OSError:
-        pass
+        return not entry.exists()
     try:
         entry.parent.rmdir()  # the holding folder itself, once it is empty
     except OSError:
         pass
+    return True
 
 
 def hold(recordings: Path, record: dict, paths: list[Path]) -> str:
@@ -123,7 +151,8 @@ def hold(recordings: Path, record: dict, paths: list[Path]) -> str:
     All or nothing: a move that fails puts back every item moved before it,
     removes the entry and raises the OSError. Should an item then refuse to
     go back too, the entry is kept with it inside, and the error says where
-    it is: it reaches the Trash with the entry, never nowhere.
+    it is. Its record still says where it came from, and the caller's record
+    that its rows were never dropped, so the next end puts it back.
     """
     recordings = Path(recordings)
     paths = [Path(p) for p in paths]
@@ -138,7 +167,11 @@ def hold(recordings: Path, record: dict, paths: list[Path]) -> str:
             break
         except FileExistsError:
             continue
-    _write(entry, {"record": record, "items": items, "time": time.time()})
+    try:
+        _write(entry, {"record": record, "items": items, "time": time.time()})
+    except BaseException:
+        _remove(entry)  # nothing has moved in yet
+        raise
     moved = []
     try:
         for i, path in enumerate(paths):
@@ -205,19 +238,16 @@ def update(recordings: Path, token: str, record: dict) -> None:
     _write(entry, {**data, "record": record})
 
 
-def put_back(recordings: Path, token: str, places: list[Path]) -> None:
-    """
-    Moves item i of the entry to places[i] (its parent made if need be), then
-    removes the entry. Refused before anything moves when a place is taken,
-    with FileExistsError("Something else is in its place now: {place}"), and
-    with FileNotFoundError when the entry is gone. A move that fails part way
-    takes back into the entry what it had put back, and raises.
-    """
+def _todo(recordings, token, places):
+    """(item in the entry, its place) for each item still in it: one put
+    back already, or never moved in, is passed over. Raises Gone without the
+    entry, and FileExistsError("Something else is in its place now: …")
+    when a place is taken."""
     recordings = Path(recordings)
     entry = _entry(recordings, token)
     data = read(recordings, token)
     if entry is None or data is None:
-        raise FileNotFoundError("It has already gone to the Trash.")
+        raise Gone()
     items = data.get("items") or []
     if len(places) != len(items):
         raise ValueError(f"{len(items)} places are needed, not {len(places)}")
@@ -230,6 +260,27 @@ def put_back(recordings: Path, token: str, places: list[Path]) -> None:
     for _, place in todo:
         if os.path.lexists(place):
             raise FileExistsError(f"Something else is in its place now: {place}")
+    return todo
+
+
+def check_places(recordings: Path, token: str, places: list[Path]) -> None:
+    """Raises as put_back would before moving anything (Gone, or
+    FileExistsError for a place taken), and moves nothing."""
+    _todo(recordings, token, places)
+
+
+def put_back(recordings: Path, token: str, places: list[Path]) -> None:
+    """
+    Moves item i of the entry to places[i] (its parent made if need be). The
+    entry stays, with its record, until the caller drops it (drop): Undo
+    drops it only once the rows are back too, so a crash in between leaves a
+    record of what was under way. Refused before anything moves when a place
+    is taken, with FileExistsError("Something else is in its place now:
+    {place}"), and with Gone when the entry is gone. A move that fails part
+    way takes back into the entry what it had put back, and raises; should
+    one not go back in, Stuck says which, and where it is.
+    """
+    todo = _todo(recordings, token, places)
     done = []
     try:
         for src, place in todo:
@@ -240,14 +291,27 @@ def put_back(recordings: Path, token: str, places: list[Path]) -> None:
                 raise FileExistsError(f"Something else is in its place now: {place}")
             os.rename(src, place)
             done.append((src, place))
-    except OSError:
+    except OSError as e:
+        stuck = []
         for src, place in reversed(done):
             try:
                 os.rename(place, src)
-            except OSError:
-                pass  # it stays where it was going: back in its own place
+            except OSError as again:
+                # It stays where it was going: back in its own place.
+                stuck.append(f"{place.name} could not be taken back in ({again}); it is in {place}")
+        if stuck:
+            raise Stuck(f"{e}; " + "; ".join(stuck)) from e
         raise
-    _remove(entry)
+
+
+def drop(recordings: Path, token: str) -> bool:
+    """Removes an entry once nothing is left in it (put_back moved it all
+    out), with its record. Anything still in it stays, record and all.
+    Returns whether it is gone."""
+    entry = _entry(recordings, token)
+    if entry is None or not entry.is_dir():
+        return True
+    return _remove(entry)
 
 
 def send_on(recordings: Path, token: str, trash) -> dict:
@@ -283,5 +347,6 @@ def send_on(recordings: Path, token: str, trash) -> dict:
                 res = {"ok": False, "error": str(e)}
             if not res.get("ok"):
                 return {"ok": False, "error": res.get("error") or "Could not move it to the Trash"}
-    _remove(entry)
+    if not _remove(entry):
+        return {"ok": False, "error": f"Something is still in {entry}"}
     return {"ok": True}
