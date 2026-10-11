@@ -117,6 +117,15 @@ export function startButton(page: Page): Locator {
 }
 
 /**
+ * The setup screen's Last time button, in the header of a window too narrow
+ * for Last time beside the setup. Hidden from a screen reader with the rest
+ * of the page while its panel is open, as a modal hides it.
+ */
+export function lastTimeButton(page: Page): Locator {
+  return page.locator("header").getByRole("button", { name: /^Last time/, includeHidden: true })
+}
+
+/**
  * History, from the setup screen. It opens on the newest rehearsal, beside
  * the list; `name` chooses another from the list. Returns the list.
  */

@@ -27,7 +27,10 @@ function subscribe(changed: () => void) {
     known = null
     changed()
   }
-  // Nothing was listening while no screen asked, so a newcomer reads afresh.
+  // Nothing hears a change made before a screen begins listening or after
+  // it stops: one between its first render and this, or while no screen is
+  // on. So what is known is forgotten at both ends, and a screen that comes
+  // back reads afresh from its first render.
   known = null
   window.addEventListener("resize", again)
   // applyAppearance sets the scale as the root's font size, on its style.
@@ -36,6 +39,7 @@ function subscribe(changed: () => void) {
   return () => {
     window.removeEventListener("resize", again)
     scale.disconnect()
+    known = null
   }
 }
 
@@ -50,5 +54,6 @@ function snapshot(): boolean {
 /** Whether the window is wide enough for the start screen's left part beside
  *  the setup, following the window and the Appearance scale. */
 export function useWide(): boolean {
-  return useSyncExternalStore(subscribe, snapshot)
+  // With no window to measure, wide: what the site's frame is, at 1180 px.
+  return useSyncExternalStore(subscribe, snapshot, () => true)
 }

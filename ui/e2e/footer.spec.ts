@@ -1,4 +1,12 @@
-import { expect, openApp, recordTake, startButton, startRehearsal, test } from "./app.ts"
+import {
+  expect,
+  lastTimeButton,
+  openApp,
+  recordTake,
+  startButton,
+  startRehearsal,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Every footer is one row: what the screen has to say on the left, its
@@ -109,10 +117,11 @@ test.describe("the setup screen with a rehearsal before", () => {
 
   test("narrow, the new rehearsal over Start and Last time behind its button", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
-    await expect(page.locator("header").getByRole("button", { name: "Last time" })).toBeVisible()
+    await expect(lastTimeButton(page)).toBeVisible()
     await expect(lastTime(page)).toHaveCount(0)
     const setup = (await setupBox(page).boundingBox())!
     const start = (await startButton(page).boundingBox())!
     expect(setup.x + setup.width).toBeGreaterThan(start.x)
+    expect(setup.y + setup.height).toBeLessThanOrEqual(start.y)
   })
 })

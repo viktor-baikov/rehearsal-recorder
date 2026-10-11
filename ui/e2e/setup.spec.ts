@@ -3,6 +3,7 @@ import {
   calls,
   expect,
   keyOn,
+  lastTimeButton,
   notices,
   openApp,
   setFake,
@@ -610,11 +611,7 @@ test.describe("the tracks during the check", () => {
 test.describe("the left part behind a button in a narrow window", () => {
   test.use({ viewport: { width: 1000, height: 820 } })
 
-  /** The header's Last time button. Hidden from a screen reader with the
-   *  rest of the page while the panel is open, as a modal hides it. */
-  const pastButton = (page: Page) =>
-    page.locator("header").getByRole("button", { name: /^Last time/, includeHidden: true })
-  /** The panel it opens. */
+  /** The panel the header's Last time button opens. */
   const panel = (page: Page) => page.getByRole("dialog", { name: "Last time" })
   /** The left part, where it is beside the setup. */
   const past = (page: Page) => page.locator("[data-part='past']")
@@ -649,9 +646,23 @@ test.describe("the left part behind a button in a narrow window", () => {
       return w.pywebview.api.player_state()
     })
 
+  /** What the open panel locks, as a modal does: the pointer off the page,
+   *  its scroll, the screen hidden from a screen reader, anything inert. */
+  const locks = (page: Page) =>
+    page.evaluate(() => ({
+      pointer: getComputedStyle(document.body).pointerEvents === "none",
+      scroll: document.body.hasAttribute("data-scroll-locked"),
+      hidden: document.querySelector("main")!.closest("[aria-hidden='true']") !== null,
+      inert: document.querySelector("[inert]") !== null,
+    }))
+
+  /** Last time's button for Pałyn 2, the last go at Pałyn, in `where`. */
+  const palyn = (where: Locator, does: "Play" | "Pause") =>
+    where.getByRole("button", { name: `${does} Pałyn 2, the last go at Pałyn` })
+
   test("under 1100 px Last time opens as a side panel from the header", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
-    const button = pastButton(page)
+    const button = lastTimeButton(page)
     await expect(button).toBeVisible()
     await expect(past(page)).toBeHidden()
     const history = page.locator("header").getByRole("button", { name: "History", exact: true })
@@ -671,7 +682,7 @@ test.describe("the left part behind a button in a narrow window", () => {
 
   test("Esc closes the panel and focus returns to its button", async ({ page }) => {
     await openApp(page)
-    const button = pastButton(page)
+    const button = lastTimeButton(page)
     const ways: [string, () => Promise<void>][] = [
       ["Esc", () => page.keyboard.press("Escape")],
       ["the close button", () => panel(page).getByRole("button", { name: "Close" }).click()],
@@ -689,22 +700,34 @@ test.describe("the left part behind a button in a narrow window", () => {
   })
 
   test("widening the window closes the panel", async ({ page }) => {
-    await openApp(page)
-    await pastButton(page).click()
-    await expect(panel(page)).toBeVisible()
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    await lastTimeButton(page).click()
+    await palyn(panel(page), "Play").click()
+    await expect(palyn(panel(page), "Pause")).toBeVisible()
+    expect(await locks(page)).toEqual({ pointer: true, scroll: true, hidden: true, inert: false })
 
     await page.setViewportSize({ width: 1180, height: 820 })
     await expect(panel(page)).toHaveCount(0)
-    await expect(pastButton(page)).toHaveCount(0)
+    await expect(lastTimeButton(page)).toHaveCount(0)
     await expect(past(page)).toBeVisible()
+    // What the panel locked goes with it.
+    await expect
+      .poll(() => locks(page))
+      .toEqual({ pointer: false, scroll: false, hidden: false, inert: false })
     await settled(page)
     const left = (await past(page).boundingBox())!
     const setup = (await page.locator("[data-part='setup']").boundingBox())!
     expect(left.x + left.width).toBeLessThanOrEqual(setup.x + 0.5)
 
+    // The take plays on beside the setup, and Space is still its own.
+    await expect(palyn(past(page), "Pause")).toBeVisible()
+    await page.keyboard.press("Space")
+    await expect(palyn(past(page), "Play")).toBeVisible()
+    expect((await playerNow(page)).playing).toBe(false)
+
     // Narrowed again, it stays shut until it is asked for.
     await page.setViewportSize({ width: 1000, height: 820 })
-    await expect(pastButton(page)).toHaveAttribute("aria-expanded", "false")
+    await expect(lastTimeButton(page)).toHaveAttribute("aria-expanded", "false")
     await expect(panel(page)).toHaveCount(0)
   })
 
@@ -713,11 +736,11 @@ test.describe("the left part behind a button in a narrow window", () => {
     await openApp(page)
     // At 100 % the window has room for both.
     await expect(past(page)).toBeVisible()
-    await expect(pastButton(page)).toHaveCount(0)
+    await expect(lastTimeButton(page)).toHaveCount(0)
 
     // 130 %, as Appearance sets it: on the root's font size.
     await page.evaluate(() => (document.documentElement.style.fontSize = "20.8px"))
-    await expect(pastButton(page)).toBeVisible()
+    await expect(lastTimeButton(page)).toBeVisible()
     await expect(past(page)).toBeHidden()
     await settled(page)
     const room = await tracksRoom(page)
@@ -733,42 +756,50 @@ test.describe("the left part behind a button in a narrow window", () => {
     await expect
       .poll(() => page.evaluate(() => getComputedStyle(document.documentElement).fontSize))
       .toBe("24px")
-    await expect(pastButton(page)).toBeVisible()
+    await expect(lastTimeButton(page)).toBeVisible()
     await expect(past(page)).toBeHidden()
     await settled(page)
     const room = await tracksRoom(page)
     expect(room.setup).toBeCloseTo(room.screen, 0)
     expect(room.group).toBeCloseTo(room.most, 0)
 
-    // Shell clips rather than scrolls, so a header button cut off at the
-    // edge is looked for directly too.
+    // Shell clips the page, so the document itself never scrolls: what
+    // could is the screen's middle and, with the panel open, what scrolls in
+    // the panel (null while there is none). A header button cut off at the
+    // window's edge is looked for directly.
     const sideways = () =>
-      page.evaluate(() => ({
-        scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-        cut: [...document.querySelectorAll("header button")].some(
-          (b) => b.getBoundingClientRect().right > window.innerWidth
-        ),
-      }))
-    expect(await sideways()).toEqual({ scrolls: false, cut: false })
+      page.evaluate(() => {
+        const wider = (el: Element) => el.scrollWidth > el.clientWidth + 1
+        const dialog = document.querySelector("[role='dialog']")
+        const scrollers = dialog
+          ? [...dialog.querySelectorAll("*")].filter((el) => getComputedStyle(el).overflowY === "auto")
+          : []
+        return {
+          middle: wider(document.querySelector("main")!),
+          panel: scrollers.length ? scrollers.some(wider) : null,
+          cut: [...document.querySelectorAll("header button")].some(
+            (b) => b.getBoundingClientRect().right > window.innerWidth
+          ),
+        }
+      })
+    expect(await sideways()).toEqual({ middle: false, panel: null, cut: false })
 
-    await pastButton(page).click()
+    await lastTimeButton(page).click()
     await expect(panel(page).getByRole("complementary", { name: "Last time" })).toBeVisible()
-    expect(await sideways()).toEqual({ scrolls: false, cut: false })
+    expect(await sideways()).toEqual({ middle: false, panel: false, cut: false })
   })
 
   test("the header button shows Last time playing", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
-    const button = pastButton(page)
+    const button = lastTimeButton(page)
     await expect(button).toBeVisible()
     const width = (await button.boundingBox())!.width
     await expect(button).not.toHaveAttribute("data-playing")
     await expect(button).toHaveAccessibleName("Last time")
 
     await button.click()
-    await panel(page).getByRole("button", { name: "Play Pałyn 2, the last go at Pałyn" }).click()
-    await expect(
-      panel(page).getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })
-    ).toBeVisible()
+    await palyn(panel(page), "Play").click()
+    await expect(palyn(panel(page), "Pause")).toBeVisible()
     // Esc is the panel's while it is open: it closes it, and the take plays on.
     await page.keyboard.press("Escape")
     await expect(panel(page)).toHaveCount(0)
@@ -784,11 +815,54 @@ test.describe("the left part behind a button in a narrow window", () => {
     // playing in it, never opened again.
     const opens = await callCount(page, "player_open")
     await page.setViewportSize({ width: 1180, height: 820 })
-    await expect(pastButton(page)).toHaveCount(0)
-    await expect(
-      past(page).getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })
-    ).toBeVisible()
+    await expect(lastTimeButton(page)).toHaveCount(0)
+    await expect(palyn(past(page), "Pause")).toBeVisible()
     expect((await playerNow(page)).playing).toBe(true)
     expect(await callCount(page, "player_open")).toBe(opens)
+  })
+
+  test("after the close button Space pauses the take, after Esc it opens the panel again", async ({
+    page,
+  }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    const button = lastTimeButton(page)
+    await button.click()
+    await palyn(panel(page), "Play").click()
+    await expect(button).toHaveAttribute("data-playing")
+
+    // Closed with the mouse, the panel sends focus back to its button, but
+    // the mouse put it there: Space is the take's, and pauses it.
+    await panel(page).getByRole("button", { name: "Close" }).click()
+    await expect(panel(page)).toHaveCount(0)
+    await expect(button).toBeFocused()
+    await page.keyboard.press("Space")
+    await expect(button).not.toHaveAttribute("data-playing")
+    expect((await playerNow(page)).playing).toBe(false)
+    await expect(panel(page)).toHaveCount(0)
+    await page.keyboard.press("Space")
+    await expect(button).toHaveAttribute("data-playing")
+
+    // Closed with Esc, focus is back on the button by the keyboard, and Space
+    // presses it, as it presses any button so reached: the panel opens
+    // again, and the take plays on.
+    await button.click()
+    await expect(panel(page)).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(panel(page)).toHaveCount(0)
+    await expect(button).toBeFocused()
+    await page.keyboard.press("Space")
+    await expect(panel(page)).toBeVisible()
+    await expect(palyn(panel(page), "Pause")).toBeVisible()
+    expect((await playerNow(page)).playing).toBe(true)
+  })
+
+  test("with no rehearsal before there is no Last time button and no panel", async ({ page }) => {
+    await openApp(page, { before: "window.__NO_HISTORY__ = true;" })
+    await expect(startButton(page)).toBeVisible()
+    await expect.poll(() => callCount(page, "last_time")).toBe(1)
+    await expect(page.locator("header").getByRole("button", { name: "History", exact: true })).toBeVisible()
+    await expect(lastTimeButton(page)).toHaveCount(0)
+    await expect(panel(page)).toHaveCount(0)
+    await expect(past(page)).toHaveCount(0)
   })
 })
