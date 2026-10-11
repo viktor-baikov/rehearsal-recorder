@@ -662,7 +662,9 @@ export function HistoryScreen({
       offerUndo({
         text: wentTo(`“${take.name}”`),
         token: res.undo,
-        onUndone: () => changed(take.folder),
+        // Read again where Python put it back: a rename since moved the
+        // rehearsal's folder.
+        onUndone: (r) => changed(r.folder ?? take.folder),
       })
     }
     await changed(take.folder)
@@ -774,17 +776,16 @@ export function HistoryScreen({
       return
     }
     if (res.take) reselect(placed(take.folder, res.take))
-    offerCropUndo(take.name, res, () => uncropped(take), SAID)
+    offerCropUndo(take.name, res, (r) => uncropped(take, r.folder ?? take.folder), SAID)
     await changed(take.folder)
   }
 
   // A crop's Undo: the uncut take is under the same paths again, and only a
-  // fresh copy of it tells the player so.
-  const uncropped = async (take: PlacedTake) => {
-    const fresh = (await reopen(take.folder))?.takes.find(
-      (t) => t.take_number === take.take_number
-    )
-    if (fresh) reselect(placed(take.folder, fresh))
+  // fresh copy of it tells the player so. Read from `folder`, where Python
+  // says the rehearsal is now: a rename since moved it.
+  const uncropped = async (take: PlacedTake, folder: string) => {
+    const fresh = (await reopen(folder))?.takes.find((t) => t.take_number === take.take_number)
+    if (fresh) reselect(placed(folder, fresh))
     void refresh()
   }
 

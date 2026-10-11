@@ -55,6 +55,15 @@ async function deleteTake(overview: Locator, n: number, name: string) {
   await row(overview, n).getByRole("button", { name: `Delete take ${name}` }).click()
 }
 
+/** Tuesday jam renamed in History, which moves its folder to /rec/{name}. */
+async function renameTuesday(page: Page, name: string) {
+  await page.getByRole("button", { name: "Rename rehearsal Tuesday jam" }).click()
+  const dialog = page.getByRole("dialog", { name: "Rename rehearsal" })
+  await dialog.locator("input").fill(name)
+  await dialog.getByRole("button", { name: "Rename" }).click()
+  await expect(page.getByRole("button", { name: `Delete rehearsal ${name}` })).toBeVisible()
+}
+
 /** A rehearsal started with takes in it already, on its screen. */
 async function tonight(page: Page, takes: object[], before = "") {
   await openApp(page, { before: `window.__TONIGHT__ = ${JSON.stringify(takes)}; ${before}` })
@@ -572,17 +581,60 @@ test("deleting a rehearsal renamed since ends the offers of its takes", async ({
   const [token] = await waiting(page)
   // The rename moves the rehearsal's folder; Python knows it, and what of
   // it waits for an Undo, by its id all the same.
-  await page.getByRole("button", { name: "Rename rehearsal Tuesday jam" }).click()
-  const dialog = page.getByRole("dialog", { name: "Rename rehearsal" })
-  await dialog.locator("input").fill("Tuesday blues")
-  await dialog.getByRole("button", { name: "Rename" }).click()
-  const renamed = page.getByRole("button", { name: "Delete rehearsal Tuesday blues" })
-  await expect(renamed).toBeVisible()
+  await renameTuesday(page, "Tuesday blues")
   await expect(take).toHaveCount(1)
-  await renamed.click()
+  await page.getByRole("button", { name: "Delete rehearsal Tuesday blues" }).click()
   await expect(said(page, "“Tuesday blues” went to the Trash.")).toHaveCount(1)
   await expect(take).toHaveCount(0)
   expect(await waiting(page)).not.toContain(token)
+  // Asked of the folder as it is now, and recorded as it was asked.
+  expect((await calls(page, "delete_rehearsal")).map((c) => c.args)).toEqual([
+    ["/rec/Tuesday blues"],
+  ])
+})
+
+test("Undo of a take deleted in History, its rehearsal renamed since, shows it back", async ({
+  page,
+}) => {
+  const overview = await tuesday(page)
+  await deleteTake(overview, 2, "Pałyn 2")
+  await expect(row(overview, 2)).toHaveCount(0)
+  await renameTuesday(page, "Tuesday blues")
+  // The folder it had is not there any more: asked of it, Python finds no
+  // rehearsal, and neither does the fake.
+  const stale = await page.evaluate(() =>
+    (
+      window as unknown as {
+        pywebview: { api: { get_rehearsal: (folder: string) => Promise<unknown> } }
+      }
+    ).pywebview.api.get_rehearsal("/rec/old")
+  )
+  expect(stale).toEqual({ ok: false, error: "Rehearsal not found" })
+  await said(page, "“Pałyn 2” went to the Trash.").getByRole("button", { name: "Undo" }).click()
+  // Read again where Python said the rehearsal is now.
+  await expect(overview.getByRole("button", { name: /^Take 2 Pałyn 2/ })).toBeVisible()
+  expect((await calls(page, "get_rehearsal")).at(-1)?.args).toEqual(["/rec/Tuesday blues"])
+})
+
+test("Undo of a crop in History, its rehearsal renamed since, gives back the old length", async ({
+  page,
+}) => {
+  await openApp(page, { before: "window.__OLD_LENGTH_SEC__ = 20;" })
+  await openHistory(page)
+  await page.getByRole("button", { name: "Take 1 Pałyn" }).click()
+  await dragRegion(page, 0.25, 0.75)
+  await page.getByRole("button", { name: "Crop to the region" }).click()
+  await expect(page.locator("span", { hasText: "/ 0:10" }).first()).toBeVisible()
+  // Put down, to rename the rehearsal it is in.
+  await page.keyboard.press("Escape")
+  await renameTuesday(page, "Tuesday blues")
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await expect(row(overview, 1)).toContainText("0:10")
+  const notice = said(page, "“Pałyn 1” is cropped. The uncut take went to the Trash.")
+  await notice.getByRole("button", { name: "Undo" }).click()
+  // Read again where Python said the rehearsal is now.
+  await expect(row(overview, 1)).toContainText("0:20")
+  await expect(notice).toHaveCount(0)
 })
 
 test("switching the recordings folder ends every offer", async ({ page }) => {

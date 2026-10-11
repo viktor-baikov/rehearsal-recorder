@@ -384,7 +384,9 @@ function endHeld(folder, takes, cropsOnly = false) {
 // made with, and the two cross at the bridge (spelledNow): what comes in
 // under the new folder is read under the old one, and what goes out under
 // the old one is said under the new. A path under a folder a rename moved
-// away is not there any more: it comes in under /gone, where nothing is.
+// away is not there any more: a call that names one finds no rehearsal, as
+// Python's would, but take_media, which says it of each track it cannot
+// find. A test reads the calls as the interface made them.
 const renamedTo = new Map();
 const formerFolders = new Set();
 // A rehearsal before this one, renamed: its name now, by the folder it was
@@ -412,7 +414,22 @@ function spelledNow(api) {
     if (typeof call !== 'function') continue;
     api[method] = async (...args) => {
       if (!renamedTo.size) return call(...args);
-      return respell(await call(...respell(args, cameIn)), goesOut);
+      let stale = false;
+      const read = respell(args, path => {
+        const now = cameIn(path);
+        if (now.startsWith('/gone/')) stale = true;
+        return now;
+      });
+      if (stale && method !== 'take_media') {
+        window.__CALLS__.push({name: method, args});
+        return {ok:false, error:'Rehearsal not found'};
+      }
+      // A tracked call is logged as it starts, before its first await:
+      // logged with what the interface sent, not the folder it was made with.
+      const at = window.__CALLS__.length;
+      const answer = call(...read);
+      if (window.__CALLS__.length > at) window.__CALLS__[at].args = args;
+      return respell(await answer, goesOut);
     };
   }
   return api;
@@ -1269,7 +1286,7 @@ window.__MAKE_API__ = () => ({
 
   take_media: track('take_media', async (tracks, _buckets, _from, _to) => tracks.map(t => {
     // A file under a folder a rename moved away (spelledNow), as Python
-    // answers one that is not on disk.
+    // answers one that is not on disk: the take is there, its file is not.
     if (t.file.startsWith('/gone/'))
       return {name:t.name, url:null, error:'Track file not found', frames:0, samplerate:0,
               duration_sec:0, peaks:[]};
