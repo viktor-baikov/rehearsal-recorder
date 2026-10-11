@@ -55,6 +55,61 @@ test("a problem while starting is shown in the same bar, and asked for once", as
   expectedError(pageErrors, /startup failed/)
 })
 
+test("two problems while starting are both shown, and one Dismiss puts both away", async ({
+  page,
+  pageErrors,
+}) => {
+  // The bar used to keep only the last thing said, so a second problem at
+  // start hid the first.
+  await openApp(page, {
+    before: `window.__STARTUP_PROBLEM__ = [
+      {name: 'RemovalKept', message: 'A take you removed is still in its folder.'},
+      {name: 'OperationalError', message: 'Could not read the history of Tuesday jam.'}];`,
+  })
+  const bar = problemBar(page)
+  const said = bar.getByRole("listitem")
+  await expect(said).toHaveCount(2)
+  // In the order said, each with its own title line and its words.
+  await expect(said.nth(0)).toContainText("Something went wrong in startup")
+  await expect(said.nth(0)).toContainText("RemovalKept: A take you removed is still in its folder.")
+  await expect(said.nth(1)).toContainText("Something went wrong in startup")
+  await expect(said.nth(1)).toContainText(
+    "OperationalError: Could not read the history of Tuesday jam."
+  )
+  // Where the whole of them is written, once for all.
+  await expect(bar.getByText(/crash\.log/)).toHaveCount(1)
+  await expect(bar.getByRole("button", { name: "Dismiss" })).toHaveCount(1)
+
+  await bar.getByRole("button", { name: "Dismiss" }).click()
+  await expect(bar).toHaveCount(0)
+  expectedError(pageErrors, /startup failed/)
+})
+
+test("a long list of problems scrolls inside the bar, which never covers the window", async ({
+  page,
+  pageErrors,
+}) => {
+  const many = Array.from(
+    { length: 30 },
+    (_, i) => `{name: 'OperationalError', message: 'Could not read rehearsal ${i + 1}.'}`
+  )
+  await openApp(page, { before: `window.__STARTUP_PROBLEM__ = [${many.join(",")}];` })
+  const bar = problemBar(page)
+  await expect(bar.getByRole("listitem")).toHaveCount(30)
+  const view = page.viewportSize()!
+  const box = (await bar.boundingBox())!
+  // About 40% of the window at most, the crash.log line and Dismiss in it.
+  expect(box.height).toBeLessThan(view.height / 2)
+  await expect(bar.getByText(/crash\.log/)).toBeInViewport()
+  await expect(bar.getByRole("button", { name: "Dismiss" })).toBeInViewport()
+  // The last one is reached by scrolling the list, not the page.
+  const last = bar.getByRole("listitem").last()
+  await expect(last).not.toBeInViewport()
+  await last.scrollIntoViewIfNeeded()
+  await expect(last).toBeInViewport()
+  expectedError(pageErrors, /startup failed/)
+})
+
 test("a card that goes away mid-take stops it, and says why", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)

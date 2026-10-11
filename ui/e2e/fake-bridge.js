@@ -939,8 +939,10 @@ function cloudShare(what) {
 
 window.__MAKE_API__ = () => ({
   ping: async () => ({ok:true, message:'mock'}),
+  // window.__STARTUP_PROBLEM__ = {name, message}, or a list of them for a
+  // start that went wrong in more than one way.
   startup_problems: track('startup_problems', async () =>
-    (window.__STARTUP_PROBLEM__ ? [window.__STARTUP_PROBLEM__] : [])),
+    [].concat(window.__STARTUP_PROBLEM__ || [])),
   // With a host API named, this is the Windows shape once ASIO is loaded:
   // one mixer through three systems with three different input counts.
   list_input_devices: track('list_input_devices', async () => (window.__PLUGGED_IN_LATE__ ? [

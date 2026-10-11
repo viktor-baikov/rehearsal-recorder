@@ -44,6 +44,11 @@ opening.
   says "1 take is saved", not "1 take are saved"; a dialog keeps its words
   while it fades out instead of going blank first; and a notice shows above
   an open dialog, not under its shade.
+- **The red bar that says something failed lists every problem, not only the
+  last.** When more than one thing went wrong as the app started, a second
+  problem used to hide the first; now each is there, oldest first, the same
+  one never twice, and its ✕ puts them all away. A long list scrolls inside
+  the bar instead of covering the window.
 
 ## 0.11.1
 

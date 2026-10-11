@@ -1,6 +1,6 @@
 import { TriangleAlert, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { dismissBridgeError, useBridgeError } from "@/lib/bridgeErrors"
+import { dismissBridgeErrors, useBridgeErrors } from "@/lib/bridgeErrors"
 
 /**
  * Says so when a call into Python raised, over whatever screen is open.
@@ -10,10 +10,14 @@ import { dismissBridgeError, useBridgeError } from "@/lib/bridgeErrors"
  * exception's own words, for a bug report, and where the full traceback is.
  * It stays until put away, because the reason it exists is that the last
  * two such failures were silent.
+ *
+ * Every problem said since it was last put away is in it, oldest first, and
+ * one Dismiss puts them all away. A long list scrolls inside the bar, which
+ * stops at about 40% of the window, so the screen under it stays usable.
  */
 export function ErrorBar() {
-  const error = useBridgeError()
-  if (!error) return null
+  const errors = useBridgeErrors()
+  if (errors.length === 0) return null
   return (
     <div
       role="alert"
@@ -22,13 +26,19 @@ export function ErrorBar() {
     >
       <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-destructive">
-          Something went wrong
-          <span className="font-normal text-muted-foreground"> in {error.method}</span>
-        </p>
-        <p className="mt-0.5 font-mono text-xs break-words">
-          {error.name}: {error.message}
-        </p>
+        <ul className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto">
+          {errors.map((error) => (
+            <li key={`${error.method}\n${error.name}\n${error.message}`}>
+              <p className="font-medium text-destructive">
+                Something went wrong
+                <span className="font-normal text-muted-foreground"> in {error.method}</span>
+              </p>
+              <p className="mt-0.5 font-mono text-xs break-words">
+                {error.name}: {error.message}
+              </p>
+            </li>
+          ))}
+        </ul>
         <p className="mt-1 text-xs text-muted-foreground">
           The full error is in ~/.rehearsal-recorder/crash.log.
         </p>
@@ -37,7 +47,7 @@ export function ErrorBar() {
         variant="ghost"
         size="icon-row"
         aria-label="Dismiss"
-        onClick={dismissBridgeError}
+        onClick={dismissBridgeErrors}
       >
         <X />
       </Button>

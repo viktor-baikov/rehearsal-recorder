@@ -206,6 +206,12 @@ piece of its own moves onto the shared one when it is redone.
   under one. ⌘Z or Ctrl+Z runs the newest notice's action
   (`hooks/useUndoKey.ts`), except in a text field, which undoes its own
   typing, with a dialog, a menu or a list open, or while a take records.
+  A call into Python that raised is not a notice: it goes in the red bar
+  across the top (`components/ErrorBar.tsx`, from `lib/bridgeErrors.ts`),
+  which lists every problem said until it is put away, oldest first and the
+  same one once, so a second problem at start no longer hides the first.
+  One Dismiss puts them all away; a long list scrolls inside the bar, which
+  stops at 40% of the window.
 - **C5. Kbd**, `kbd.tsx`: one key chip, in the colour of the text round it,
   so the same chip reads on a page and on a filled button. Its ⌘ or Ctrl is
   `words().mod`. On a button the chip is `aria-hidden`, and the button names

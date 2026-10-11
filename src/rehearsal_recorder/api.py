@@ -4478,9 +4478,10 @@ class Api:
         because the library is not open.
 
         At start they are said to the person too, as nothing else would ever
-        show them: all in one start problem, put first, since the interface
-        shows only the last problem said and the others (the library not
-        opening, a history that cannot be read) must not be buried by it.
+        show them: all in one start problem, put first. (First because the
+        interface once showed only the last problem said, and the others,
+        the library not opening, a history that cannot be read, must not be
+        buried by it; it lists them all now, and the order is harmless.)
         Not one that stayed only for want of the library: that is said
         already, by LibraryUnavailable, and goes when the library is back.
         The tokens of those that ended go into `ended`, when given.
