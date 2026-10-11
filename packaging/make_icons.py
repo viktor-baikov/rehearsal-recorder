@@ -7,6 +7,8 @@ Turns the app's icon drawings into the files each system reads:
   packaging/icon.icns    macOS: the .app in Finder and the Dock
   ui/public/favicon.svg  the browser tab, and the logo in the setup header
   ui/public/logo.svg     the logo on the screen shown while the app starts
+  ui/public/icon-192.png reha.stream's icon in Google's results, which show
+  ui/public/favicon.ico  no SVG; and what's at /favicon.ico for whoever asks
 
 There are two drawings. icon.svg is the icon; icon-small.svg is the same
 thing for 32 px and under, where the full one's waveform is thinner than a
@@ -39,6 +41,11 @@ SMALL_UP_TO = 32
 # display scale, Explorer's views up to its largest.
 ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256]
 
+# The site's icon as a PNG, square and over 48 px as Google asks, and the
+# sizes of its /favicon.ico.
+SITE_PNG = 192
+SITE_ICO_SIZES = [16, 32, 48]
+
 # macOS keeps each size under a four-letter kind; the @2x ones are the same
 # picture at twice the pixels, for a Retina screen.
 ICNS_KINDS = [
@@ -53,9 +60,9 @@ def drawing_for(size):
     return SMALL if size <= SMALL_UP_TO else FULL
 
 
-def render(sizes):
-    """The icon as a PNG at each size, from the drawing for that size, with
-    the corners left transparent."""
+def render(sizes, drawing=None):
+    """The icon as a PNG at each size, from the drawing for that size (or the
+    one given, for all of them), with the corners left transparent."""
     # Only needed to draw, so the rest of this file can be imported without
     # a browser — the suites read drawing_for.
     from playwright.sync_api import sync_playwright
@@ -66,7 +73,7 @@ def render(sizes):
         for size in sorted(set(sizes)):
             page = browser.new_page(viewport={"width": size, "height": size},
                                     device_scale_factor=1)
-            svg = drawing_for(size).read_text(encoding="utf-8")
+            svg = (drawing or drawing_for(size)).read_text(encoding="utf-8")
             # The drawing's own width and height, whatever they are, become
             # this size; its viewBox keeps the proportions.
             sized = re.sub(r'width="\d+" height="\d+"',
@@ -114,9 +121,15 @@ def main():
     public = HERE.parent / "ui" / "public"
     shutil.copyfile(SMALL, public / "favicon.svg")
     shutil.copyfile(FULL, public / "logo.svg")
+    # The site's icon is the tab's, the small drawing at every size: Google's
+    # results draw it about as small as a tab does, even from 192 px.
+    site = render(SITE_ICO_SIZES + [SITE_PNG], drawing=SMALL)
+    (public / "icon-192.png").write_bytes(site[SITE_PNG])
+    write_ico(public / "favicon.ico", {s: site[s] for s in SITE_ICO_SIZES})
     for name in ("icon.ico", "icon.icns"):
         print(f"  {name}: {(HERE / name).stat().st_size} bytes")
-    print("  ui/public/favicon.svg, ui/public/logo.svg")
+    print("  ui/public/favicon.svg, ui/public/logo.svg,"
+          " ui/public/icon-192.png, ui/public/favicon.ico")
     return 0
 
 
