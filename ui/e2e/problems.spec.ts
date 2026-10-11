@@ -76,6 +76,9 @@ test("two problems while starting are both shown, and one Dismiss puts both away
   await expect(said.nth(1)).toContainText(
     "OperationalError: Could not read the history of Tuesday jam."
   )
+  // A screen reader says only the problem just added, not the whole list
+  // again: an alert is read whole unless told otherwise.
+  await expect(bar).toHaveAttribute("aria-atomic", "false")
   // Where the whole of them is written, once for all.
   await expect(bar.getByText(/crash\.log/)).toHaveCount(1)
   await expect(bar.getByRole("button", { name: "Dismiss" })).toHaveCount(1)

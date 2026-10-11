@@ -21,6 +21,10 @@ import {
  * to the first 20; the line under them counts the rest. One Dismiss puts them
  * all away. A long list scrolls inside the bar, which stops at about 40% of
  * the window, so the screen under it stays usable.
+ *
+ * `aria-atomic="false"`: an alert is read whole by default, and this one
+ * would read every earlier problem again with each new one. Only what was
+ * added is spoken.
  */
 export function ErrorBar() {
   const errors = useBridgeErrors()
@@ -28,6 +32,7 @@ export function ErrorBar() {
   return (
     <div
       role="alert"
+      aria-atomic="false"
       aria-label="Something went wrong"
       className="fixed inset-x-0 top-0 z-40 flex items-start gap-3 border-b border-destructive/40 bg-destructive/15 px-6 py-3 text-sm backdrop-blur"
     >
