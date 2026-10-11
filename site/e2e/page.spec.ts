@@ -384,6 +384,24 @@ test("the page tells search engines and chats what it is", async ({ page, reques
   expect(await (await request.get("/sitemap.xml")).text()).toContain("<loc>https://reha.stream/</loc>")
 })
 
+// Google's results show a site's icon only from the formats it lists (BMP,
+// GIF, ICO, PNG, JPEG, PPM, TIFF; not SVG), square and best over 48 px; the
+// home page's <link rel="icon"> says where it is.
+test("the page names an icon Google's results can show", async ({ page, request }) => {
+  await page.goto("/")
+  const href = await page.locator('link[rel="icon"][type="image/png"]').getAttribute("href")
+  const png = await (await request.get(href!)).body()
+  expect(png.subarray(1, 4).toString()).toBe("PNG")
+  const [width, height] = [png.readUInt32BE(16), png.readUInt32BE(20)]
+  expect(height).toBe(width)
+  expect(width).toBeGreaterThan(48)
+  expect(width % 48).toBe(0)
+  // Where browsers and crawlers look when a page names no icon.
+  const ico = await request.get("/favicon.ico")
+  expect(ico.status()).toBe(200)
+  expect([...(await ico.body()).subarray(0, 4)]).toEqual([0, 0, 1, 0])
+})
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
