@@ -16,7 +16,10 @@
 #                                                components) and CHANGELOG.md
 #                                                (its "What's new" line)
 #   site · preview                               only for site/ itself (Alex,
-#                                                2026-10-11)
+#                                                2026-10-11), and for what
+#                                                builds and puts it up
+#                                                (.github/actions/site, this
+#                                                file)
 #
 # A change to this file runs all of them, and so does a pull request git
 # cannot read the diff of. A push to main runs the app's checks, as it
@@ -74,22 +77,25 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           app=false site=false preview=false
+          # Each path whole, never quoted (-z), and a moved file as both
+          # its old path and its new one (--no-renames): a file moved from
+          # ui/ into site/ still runs the app's checks.
+          list=$(mktemp)
           if [ "$EVENT" != pull_request ]; then
             app=true
             if [ "$EVENT" = workflow_dispatch ]; then site=true; fi
-          elif ! files=$(git -c core.quotePath=false diff --name-only HEAD^1 HEAD); then
+          elif ! git diff --no-renames --name-only -z HEAD^1 HEAD > "$list"; then
             echo "::warning::Could not tell what this pull request changes, so every check runs."
             app=true site=true preview=true
           else
-            while IFS= read -r f; do
+            while IFS= read -r -d '' f; do
               case "$f" in
-                "") ;;
                 site/*|.github/actions/site/*) site=true preview=true ;;
                 .github/workflows/checks.yml)  app=true site=true preview=true ;;
                 ui/*|CHANGELOG.md)             app=true site=true ;;
                 *)                             app=true ;;
               esac
-            done <<< "$files"
+            done < "$list"
           fi
           echo "app=$app site=$site preview=$preview"
           { echo "app=$app"; echo "site=$site"; echo "preview=$preview"; } >> "$GITHUB_OUTPUT"
