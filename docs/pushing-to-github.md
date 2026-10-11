@@ -28,8 +28,9 @@ is nothing to set up — only somewhere to push it.
 4. The two zips appear on the release page. That is what people download.
 
 To try the whole thing without publishing anything: Actions → Release → **Run
-workflow**. Same build and same checks, but the zips are left as workflow
-artifacts instead of being attached to a release.
+workflow**, with **Rehearse the builds** chosen. Same build and same checks,
+but the zips are left as workflow artifacts instead of being attached to a
+release.
 
 ## Two things worth knowing
 

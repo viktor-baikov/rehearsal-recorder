@@ -1,82 +1,72 @@
-# Builds the apps people download, when a release is published on GitHub.
+# A release: the apps people download, and the website for them.
+#
+# One of the two workflows here, named by when it runs; the other,
+# checks.yml, checks every pull request and every push to main.
 #
 # How to cut a release:
 #   1. Update CHANGELOG.md.
-#   2. On GitHub: Releases -> Draft a new release -> new tag (v0.1.0) ->
+#   2. On GitHub: Releases -> Draft a new release -> new tag (0.12.0) ->
 #      Publish.
-#   3. This runs. When it finishes the zips are attached to that release.
-#   4. Once both zips are attached, the `site` job below puts the website
-#      (reha.stream) up for that release: site.yml.
+#   3. This runs. build · macos and build · windows attach the zips to that
+#      release.
+#   4. Once both zips are attached, site and site · deploy put the website
+#      (reha.stream) up for that release, unless it is a pre-release: the
+#      page's buttons download the latest release, which a pre-release is
+#      not.
+#
+# By hand (Actions -> Release -> Run workflow), it asks what to do:
+#   Rehearse the builds    both builds, left as workflow artifacts; nothing
+#                          is attached or deployed. The default.
+#   Put the site up again  the latest release's website, to reha.stream
+#                          again, without building the apps: after switching
+#                          something on in the Vercel project (only a
+#                          deployment made after that serves it), or when
+#                          setting up the domain.
 #
 # Nothing is built from a Linux machine and hoped for: a Mac build is made on
 # a Mac and a Windows build on Windows, because that is the only way either
 # can exist. Each one runs the test suites first and then runs --selftest on
-# the app it just produced — a build that cannot answer for itself is never
-# attached to a release.
+# the app it just produced: a build that cannot answer for itself is never
+# attached to a release. Two jobs and not a matrix, so that a skipped one
+# keeps its name.
 
 name: Release
 
 on:
   release:
     types: [published]
-  # For rehearsing the workflow without cutting a release.
   workflow_dispatch:
+    inputs:
+      what:
+        description: What to do
+        type: choice
+        options:
+          - Rehearse the builds
+          - Put the site up again
+        default: Rehearse the builds
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            label: macos
-            built: dist/Reha.app
-            selftest: dist/Reha.app/Contents/MacOS/Reha
-          - os: windows-latest
-            label: windows
-            built: dist/Reha
-            selftest: dist/Reha/Reha.exe
-
-    name: ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
+  build-macos:
+    name: build · macos
+    if: github.event_name == 'release' || inputs.what == 'Rehearse the builds'
+    runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
-      # The whole history, because the version comes from the release
-      # tag — a shallow clone has no tags and would build a 0.0.0.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v7
+      # The Python suites again, here on the system being shipped, the only
+      # place some of its platform branches are real. The interface's tests
+      # have nothing that differs between systems, and ran in checks.yml on
+      # the commit being tagged.
+      - uses: ./.github/actions/app
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
-
-      - name: Build the interface
-        working-directory: ui
-        run: |
-          npm ci
-          npm run build
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e . pyinstaller
-
-      # Same Python suites as tests.yml, but here on the system being shipped
-      # — which is the only place some of the platform branches are real.
-      # The interface's tests have nothing that differs between systems, and
-      # ran in tests.yml on the commit being tagged.
-      - name: Run every suite
-        run: python tests/run_all.py
+          also: pyinstaller
 
       - name: Package
         run: pyinstaller packaging/rehearsal-recorder.spec --noconfirm
@@ -84,55 +74,159 @@ jobs:
       # The question no source test can answer: did every native library
       # actually make it into the bundle?
       - name: Does the build have everything
-        run: ${{ matrix.selftest }} --selftest
+        run: dist/Reha.app/Contents/MacOS/Reha --selftest
 
-      # Windows runners don't have `zip` on PATH (even under the bash shell),
-      # so that leg uses PowerShell's Compress-Archive instead. The app inside
-      # is Reha; the zip keeps its old name, which every copy already out
-      # there asks GitHub for when it looks for a newer version (updates.py).
+      # The app inside is Reha; the zip keeps its old name, which every copy
+      # already out there asks GitHub for when it looks for a newer version
+      # (updates.py).
       - name: Zip it
-        if: runner.os != 'Windows'
-        shell: bash
         run: |
           cd dist
-          zip -qry ../RehearsalRecorder-${{ matrix.label }}.zip Reha.app
+          zip -qry ../RehearsalRecorder-macos.zip Reha.app
           cd ..
-          ls -lh RehearsalRecorder-${{ matrix.label }}.zip
+          ls -lh RehearsalRecorder-macos.zip
 
-      - name: Zip it
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Compress-Archive -Path dist/Reha -DestinationPath RehearsalRecorder-${{ matrix.label }}.zip
-          Get-Item RehearsalRecorder-${{ matrix.label }}.zip | Format-List Name, Length
-
-      # Kept whether or not there is a release to attach to, so
-      # workflow_dispatch runs produce something to download too.
+      # Kept whether or not there is a release to attach to, so a rehearsal
+      # produces something to download too.
       - uses: actions/upload-artifact@v7
         with:
-          name: RehearsalRecorder-${{ matrix.label }}
-          path: RehearsalRecorder-${{ matrix.label }}.zip
+          name: RehearsalRecorder-macos
+          path: RehearsalRecorder-macos.zip
           if-no-files-found: error
 
       - name: Attach it to the release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v3
         with:
-          files: RehearsalRecorder-${{ matrix.label }}.zip
+          files: RehearsalRecorder-macos.zip
 
-  # The website, for this release, once both of its zips are attached. Only
-  # for a published release, and not a pre-release: the page's buttons
-  # download the latest release, which a pre-release is not. A rehearsal by
-  # hand deploys nothing.
-  site:
-    needs: build
-    if: github.event_name == 'release' && !github.event.release.prerelease
+  build-windows:
+    name: build · windows
+    if: github.event_name == 'release' || inputs.what == 'Rehearse the builds'
+    runs-on: windows-latest
     permissions:
-      contents: read
-    uses: ./.github/workflows/site.yml
-    with:
-      tag: ${{ github.event.release.tag_name }}
-    secrets:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/app
+        with:
+          also: pyinstaller
+
+      - name: Package
+        run: pyinstaller packaging/rehearsal-recorder.spec --noconfirm
+
+      - name: Does the build have everything
+        run: dist/Reha/Reha.exe --selftest
+
+      # Windows runners don't have `zip` on PATH (even under the bash shell),
+      # so this one uses PowerShell's Compress-Archive.
+      - name: Zip it
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/Reha -DestinationPath RehearsalRecorder-windows.zip
+          Get-Item RehearsalRecorder-windows.zip | Format-List Name, Length
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RehearsalRecorder-windows
+          path: RehearsalRecorder-windows.zip
+          if-no-files-found: error
+
+      - name: Attach it to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: RehearsalRecorder-windows.zip
+
+  # The website for this release: after a published release that is not a
+  # pre-release has both zips attached, so the page's download links work
+  # from the moment it is up and it shows the version people get; or by
+  # hand, for the latest release, with both builds skipped. A job runs
+  # after a skipped one only when its `if` says so, hence !cancelled().
+  site:
+    name: site
+    needs: [build-macos, build-windows]
+    if: >-
+      !cancelled() && (
+        (github.event_name == 'release' && !github.event.release.prerelease &&
+         needs.build-macos.result == 'success' && needs.build-windows.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' && inputs.what == 'Put the site up again'))
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # The release the site is for: this one, or by hand the latest one. By
+      # hand this runs on a branch, so the site, the interface it draws with
+      # and CHANGELOG.md are put back as they were at that release, and
+      # nothing else: the action that builds them is this branch's.
+      - name: Which release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          tag="$TAG"
+          if [ -z "$tag" ]; then
+            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+            git fetch --quiet --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+            git restore --source="refs/tags/$tag" --worktree -- site ui CHANGELOG.md
+          fi
+          echo "The site is for $tag."
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/site
+        with:
+          version: ${{ steps.release.outputs.tag }}
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: site-playwright-report
+          path: site/playwright-report/
+          if-no-files-found: ignore
+
+  # The one place anything goes to reha.stream. The project on Vercel has no
+  # Git connection: this uploads the files the site job laid out, and Vercel
+  # makes the deployment from them (see .github/actions/site). It needs three
+  # repository secrets: VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID.
+  # What Vercel does with an address before serving a file (the short links
+  # /mac and /windows, a year's cache for the build's hashed files) is in
+  # site/vercel-config.json. One deploy at a time, and none is cut short.
+  # The page counts visits with Vercel's Web Analytics and how fast it loads
+  # with Speed Insights, each switched on in the Vercel project.
+  deploy:
+    name: site · deploy
+    needs: site
+    if: ${{ !cancelled() && needs.site.result == 'success' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: reha-stream
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://reha.stream
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: site
+
+      - name: Deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          TAG: ${{ needs.site.outputs.tag }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::error::Deploying needs the repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID."
+            exit 1
+          fi
+          url=$(npx --yes vercel@62.4.0 deploy site --prod --token "$VERCEL_TOKEN")
+          echo "Deployed $TAG to $url"
+          echo "The site for $TAG is at $url" >> "$GITHUB_STEP_SUMMARY"
