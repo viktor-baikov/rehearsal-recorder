@@ -202,10 +202,12 @@ test("no length is the least", () => expect(drawnLength(0, 0, 24, 5)).toBe(5))
   - `taking a track off says so and Undo puts it back in its place`: remove the second of four. The notice reads `Bass was taken off.` Undo puts it back as the second, with its input and name.
   - `Cmd+Z puts back the track taken off`: the same, by the key, with focus outside a field.
   - `taking a track off during the check keeps the others' meters`: remove the first while checking. The remaining tracks' meters and "signal" stay with them.
+  - `a port pulled out is said in its track's line and no row moves`: with Keys on MIDI and the check running, pull the port (`__MIDI_GONE__`). The note `Not connected. Records its notes from the moment it is plugged in.` is inside Keys' row. Every row's top and bottom, Add track's box and the footer's box are unchanged.
+  - `no empty band under Recording with`: with a track on Both, the first row starts at Recording with's bottom plus the row line, with no gap over 1 px.
   - `Start keeps its width while Last time plays`: measure Start and the set picker, press ▶ on a Last time song, and both boxes are unchanged to the pixel. The Space chip is there but invisible (`toBeHidden` is not enough; check `visibility`).
 - [ ] **Step 2:** Build (`npm run build`) and run `npx playwright test -c playwright.local.config.ts e2e/setup.spec.ts`. Expected: the new tests FAIL.
 - [ ] **Step 3: Implement.**
-  - Take the mockup's layout with only the chosen branches.
+  - Take the mockup's `Setup.tsx` with only the chosen branches, its rows included: the five port-line notes, no place kept above the rows, `checkedNames`, `removeTrack`. Its narrow-window panel is Task 5's; below 1100 px the left part stays under the setup, as today. `LastTime.tsx` is Task 6's.
   - Keep the readings by place: `checkedNames` (the names Python knows each track's input by, set when the check begins) moves with the tracks on removal and Undo, as `checkedPorts` does.
   - Take `removeTrack` with `notify({ kind: "done", key: "setup-track", text, action: { label: "Undo", run } })`.
   - Start keeps its `Kbd`, with `invisible` while `inHand`.
@@ -267,7 +269,7 @@ test("no length is the least", () => expect(drawnLength(0, 0, 24, 5)).toBe(5))
   - `rehearsalsLabel`, `inCloudLabel`.
 
 - [ ] **Step 1: Write the failing e2e tests:**
-  - `Not played keeps the song name whole and drops figures`: with the stress data (copy `mockup-tree`'s q3 stress names into the fake band, or reuse `/mnt/project-files/design-system/screen-start/q4/src/stress.js`), "Dym" is not cut. Its figure line has `[data-dropped]` and its sr-only text is the whole line.
+  - `Not played keeps the song name whole and drops figures`: with the stress data (`/mnt/project-files/design-system/screen-start/q4/src/stress.js`, which lays over `band.js`, added as an e2e fixture the tests opt into), "Dym" is not cut. Its figure line has `[data-dropped]` and its sr-only text is the whole line.
   - `a cut name shows whole on hover`: hover Kalychanka's name and the tooltip holds the whole title. Then the same by Tab, when the focus scrolls the left part.
   - `the small play button shows a spinner after one second`: make the fake bridge slow to load a take (add a `window.__SLOW_LOAD_MS__` switch to `fake-bridge.js` if none exists). There is no spinner at 0.5 s and there is one at 1.5 s. This is the foundation's deferred PlayButton e2e.
   - `Earlier rows open their rehearsal by keyboard`: Tab to a row, press Enter, and History opens on it.
@@ -303,15 +305,13 @@ test("no length is the least", () => expect(drawnLength(0, 0, 24, 5)).toBe(5))
   - `ModeSwitch` keeps its props, on `ToggleGroup type="single" variant="switch"`.
 
 - [ ] **Step 1: Write the failing e2e tests:**
-  - `a port pulled out is said in its track's line and no row moves`: with Keys on MIDI and the check running, pull the port (`__MIDI_GONE__`). The note `Not connected. Records its notes from the moment it is plugged in.` is inside Keys' row. Every row's top and bottom, Add track's box and the footer's box are unchanged.
-  - `no empty band under Recording with`: with a track on Both, the first row starts at Recording with's bottom plus the row line, with no gap over 1 px.
   - `an empty band says how to add tracks`: remove every track. `No tracks yet` and its line show, and Add track works.
   - `Stereo is a toggle with aria-pressed`, and the on look is not the accent (its background is not `--primary`).
   - `arrow keys move along Audio Both MIDI`.
   - `Look again shows a spinner only after one second` (the fake bridge's rescan made slow).
   - `the device name keeps its width and the figures give way`: with the stress device name, the name is not cut and the figure line has `[data-dropped]`.
 - [ ] **Step 2:** Build and run them. Expected: FAIL.
-- [ ] **Step 3: Implement**, with the inventory §3 rows for `Setup.tsx`'s tracks, `ModeSwitch`, `PortPicker`, `NotesCheck` and `NameField` as the checklist. The mockup tree's port-line code has the five notes. Only "At least one track has to record sound" stays above the rows, on an Alert. Use one `Check` icon for "signal" and for "notes".
+- [ ] **Step 3: Implement**, with the inventory §3 rows for `Setup.tsx`'s tracks, `ModeSwitch`, `PortPicker`, `NotesCheck` and `NameField` as the checklist. The port-line notes are in since Task 4. Use one `Check` icon for "signal" and for "notes".
 - [ ] **Step 4:** Run the whole Playwright suite, Vitest, lint and design-check.
 - [ ] **Step 5:** Commit: `ui: the start screen's track rows on the shared pieces`.
 
