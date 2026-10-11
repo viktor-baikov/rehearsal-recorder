@@ -244,15 +244,16 @@ piece of its own moves onto the shared one when it is redone.
   of piece are built two to sixteen times each, and each copy drifts from
   the others. Each becomes one shared piece, taken from shadcn/ui where it
   has one (U1). Some are in `components/ui/` already, and the copies made by
-  hand move onto them: dividers (`Separator`), chips (`Badge`) and progress
-  bars (`Progress`). The rest are added by the first screen's pull request
-  that needs them: on/off and pick-one buttons (Toggle and ToggleGroup, with
-  arrow keys inside a group), one list row (Item, every row reachable by
-  keyboard), one ✕, one link, one size of icon button, warnings (Alert),
-  loading (Spinner), empty states (Empty), tooltips (Tooltip), expanding
-  (Collapsible), checkboxes (Checkbox or Switch), a field with a button
-  (InputGroup), and our own set list for both screens, meter, screen header,
-  side panel and pane head. A take's name is written by `TakeTitle`
+  hand move onto them: dividers (`Separator`), chips (`Badge`), progress
+  bars (`Progress`), and, added with the start screen, on/off and pick-one
+  buttons (`Toggle` and `ToggleGroup`, with arrow keys inside a group), one
+  list row (`Item`, every row reachable by keyboard), warnings (`Alert`),
+  loading (`Spinner`), empty states (`Empty`) and tooltips (`Tooltip`). The
+  rest are added by the first screen's pull request that needs them: one ✕,
+  one link, one size of icon button, expanding (Collapsible), checkboxes
+  (Checkbox or Switch), a field with a button (InputGroup), and our own set
+  list for both screens, meter, screen header, side panel and pane head. A
+  take's name is written by `TakeTitle`
   (`components/TakeTitle.tsx`) everywhere, where today one list uses it and
   the rest write the name their own way. "Selected" has two looks instead of
   seven: the white plate inside a switch, and a grey fill for a row, pill,
@@ -289,6 +290,44 @@ The other shared components, each with its stories:
 - **Progress**, `progress.tsx`: a thin bar in the accent for how far along a
   job is, where it was started (the take being saved under Stop, a crop, a
   draft) and in the background work list.
+- **Tooltip**, `tooltip.tsx`: a small tip in the text's colour, on hover and
+  on keyboard focus after 400 ms, gone with Esc or the pointer. It is for a
+  name a row had to cut, shown whole (B6), and for what an icon button does:
+  C8's native `title` tooltips. Each `Tooltip` has its own provider, so it
+  needs nothing round it.
+- **Sheet**, `sheet.tsx`: a panel that slides in from the left or the right
+  over the window's full height, 28 rem wide and never wider than the window
+  less 3 rem. It is a dialog on the Dialog's veil and z-index, so the notices
+  stay above it and a click on one does not close it (C4); Esc, the veil and
+  its ✕, the shared `Button`, close it and the focus goes back to the button
+  that opened it. For the start screen's left part in a narrow window, the
+  narrow form of C8's side panel.
+- **Toggle**, `toggle.tsx`: a button that stays pressed (`aria-pressed`), in
+  `default` and `outline`, sized as Button's `row` (32 px) and `icon-row`.
+  On is the grey `selected` fill, never the accent (F2), and it has the same
+  weight and 1 px frame on or off, so pressing it moves nothing. C8's on/off
+  buttons: Check signal, Stereo.
+- **ToggleGroup**, `toggle-group.tsx`: pick one or several, with the arrow
+  keys moving along the group and Tab leaving it. `default` and `outline` are
+  Toggles joined into a bar; `switch` is History's switch, a grey track with
+  the chosen item a plate on it with a light shadow. C8's three identical
+  segmented switches and its pick-one groups.
+- **Alert**, `alert.tsx`: a box for a line the screen has to say, with an
+  icon, a title and a text, all optional. `warning` is the theme's `warn`
+  colour on the icon and the edge with a faint wash behind; `destructive` is
+  a failure; `default` is neutral. C8's warnings and errors.
+- **Spinner**, `spinner.tsx`: lucide's `Loader2Icon`, turning, `role="status"`
+  and named Loading. It is there from the start but invisible for the first
+  second (`SPINNER_AFTER_MS`, or its `after` in ms), so a quick answer does
+  not flash it and nothing moves when it shows (B4, B5). It stands still
+  under Reduce motion and while a take records (F11). C8's loading signs.
+- **Empty**, `empty.tsx`: an empty list that says what will be here and how it
+  gets here (B7): a title, a line, and the button that fills it. C8's empty
+  states.
+- **Item**, `item.tsx`: the one list row (C8): a title, a line under it and
+  what can be done at the end, in `default`, `outline` and `muted`. A row that
+  goes somewhere is an `asChild` link or button, which Tab reaches and Enter
+  follows, with the shared focus ring.
 
 ## Writing components
 
