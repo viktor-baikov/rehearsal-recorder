@@ -83,7 +83,7 @@ The inventory's §4 calls stand: headings without capitals, the track's name bar
 - **The Tooltip opens after 400 ms**, close to a native title's delay. shadcn's 0 ms would flash a tip on every row the pointer crosses.
 - **Statuses in one quiet look:** "Not connected" and "Not on disk" are muted text. The problem itself shows on the control (the picker's warning edge, a ▶ that cannot be pressed). Today Earlier's "not found" is red.
 - **The Spinner holds its room:** before its second, it is the same icon made invisible, so nothing moves when it appears (B4).
-- **Shell's title goes from 18 to 16 on every screen** (F5): it is Shell's one size, and the allow-list's `text-size` entry for Shell is that line. Shell's `uppercase` subtitle stays on the list for the screens that show it.
+- **Shell's title goes from 18 to 20 on every screen** (Alex, 2026-10-11 18:37Z «давай 20»; 18 is not one of F5's five sizes): it is Shell's one size, and the allow-list's `text-size` entry for Shell is that line. Shell's `uppercase` subtitle stays on the list for the screens that show it.
 - **B9 is not in this PR.** The setting to turn off single-key shortcuts comes with Settings' PR; this screen's Space obeys it then.
 - **Review's bars take the shared length now** (`TakeSummary.tsx`), with no change to their look, so the helper has its second user from the start.
 
@@ -183,7 +183,7 @@ test("no length is the least", () => expect(drawnLength(0, 0, 24, 5)).toBe(5))
 ### Task 4: Three groups, the name beside Start, and the check by place
 
 **Files:**
-- Modify: `ui/src/components/Shell.tsx` (title `text-base`; prop `air?: boolean` makes header `px-8` and footer `px-8 py-6`)
+- Modify: `ui/src/components/Shell.tsx` (title `text-xl`, Alex 2026-10-11 18:37Z; prop `air?: boolean` makes header `px-8` and footer `px-8 py-6`)
 - Modify: `ui/src/screens/Setup.tsx` (layout per Q1, from `mockup-tree/ui/src/screens/Setup.tsx` with `air`, `panel` and `footer` true; Check signal by place; taking a track off with Undo; Start's width)
 - Test: `ui/e2e/setup.spec.ts`
 
