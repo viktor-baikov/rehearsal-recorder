@@ -248,17 +248,19 @@ piece of its own moves onto the shared one when it is redone.
   bars (`Progress`), and, added with the start screen, on/off and pick-one
   buttons (`Toggle` and `ToggleGroup`, with arrow keys inside a group), one
   list row (`Item`, every row reachable by keyboard), warnings (`Alert`),
-  loading (`Spinner`), empty states (`Empty`) and tooltips (`Tooltip`). The
-  rest are added by the first screen's pull request that needs them: one ✕,
-  one link, one size of icon button, expanding (Collapsible), checkboxes
-  (Checkbox or Switch), a field with a button (InputGroup), and our own set
-  list for both screens, meter, screen header, side panel and pane head. A
-  take's name is written by `TakeTitle`
+  loading (`Spinner`), empty states (`Empty`), tooltips (`Tooltip`) and
+  meters (`Meter`). The rest are added by the first screen's pull request
+  that needs them: one ✕, one link, one size of icon button, expanding
+  (Collapsible), checkboxes (Checkbox or Switch), a field with a button
+  (InputGroup), and our own set list for both screens, screen header, side
+  panel and pane head. A take's name is written by `TakeTitle`
   (`components/TakeTitle.tsx`) everywhere, where today one list uses it and
-  the rest write the name their own way. "Selected" has two looks instead of
-  seven: the white plate inside a switch, and a grey fill for a row, pill,
-  tab or toggle that is on. The full table, with every place each piece is
-  built today, is C8 in the spec.
+  the rest write the name their own way. A go drawn as a bar is as tall as
+  it ran against the longest, through `drawnLength` (`lib/takeScale.ts`),
+  never under a few pixels. "Selected" has two looks instead of seven: the
+  white plate inside a switch, and a grey fill for a row, pill, tab or
+  toggle that is on. The full table, with every place each piece is built
+  today, is C8 in the spec.
 
 The other shared components, each with its stories:
 
@@ -328,6 +330,21 @@ The other shared components, each with its stories:
   what can be done at the end, in `default`, `outline` and `muted`. A row that
   goes somewhere is an `asChild` link or button, which Tab reaches and Enter
   follows, with the shared focus ring.
+- **Meter**, `meter.tsx`: one thin bar for a reading that moves, C8's meter:
+  the signal check's level (`tone="signal"`, the signal green) and the notes
+  check's velocity (`tone="notes"`, grey in the text's colour). `sides` are
+  values from 0 to 1; two split the bar along its length, the first above,
+  the second below, so a dead half of a pair shows. It follows its value over
+  75 ms and keeps doing so under Reduce motion and while a take records: a
+  meter is a reading, not motion. It is a picture, hidden from a screen
+  reader, unless given a `label`, and then a `meter` at its largest side.
+- **Whole**, `whole.tsx`: B6's pieces for a long name. `Whole` is a text that
+  shows whole in a tip when it is cut; `useCut` and `WholeTip` do the same
+  round a button or a link, the tip also showing on keyboard focus and
+  staying while focus is there, even when focusing scrolled the panel.
+  `Figures` is the line of figures beside a name: it takes the room the name
+  leaves, drops whole figures, the least needed first (`lib/figures.ts`), and
+  shows them all on hover once it has dropped any.
 
 ## Writing components
 
@@ -429,8 +446,10 @@ as the `cn` import.
 - **B6. Long names.** A name never gives way to a secondary figure: the name
   is what tells one thing from another. The figure wraps, goes first, or
   hides and shows on hover, as the MIDI tile's count does; a cut name shows
-  whole on hover; where a name has room for a second line, it wraps. As
-  each screen is redone.
+  whole on hover and on keyboard focus (`Whole`, or `useCut` and `WholeTip`);
+  where a name has room for a second line, it wraps; the figures beside it
+  are `Figures`, which drop whole, least needed first. As each screen is
+  redone.
 - **B7. Empty states.** An empty list that only says it is empty leaves the
   person to guess what to do next: "This set has no songs." under Next take
   does not say how a song gets there. So an empty list says, in its own
