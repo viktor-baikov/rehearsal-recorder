@@ -12213,6 +12213,25 @@ def main():
     ok("and the takes' own files are where they were",
        all(Path(t["file"]).is_file() for f in (mon77, gig77) for n in (1, 2, 3)
            for t in h77._lib.take(f, n)["tracks"]))
+
+    print("  the rehearsal that shares the cloud folder renamed")
+    # Its cloud folder is Monday's too: moving the folder whole would carry
+    # Monday's copies off with it, to where Monday's rows do not look.
+    mons77 = {n: (copy77(mon77, n), sound77(copy77(mon77, n))) for n in (1, 2, 3)}
+    renamed77 = h77.rename_rehearsal(str(gig77), "Gig again")
+    gig77 = Path(renamed77.get("folder") or gig77)
+    run77()
+    again77 = drive77 / gig77.name
+    ok("e. renaming the gig leaves Monday's copies where Monday's rows say, as they were",
+       renamed77.get("ok") is True
+       and all(copy77(mon77, n) == path and sound77(path) == sound
+               for n, (path, sound) in mons77.items()))
+    ok("and the gig's copies go to its new cloud folder, by their own names there",
+       [copy77(gig77, n) for n in (1, 2, 3)]
+       == [again77 / "01 - Take 1.wav", again77 / "02 - Take 2.wav", again77 / "03 - Take 3.wav"]
+       and all(sound77(copy77(gig77, n)) not in (None, mons77[n][1]) for n in (1, 2, 3))
+       and sorted(p.name for p in (drive77 / mon77.name).iterdir())
+       == ["01 - Take 1.wav", "02 - Take 2.wav", "03 - Take 3.wav"])
     h77.shutdown()
     apimod77.move_to_trash = real_trash71
 

@@ -1191,6 +1191,18 @@ class Library:
                     if but is None or row.take_id != but
                     for p in (row.mix, row.tracks) if p}
 
+    def cloud_paths_outside(self, folder):
+        """Every copy in the cloud folder a take of another rehearsal than
+        the one in `folder` names, relative to the cloud folder: what moving
+        this rehearsal's cloud folder must not carry off. Every copy, when no
+        rehearsal is in `folder`."""
+        with self._session() as db:
+            rehearsal = self._find(db, folder)
+            rows = db.scalars(select(CloudCopy).join(Take, CloudCopy.take_id == Take.id)
+                              .where(Take.rehearsal_id != rehearsal.id)
+                              if rehearsal is not None else select(CloudCopy))
+            return {p for row in rows for p in (row.mix, row.tracks) if p}
+
     def others_cloud_paths(self, folder, take_number):
         """cloud_paths but the take `take_number` of the rehearsal in
         `folder`: every copy the other takes name, where a copy of this one

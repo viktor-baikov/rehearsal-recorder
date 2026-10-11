@@ -5854,7 +5854,8 @@ class Api:
         After a rehearsal is renamed: its folder in the cloud takes the new
         name, with every copy in it, and each take's record follows. When that
         cannot be done in one move — a copy being made, a copy not where its
-        record says, a folder already there under the new name — each take
+        record says, a folder already there under the new name, another
+        rehearsal's copies in the same folder — each take
         that was in the cloud is made again in the new folder instead, and the
         old one goes once it is empty.
         """
@@ -5876,10 +5877,15 @@ class Api:
         def paths(take):
             return [Path(v) for k, v in take["cloud"].items() if k in ("mix", "tracks") and v]
 
+        # Not whole when another rehearsal's copies are in it too (one found
+        # again by Locate in a folder named like this one's): they would go
+        # where their rows do not look. Made again in the new folder instead,
+        # which leaves those where they are (_copy_to_cloud).
         movable = (
             not self._copy_busy(new_folder) and not self._copy_busy(old_folder)
             and was.is_dir() and not goes_to.exists()
             and all(p.parent == was and p.exists() for t in takes for p in paths(t))
+            and not self._cloud_in_use(was, self._lib.cloud_paths_outside(new_folder))
         )
         if movable:
             try:

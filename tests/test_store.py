@@ -1675,6 +1675,11 @@ def main():
        "Night - 2026-09-30 19-00/02 - Polyn.wav" not in lib.others_cloud_paths(night17, 3)
        and "Night - 2026-09-30 19-00/02 - Polyn.wav" in lib.others_cloud_paths(night17, 2)
        and lib.others_cloud_paths(night17, 99) == lib.cloud_paths())
+    ok("and those other rehearsals' takes name leave out every take of this one",
+       "Night - 2026-09-30 19-00/02 - Polyn.wav" not in lib.cloud_paths_outside(night17)
+       and "Night - 2026-09-30 19-00/02 - Polyn.wav"
+       in lib.cloud_paths_outside(night17.parent / "Nowhere")
+       and lib.cloud_paths_outside(night17.parent / "Nowhere") == lib.cloud_paths())
     lib.set_cloud_copy(night17, 3, None, None)
 
     print("  a whole rehearsal")
