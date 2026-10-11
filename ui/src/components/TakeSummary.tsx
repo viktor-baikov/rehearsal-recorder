@@ -128,7 +128,7 @@ export function TakeSummary({
                 <span
                   data-bar
                   className={cn(
-                    "w-2 rounded-[2px]",
+                    "w-2 rounded-sm",
                     g.here
                       ? "bg-foreground"
                       : g.starred

@@ -25,7 +25,7 @@ export function EveningStrip({ runs, className }: { runs: Run[]; className?: str
               key={j}
               data-starred={take.starred || undefined}
               className={cn(
-                "h-full min-w-0.5 rounded-[2px]",
+                "h-full min-w-0.5 rounded-sm",
                 take.starred ? "bg-signal/80" : "bg-muted-foreground/40"
               )}
               style={{ flex: `${Math.max(1, take.duration_sec)} 1 0` }}

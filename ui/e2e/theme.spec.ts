@@ -1,4 +1,4 @@
-import { expect, openApp, openHistory, startButton, startRehearsal, test } from "./app.ts"
+import { expect, openApp, openHistory, recordTake, startButton, startRehearsal, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // The decided theme (spec F1-F11), as the page shows it: the values in
@@ -61,6 +61,55 @@ test("a figure is in the system font, with digits of one width", async ({ page }
   })
   expect(look.family.startsWith("ui-monospace")).toBe(false)
   expect(look.numeric).toBe("tabular-nums")
+})
+
+test.describe("a take's bar", () => {
+  const corner = (bar: ReturnType<Page["locator"]>) =>
+    bar.evaluate((e) => getComputedStyle(e).borderTopLeftRadius)
+
+  test("has 4 px corners after a take, under Last time and in History (F9)", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    const lastTime = page.getByRole("complementary", { name: "Last time" })
+    const goes = lastTime.locator("[data-song='Pałyn'] [aria-hidden] > span")
+    await expect(goes.first()).toBeVisible()
+    expect(await corner(goes.first())).toBe("4px")
+
+    // A second go at Viasna tonight, so the screen after it has bars.
+    await openApp(page, {
+      before: "window.__TONIGHT__ = [{name: 'Viasna', duration_sec: 18}];",
+    })
+    await startRehearsal(page, 2)
+    await recordTake(page, 2)
+    const summary = page.locator("[data-take-summary] [data-bar]")
+    await expect(summary.first()).toBeVisible()
+    expect(await corner(summary.first())).toBe("4px")
+
+    await openApp(page)
+    const list = await openHistory(page)
+    const strip = list.getByRole("button", { name: /^Tuesday jam/ }).locator("[data-strip]")
+    expect(await corner(strip.locator("span").first())).toBe("4px")
+  })
+
+  test("at its narrowest, 2 px, still draws in History's strip", async ({ page }) => {
+    await openApp(page)
+    const list = await openHistory(page)
+    const strip = list.getByRole("button", { name: /^Tuesday jam/ }).locator("[data-strip]")
+    // Squeezed until every bar is at its least. A 4 px corner on a 2 px bar
+    // is cut down to fit it (each pair of corners at most the side they
+    // share), so the bar is a pill there, not gone.
+    await strip.evaluate((e) => ((e as HTMLElement).style.width = "40px"))
+    const bar = strip.locator("span").first()
+    const box = (await bar.boundingBox())!
+    expect(box.width).toBeCloseTo(2, 1)
+    expect(box.height).toBeCloseTo(6, 1)
+
+    // The same few pixels with the bar there and with it hidden: they differ.
+    const clip = { x: box.x, y: box.y, width: box.width, height: box.height }
+    const shown = await page.screenshot({ clip, animations: "disabled" })
+    await bar.evaluate((e) => ((e as HTMLElement).style.visibility = "hidden"))
+    const hidden = await page.screenshot({ clip, animations: "disabled" })
+    expect(shown.equals(hidden)).toBe(false)
+  })
 })
 
 test.describe("motion", () => {
