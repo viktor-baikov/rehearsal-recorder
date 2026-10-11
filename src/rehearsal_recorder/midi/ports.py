@@ -345,6 +345,9 @@ class OpenPort:
                     self._poll(midi_in)
                 except Exception:
                     log.exception("closing MIDI port %s", self.info.name)
+            # The library's port it was opened on, let go of here for the
+            # same reason as the system's listing (see PortSystem._shut).
+            self._native = None
 
     def _make(self):
         """The library's input, open on the port. Raises if it will not be."""
@@ -694,10 +697,14 @@ class PortSystem:
                 asked.set()
 
     def _shut(self):
-        """No more listings: answer whoever is waiting for one."""
+        """No more listings: answer whoever is waiting for one, and let go of
+        the last one's ports, which are the library's objects too. The app
+        holds its system until the process ends, and a port still held then
+        is reported at exit ("nanobind: leaked 1 instances!")."""
         with self._lock:
             self._stop.set()
             askers, self._askers = self._askers, []
+            self._found = (0, [])
         for asked in askers:
             asked.set()
 

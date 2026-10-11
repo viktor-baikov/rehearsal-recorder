@@ -629,6 +629,12 @@ def main():
     ok("and stops its threads", wait_for(
         lambda: not threads_named("midi")))
     ok("and none of the library's objects is left", wait_for(lambda: world.alive() == []))
+    # The app keeps its system, and the ports it opened, until the process
+    # ends: a port of the library's they still held then was reported at
+    # exit as "nanobind: leaked 1 instances!".
+    ok("not even the ports it listed and opened, though all three are still held",
+       system is not None and rx is not None and rx2 is not None
+       and "InputPort" not in world.alive())
     try:
         system.open(ports.PortInfo("TD-17"), lambda ns, d: None)
         ok("a closed system opens nothing", False)
@@ -720,8 +726,9 @@ def main():
         ok(f"and at once, not after waiting for it ({what})", time.perf_counter() - began < 2)
         setattr(world, knob, False)
         ok(f"and leaves no thread ({what})", wait_for(lambda: not threads_named("midi-in")))
+        # The system's own listing is alive: its ports are the library's too.
         ok(f"or object of the library's but the observer's ({what})", wait_for(
-            lambda: set(world.alive()) <= {"Observer", "ObserverConfiguration"}))
+            lambda: set(world.alive()) <= {"Observer", "ObserverConfiguration", "InputPort"}))
         good = system.open(info, lambda ns, d: None)
         ok(f"and the next open works ({what})", good.connected())
         finish()

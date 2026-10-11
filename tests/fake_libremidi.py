@@ -23,6 +23,10 @@ or trying it (the notes at the top of ports.py say how):
     never collected: `world.alive()` says which of the library's objects are
     still there, and a test that left one behind has found the leak the real
     library reports at exit ("nanobind: leaked 1 instances").
+  - Each listing of the ports makes a new InputPort for every port, and
+    those are the library's objects like any other: one that is kept after
+    the system closes is one `world.alive()` says, and one the real library
+    reports at exit.
   - An object of the library that is let go of on a thread says so in
     `world.order` as ("destroyed", kind, thread), as the real destructors
     run there.
@@ -126,6 +130,13 @@ class World:
         for port in gone:
             for observer in self.observers:
                 observer.notice("input_removed", port)
+
+    def listed(self, port):
+        """A port as a listing gives it: a new one, written down as made."""
+        copy = self.module.InputPort()
+        copy.__dict__.update(vars(port))
+        self.made(copy)
+        return copy
 
     def send(self, name, data, ago_ns=0):
         """What the OS does when the instrument plays: every input open on
@@ -271,7 +282,7 @@ def build(world):
                     if p not in now:
                         self.notice("input_removed", p, listing=True)
             self.known = now
-            return now
+            return [world.listed(p) for p in now]
 
         def notice(self, which, port, listing=False):
             if world.silent or (self.api == API.COREMIDI) != listing:
