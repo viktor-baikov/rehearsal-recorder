@@ -150,13 +150,34 @@ test("choosing a theme or a scale leaves every pill the width it was", async ({ 
   }
 
   // The scale rescales the whole page, so the widths cannot be compared
-  // across a click. These four say a figure of three digits and a percent
-  // sign each, so they are as wide as one another whichever one is chosen.
+  // across a click, and the four say different figures: whether those are as
+  // wide as one another depends on the machine's font (on CI's Linux runner
+  // they came out at three widths). So the chosen one and the others must
+  // share what sets a width besides the words: the weight, the frame, the
+  // padding, and figures of even width wherever the font has them.
+  const looks = (pills: Locator[]) =>
+    Promise.all(
+      pills.map((p) =>
+        p.evaluate((el) => {
+          const s = getComputedStyle(el)
+          return [
+            s.fontWeight,
+            s.borderLeftWidth,
+            s.borderRightWidth,
+            s.paddingLeft,
+            s.paddingRight,
+            s.letterSpacing,
+            s.fontVariantNumeric,
+          ].join(" ")
+        })
+      )
+    )
   for (const pill of [scales[2]!, scales[1]!]) {
     await pill.click()
     await expect(pill).toHaveAttribute("aria-pressed", "true")
-    const now = await widths(scales)
-    expect(new Set(now).size).toBe(1)
+    // Polled: a scale change eases the padding in with the rest of the page.
+    await expect.poll(async () => new Set(await looks(scales)).size).toBe(1)
+    expect((await looks(scales))[0]).toContain("tabular-nums")
   }
 })
 
