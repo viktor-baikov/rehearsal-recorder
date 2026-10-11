@@ -49,7 +49,9 @@ opening.
   problem used to hide the first; now each is there, oldest first, the same
   one never twice, and its ✕ puts them all away. A long list scrolls inside
   the bar instead of covering the window, and past 20 the rest are counted
-  under it ("and 5 more"), so the first problem always stays in it.
+  under it ("and 5 more"), so the first problem always stays in it. A
+  problem in the window itself, not in Python, is now written to crash.log
+  too, so the bar is right that all of them are there.
 
 ## 0.11.1
 

@@ -943,6 +943,9 @@ window.__MAKE_API__ = () => ({
   // start that went wrong in more than one way.
   startup_problems: track('startup_problems', async () =>
     [].concat(window.__STARTUP_PROBLEM__ || [])),
+  // A problem raised in the page, which Python writes to crash.log. Here it
+  // is only kept, so a test can read what was sent.
+  log_problem: track('log_problem', async (_where, _name, _message, _stack) => null),
   // With a host API named, this is the Windows shape once ASIO is loaded:
   // one mixer through three systems with three different input counts.
   list_input_devices: track('list_input_devices', async () => (window.__PLUGGED_IN_LATE__ ? [

@@ -5,6 +5,7 @@ import {
   getMoreBridgeErrors,
   KEPT,
   reportBridgeError,
+  reportPageError,
   subscribeBridgeErrors,
   TOLD_APART,
   whereTheRestIs,
@@ -148,5 +149,87 @@ describe("the bridge's errors", () => {
     stop()
     reportBridgeError("startup", fail("RemovalKept", "Two folders were kept."))
     expect(heard).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("a problem raised in the page itself", () => {
+  // It never passed through Python, so nothing wrote it to crash.log: the
+  // page sends it there, straight through the bridge.
+  let sent: ReturnType<typeof vi.fn>
+  beforeEach(() => {
+    sent = vi.fn(async () => null)
+    vi.stubGlobal("window", { pywebview: { api: { log_problem: sent } } })
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("is listed like any other, and sent to Python's log once", () => {
+    const e = fail("TypeError", "Cannot read properties of undefined")
+    reportPageError("Undo", e)
+    expect(getBridgeErrors()).toEqual([
+      { method: "Undo", name: "TypeError", message: "Cannot read properties of undefined" },
+    ])
+    expect(sent).toHaveBeenCalledTimes(1)
+    expect(sent).toHaveBeenCalledWith(
+      "Undo",
+      "TypeError",
+      "Cannot read properties of undefined",
+      e.stack
+    )
+  })
+
+  it("is not sent again when said again", () => {
+    reportPageError("Undo", fail("TypeError", "Cannot read properties of undefined"))
+    reportPageError("Undo", fail("TypeError", "Cannot read properties of undefined"))
+    reportPageError("end_trash", fail("TypeError", "Cannot read properties of undefined"))
+    expect(sent.mock.calls.map((c) => c[0])).toEqual(["Undo", "end_trash"])
+  })
+
+  it("is sent when counted past the list, and not again once counted", () => {
+    for (let i = 1; i <= KEPT; i++) reportBridgeError("startup", fail("OperationalError", `${i}`))
+    reportPageError("Undo", fail("TypeError", "after the list"))
+    reportPageError("Undo", fail("TypeError", "after the list"))
+    expect(getMoreBridgeErrors()).toBe(1)
+    expect(sent).toHaveBeenCalledTimes(1)
+  })
+
+  it("is not sent once the count no longer tells reports apart", () => {
+    for (let i = 1; i <= KEPT + TOLD_APART; i++) {
+      reportPageError("notice", fail("TypeError", `index ${i} out of range`))
+    }
+    expect(sent).toHaveBeenCalledTimes(KEPT + TOLD_APART)
+    // Past the bound every report counts, and none is sent: a flood in the
+    // page cannot flood the log.
+    reportPageError("notice", fail("TypeError", "index 5000 out of range"))
+    reportPageError("notice", fail("TypeError", "index 5001 out of range"))
+    expect(getMoreBridgeErrors()).toBe(TOLD_APART + 2)
+    expect(sent).toHaveBeenCalledTimes(KEPT + TOLD_APART)
+  })
+
+  it("is still listed when the bridge is not there, or its send fails", async () => {
+    vi.stubGlobal("window", {})
+    reportPageError("notice", fail("TypeError", "no bridge"))
+    vi.stubGlobal("window", { pywebview: { api: { log_problem: vi.fn(async () => {
+      throw new Error("the bridge went away")
+    }) } } })
+    reportPageError("notice", fail("TypeError", "a send that fails"))
+    vi.stubGlobal("window", { pywebview: { api: { log_problem: () => {
+      throw new Error("at once")
+    } } } })
+    reportPageError("notice", fail("TypeError", "a send that throws"))
+    // Let a rejected send settle: nothing unhandled, nothing more listed.
+    await Promise.resolve()
+    expect(getBridgeErrors().map((e) => e.message)).toEqual([
+      "no bridge",
+      "a send that fails",
+      "a send that throws",
+    ])
+  })
+
+  it("comes only from reportPageError: a bridge call's own failure is never sent", () => {
+    // Python has written those already.
+    reportBridgeError("keep_take", fail("UnicodeEncodeError", "'charmap' codec"))
+    expect(sent).not.toHaveBeenCalled()
   })
 })

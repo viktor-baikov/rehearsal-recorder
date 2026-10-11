@@ -138,6 +138,25 @@ MIDI_THREADS = True
 
 log = logging.getLogger(__name__)
 
+# How much of each part of a problem the page sends (log_problem) is kept: a
+# few KB holds a whole stack, and the page decides what it sends.
+PAGE_PROBLEM_CHARS = 4000
+
+
+def _page_problem_text(value):
+    """One part of a problem the page sent, as text no longer than
+    PAGE_PROBLEM_CHARS. Whatever the bridge handed over: None, a number, a
+    list, or something with no words of its own."""
+    if value is None:
+        return ""
+    try:
+        text = value if isinstance(value, str) else str(value)
+    except Exception:  # noqa: BLE001
+        text = f"<{type(value).__name__}>"
+    if len(text) > PAGE_PROBLEM_CHARS:
+        text = f"{text[:PAGE_PROBLEM_CHARS]}... ({len(text) - PAGE_PROBLEM_CHARS} more characters)"
+    return text
+
 
 # What a cloud copy is called while it is still being written. The worker is
 # killed at interpreter exit, possibly mid-copy, and nothing is recorded on
@@ -847,6 +866,30 @@ class Api:
         forgotten."""
         problems, self._problems = self._problems, []
         return problems
+
+    def log_problem(self, where, name, message, stack=""):
+        """
+        A problem raised in the page itself, written to the crash log.
+
+        The red bar says every problem's whole error is in crash.log. One a
+        call into Python raised is: pywebview logs it. One the page raised (a
+        notice's callback that threw, an Undo that failed in the page after
+        Python answered) never passed through here, so the page sends it,
+        once for each problem it lists or counts. It goes as one ERROR record
+        through this module's logger, which the crash log's handler keeps
+        (app._arm_crash_log).
+
+        Never raises and answers nothing: each part is made text and cut to
+        PAGE_PROBLEM_CHARS, and a failure here is dropped. Writing a problem
+        down must not make another.
+        """
+        try:
+            parts = [_page_problem_text(v) for v in (where, name, message, stack)]
+            where, name, message, stack = parts
+            log.error("problem in the page, in %s: %s: %s%s",
+                      where, name, message, f"\n{stack}" if stack else "")
+        except Exception:  # noqa: BLE001 - never let logging make a problem
+            pass
 
     @property
     def _lib(self):

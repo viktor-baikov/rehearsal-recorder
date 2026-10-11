@@ -1181,6 +1181,9 @@ type PyApi = {
   /** What went wrong while starting, each said once: returned, then
    *  forgotten on the Python side. */
   startup_problems(): Promise<{ name: string; message: string }[]>
+  /** A problem raised in the page itself, written to crash.log (see
+   *  `reportPageError`). Never raises; answers nothing. */
+  log_problem(where: string, name: string, message: string, stack?: string): Promise<null>
 }
 
 declare global {

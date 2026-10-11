@@ -1,5 +1,5 @@
 import { api, type PendingTake, type UndoResult } from "@/lib/api"
-import { reportBridgeError } from "@/lib/bridgeErrors"
+import { reportPageError } from "@/lib/bridgeErrors"
 import { croppedText, goneText, trashName } from "@/lib/deletion"
 import { dismiss, getNotices, notify } from "@/lib/notices"
 
@@ -80,14 +80,16 @@ export function offerUndo({
   }
 
   // Both run from a notice, which calls them and goes on: what fails on the
-  // way is said on the error bar, as any bridge failure is.
+  // way is said on the error bar, as any bridge failure is. A failure in
+  // Python is already said and logged by api(); what is left to catch here
+  // is the page's own, which reportPageError writes to crash.log too.
   function offer(kind: "done" | "error", said: string) {
     notify({
       key,
       kind,
       text: said,
-      action: { label: "Undo", run: () => void undo().catch((e) => reportBridgeError("Undo", e)) },
-      onGone: () => void end().catch((e) => reportBridgeError("end_trash", e)),
+      action: { label: "Undo", run: () => void undo().catch((e) => reportPageError("Undo", e)) },
+      onGone: () => void end().catch((e) => reportPageError("end_trash", e)),
     })
   }
 

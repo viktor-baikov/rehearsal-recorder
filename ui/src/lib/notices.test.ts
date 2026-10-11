@@ -107,8 +107,8 @@ describe("onGone", () => {
 })
 
 describe("a callback that throws", () => {
-  // What the page does with an error it did not expect: reportBridgeError
-  // writes it with console.error and shows the bar.
+  // What the page does with an error it did not expect: reportPageError
+  // writes it with console.error, shows the bar and sends it to crash.log.
   const reported = () => vi.spyOn(console, "error").mockImplementation(() => {})
 
   it("is reported, and does not stop the notice from leaving or the next one from being raised", () => {

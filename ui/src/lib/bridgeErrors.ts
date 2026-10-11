@@ -7,7 +7,8 @@ import { useSyncExternalStore } from "react"
  * and no screen was written to expect one: Save take and renaming both
  * failed on Windows by the button dimming and nothing else happening. `api()`
  * now reports every such failure here, and so does the start, one report per
- * problem it met; `ErrorBar` shows them all.
+ * problem it met; `ErrorBar` shows them all. A problem raised in the page
+ * itself comes through `reportPageError`, which also writes it to crash.log.
  *
  * Every report stays until the person puts them away, newest last. Keeping
  * only the latest let a second problem at start hide the first. One that is
@@ -53,20 +54,54 @@ function emit() {
 /** Same call, same exception, same message. */
 export const keyOf = (e: BridgeError) => `${e.method}\n${e.name}\n${e.message}`
 
-export function reportBridgeError(method: string, error: unknown) {
-  const e = error instanceof Error ? error : new Error(String(error))
+const asError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
+
+/**
+ * Lists or counts a problem. True when it is new and told apart from the
+ * rest: listed, or counted for the first time while the count still tells
+ * reports apart. A repeat, and any report past `TOLD_APART`, is false.
+ */
+export function reportBridgeError(method: string, error: unknown): boolean {
+  const e = asError(error)
   const report = { method, name: e.name || "Error", message: e.message }
   console.error(`[bridge] ${method} failed:`, e)
   const key = keyOf(report)
-  if (errors.some((had) => keyOf(had) === key)) return
+  if (errors.some((had) => keyOf(had) === key)) return false
+  let told = true
   if (errors.length < KEPT) {
     errors = [...errors, report]
   } else {
-    if (counted.has(key)) return
+    if (counted.has(key)) return false
     if (counted.size < TOLD_APART) counted.add(key)
+    else told = false
     more += 1
   }
   emit()
+  return told
+}
+
+/**
+ * A problem raised in the page itself, such as a notice's callback that
+ * threw: on the bar like any other, and written to crash.log, which it would
+ * not reach otherwise (Python logs only what raised in Python). Sent once,
+ * when the bar lists or first counts it, so a flood in the page cannot flood
+ * the log; past `TOLD_APART` nothing more is sent.
+ *
+ * Straight through the bridge, not `api()`: a send that fails would be one
+ * more report, and so on. A send that fails is let go.
+ */
+export function reportPageError(where: string, error: unknown) {
+  const e = asError(error)
+  if (!reportBridgeError(where, e)) return
+  try {
+    const bridge = typeof window === "undefined" ? undefined : window.pywebview?.api
+    if (typeof bridge?.log_problem !== "function") return
+    Promise.resolve(bridge.log_problem(where, e.name || "Error", e.message, e.stack ?? "")).catch(
+      () => {}
+    )
+  } catch {
+    // The bridge went away, or threw before answering: the bar has it.
+  }
 }
 
 export function dismissBridgeErrors() {

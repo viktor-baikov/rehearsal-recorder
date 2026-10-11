@@ -219,7 +219,10 @@ piece of its own moves onto the shared one when it is redone.
   long list scrolls inside the bar, which stops at 40% of the window. The
   bar is `aria-atomic="false"`, so a screen reader says only a new problem,
   not the whole list again; the count line is `aria-live="off"`, read with
-  the bar rather than at each change.
+  the bar rather than at each change. A problem raised in the page itself,
+  such as a notice's callback that threw, goes in through `reportPageError`,
+  which also sends it to crash.log (`log_problem`), once per problem, so the
+  bar's "all of them are in crash.log" holds for it too.
 - **C5. Kbd**, `kbd.tsx`: one key chip, in the colour of the text round it,
   so the same chip reads on a page and on a filled button. Its ⌘ or Ctrl is
   `words().mod`. On a button the chip is `aria-hidden`, and the button names

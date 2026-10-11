@@ -8,6 +8,7 @@ import {
   notices,
   openApp,
   openHistory,
+  problemBar,
   recordTake,
   setFake,
   startRehearsal,
@@ -837,4 +838,33 @@ test("a folder switch names what could not be ended in the old folder", async ({
     )
   ).toHaveAttribute("data-notice", "warning")
   await expect(notices(page, "done")).toContainText("Folder saved")
+})
+
+test("an Undo that fails in the page itself is said on the bar and sent to the crash log", async ({
+  page,
+  pageErrors,
+}) => {
+  // Python answers, and the page trips over the answer: an error Python never
+  // saw, so it is not in crash.log unless the page sends it there.
+  const overview = await tuesday(page)
+  await deleteTake(overview, 2, "Pałyn 2")
+  const notice = said(page, "“Pałyn 2” went to the Trash.")
+  await expect(notice).toHaveCount(1)
+  await page.evaluate(() => {
+    const bridge = (window as unknown as { pywebview: { api: Record<string, unknown> } })
+      .pywebview.api
+    bridge.undo_trash = async () => null
+  })
+  await notice.getByRole("button", { name: "Undo" }).click()
+
+  const bar = problemBar(page)
+  await expect(bar).toContainText("Something went wrong in Undo")
+  await expect(bar).toContainText("TypeError")
+  await expect.poll(() => callCount(page, "log_problem")).toBe(1)
+  const [sent] = await calls(page, "log_problem")
+  expect(sent.args.slice(0, 2)).toEqual(["Undo", "TypeError"])
+  expect(String(sent.args[2])).toContain("null")
+  // The stack, for whoever reads the log.
+  expect(String(sent.args[3])).toContain("TypeError")
+  expectedError(pageErrors, /Undo failed/)
 })

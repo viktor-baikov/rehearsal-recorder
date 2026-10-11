@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react"
-import { reportBridgeError } from "@/lib/bridgeErrors"
+import { reportPageError } from "@/lib/bridgeErrors"
 
 /**
  * Things that happened, said in the corner of the window.
@@ -90,15 +90,16 @@ function emit() {
 }
 
 /**
- * Runs a notice's callback. One that throws is said on the error bar and goes
- * no further: the corner stays as it was left, the callbacks after it still
- * run, and whoever raised or closed the notice is not the one that fails.
+ * Runs a notice's callback. One that throws is said on the error bar, and
+ * written to crash.log, and goes no further: the corner stays as it was left,
+ * the callbacks after it still run, and whoever raised or closed the notice
+ * is not the one that fails.
  */
 function call(what: string, callback: () => void) {
   try {
     callback()
   } catch (e) {
-    reportBridgeError(what, e)
+    reportPageError(what, e)
   }
 }
 
