@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { MidiPort } from "@/lib/api"
-import { bareName, findPort, portRef } from "@/lib/midiPorts"
+import { bareName, findPort, portBusyText, portGoneText, portRef } from "@/lib/midiPorts"
 
 // The same cases as tests/test_midi.py section [2]: the picker says a saved
 // port is there, or not connected, exactly when Python finds it or does not.
@@ -61,6 +61,18 @@ describe("findPort: a saved port found again among the ports there (P1)", () => 
   it("bareName takes off Windows' numbers and the space around", () => {
     expect(bareName("2- TD-17 1")).toBe("TD-17")
     expect(bareName("  2- TD-17 1 ")).toBe("TD-17")
+  })
+})
+
+describe("the sentences a track's port line says (B8)", () => {
+  it("says a port is in use by another app", () => {
+    expect(portBusyText("TD-17")).toBe("“TD-17” is in use by another app.")
+  })
+
+  it("says a port is not connected, and that the track picks its notes up when it is plugged in", () => {
+    expect(portGoneText("TD-17", "Drums")).toBe(
+      "“TD-17” is not connected. Drums records its notes from the moment it is plugged in."
+    )
   })
 })
 

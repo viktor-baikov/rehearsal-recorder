@@ -1,6 +1,5 @@
 import type { Label, MarkHit, MarksGrouping } from "@/lib/api"
-import { formatClock, formatDate, formatDayIn } from "@/lib/format"
-import { rehearsalsLabel } from "@/lib/songs"
+import { formatClock, formatDate, formatDayIn, rehearsalsLabel } from "@/lib/format"
 
 // History's Marks view: every mark with a label, from every rehearsal
 // (docs/superpowers/specs/2026-10-04-marks-across-the-library-design.md).

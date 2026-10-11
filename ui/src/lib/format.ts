@@ -152,6 +152,26 @@ export function goesLabel(n: number): string {
   return n === 1 ? "1 go" : `${n} goes`
 }
 
+/** "1 rehearsal", "4 rehearsals": how many rehearsals a song, take or mark was in. */
+export function rehearsalsLabel(n: number): string {
+  return n === 1 ? "1 rehearsal" : `${n} rehearsals`
+}
+
+/** "1 song", "6 songs": the songs in a set. */
+export function songsLabel(n: number): string {
+  return n === 1 ? "1 song" : `${n} songs`
+}
+
+/** "1 input", "18 inputs": the inputs a card has. */
+export function inputsLabel(n: number): string {
+  return n === 1 ? "1 input" : `${n} inputs`
+}
+
+/** "3 in the cloud": how many of a rehearsal's takes have a copy in the cloud folder. */
+export function inCloudLabel(n: number): string {
+  return `${n} in the cloud`
+}
+
 /**
  * "1.2 GB" / "340 MB" / "412 B": how much of the disk something is using.
  * Counted in thousands, the way the file manager the person will go and look

@@ -21,13 +21,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SetSongsEditor } from "@/components/SetEditor"
 import { api, type SongChoices, type SongSet } from "@/lib/api"
+import { songsLabel } from "@/lib/format"
 import { asSetSongs } from "@/lib/setSongs"
 import { focusIsLeftover } from "@/hooks/useSpacebar"
 
 // The set a rehearsal plays by, picked on the start screen beside Start
 // rehearsal, and a new one made from there (issue #12 step 8, S1–S3).
-
-const songsLabel = (n: number) => (n === 1 ? "1 song" : `${n} songs`)
 
 /**
  * The button left of Start rehearsal, as tall as it: the set Start plays

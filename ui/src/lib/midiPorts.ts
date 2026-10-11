@@ -70,3 +70,15 @@ export function portRef(port: MidiPort | MidiPortRef): MidiPortRef {
   }
   return kept
 }
+
+/** A track's port line when another app holds the port. Plugging it in
+ *  again will not help, so this line makes no promise about the notes. */
+export function portBusyText(port: string): string {
+  return `“${port}” is in use by another app.`
+}
+
+/** A track's port line when the port is not connected: the track takes its
+ *  notes again from the moment the port is plugged in. */
+export function portGoneText(port: string, track: string): string {
+  return `“${port}” is not connected. ${track} records its notes from the moment it is plugged in.`
+}

@@ -15,10 +15,14 @@ import {
   formatMonth,
   formatWhen,
   goesLabel,
+  inCloudLabel,
+  inputsLabel,
   longAgo,
   notConnected,
   peakToDb,
+  rehearsalsLabel,
   savedLine,
+  songsLabel,
   takesLabel,
 } from "@/lib/format"
 
@@ -72,6 +76,22 @@ describe("amounts", () => {
   it("counts takes in the singular and the plural", () => {
     expect(takesLabel(1)).toBe("1 take")
     expect(takesLabel(3)).toBe("3 takes")
+  })
+  it("counts inputs in the singular and the plural", () => {
+    expect(inputsLabel(1)).toBe("1 input")
+    expect(inputsLabel(18)).toBe("18 inputs")
+  })
+  it("counts rehearsals in the singular and the plural", () => {
+    expect(rehearsalsLabel(1)).toBe("1 rehearsal")
+    expect(rehearsalsLabel(4)).toBe("4 rehearsals")
+  })
+  it("counts songs in the singular and the plural", () => {
+    expect(songsLabel(1)).toBe("1 song")
+    expect(songsLabel(6)).toBe("6 songs")
+  })
+  it("says how many takes are in the cloud", () => {
+    expect(inCloudLabel(1)).toBe("1 in the cloud")
+    expect(inCloudLabel(3)).toBe("3 in the cloud")
   })
   it("says how many takes are saved, with a verb that agrees", () => {
     expect(savedLine(1)).toBe("1 take is saved and stays where it is.")
