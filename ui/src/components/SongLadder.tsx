@@ -118,7 +118,7 @@ export function SongLadder({
                       // them all a little narrower, rather than hide some:
                       // each gives way by its own length, so they keep scale.
                       className={cn(
-                        "relative flex h-6 min-w-0 shrink items-center overflow-hidden rounded-[5px] border",
+                        "relative flex h-6 min-w-0 shrink items-center overflow-hidden rounded-sm border",
                         rung.missing
                           ? "border-dashed border-muted-foreground/45"
                           : take.starred

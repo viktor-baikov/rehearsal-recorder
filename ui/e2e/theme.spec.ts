@@ -67,7 +67,9 @@ test.describe("a take's bar", () => {
   const corner = (bar: ReturnType<Page["locator"]>) =>
     bar.evaluate((e) => getComputedStyle(e).borderTopLeftRadius)
 
-  test("has 4 px corners after a take, under Last time and in History (F9)", async ({ page }) => {
+  test("has 4 px corners after a take, under Last time, in History, on a song and in Marks (F9)", async ({
+    page,
+  }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const lastTime = page.getByRole("complementary", { name: "Last time" })
     const goes = lastTime.locator("[data-song='Pałyn'] [aria-hidden] > span")
@@ -88,6 +90,17 @@ test.describe("a take's bar", () => {
     const list = await openHistory(page)
     const strip = list.getByRole("button", { name: /^Tuesday jam/ }).locator("[data-strip]")
     expect(await corner(strip.locator("span").first())).toBe("4px")
+
+    // A song's page draws each evening's goes as bars, and Marks each
+    // mark's take.
+    await page.getByRole("button", { name: "Songs", exact: true }).click()
+    const rung = page.locator("[data-rung] [data-bars] > span").first()
+    await expect(rung).toBeVisible()
+    expect(await corner(rung)).toBe("4px")
+    await page.getByRole("button", { name: "Marks", exact: true }).click()
+    const marked = page.locator("[data-mark] [data-take-bar]").first()
+    await expect(marked).toBeVisible()
+    expect(await corner(marked)).toBe("4px")
   })
 
   test("at its narrowest, 2 px, still draws in History's strip", async ({ page }) => {

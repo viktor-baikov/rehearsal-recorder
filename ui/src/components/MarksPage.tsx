@@ -251,8 +251,9 @@ function MarkRow({
       <div className="flex items-center gap-2.5">
         <span className="w-[120px]">
           <span
+            data-take-bar
             title={`${m.name} · ${formatClock(length)}`}
-            className="relative block h-[22px] rounded-[5px] border bg-muted"
+            className="relative block h-[22px] rounded-sm border bg-muted"
             style={{ width: `${Math.max(8, Math.round((length / longest) * BAR_PX))}px` }}
           >
             <span
