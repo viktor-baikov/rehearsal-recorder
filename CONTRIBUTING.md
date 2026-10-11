@@ -35,6 +35,11 @@ rebuild every time. The whole
 development loop — both halves, the proxy between them, what to check when
 the meters sit at zero — is in [docs/development.md](docs/development.md).
 
+How the screens look and work — the colours, sizes and shared components,
+and what CI refuses — is in [docs/design-system.md](docs/design-system.md).
+`npm run storybook` in `ui/` shows every shared component, in both themes
+and as on the Mac and on Windows.
+
 ## Tests
 
 ```bash

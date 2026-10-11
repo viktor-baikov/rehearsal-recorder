@@ -297,8 +297,7 @@ rehearsal into the next.
 - **Play and pause** with the big button or Space. The arrow keys jump 10
   seconds back and forward, and Home goes back to the start. Click anywhere
   on the tracks to jump there.
-- **Each track** shows its icon and name, and whether the file is **Mono**
-  or **Stereo**.
+- **Each track** shows its icon and name.
 - **Balance the band** with the fader under each track name. **M** mutes a
   track and **S** plays it on its own. Volumes are remembered by track name,
   so the next take starts with the same balance.
