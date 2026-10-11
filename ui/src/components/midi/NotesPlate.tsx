@@ -2,12 +2,17 @@ import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { MidiGlyph } from "@/components/midi/MidiGlyph"
 import { LanePlate } from "@/components/ui/lane-plate"
 
-/** The least a notes plate is tall, and so the lane beside it: room to name
- *  six drum rows, 11 px each (NotesLane's LABEL_MIN_PX) between 3 px above and
- *  below, and under the 1 px line a lower half has. Its own text takes 69,
- *  which left the drums' rows unnamed; a lane of notes is not so short that a
- *  kit cannot be read. */
+/** The least a notes plate is tall at the Appearance scale of 1, and so the
+ *  lane beside it: room to name six drum rows, 11 px each (NotesLane's
+ *  LABEL_MIN_PX) between 3 px above and below, and under the 1 px line a lower
+ *  half has. Its own text takes 69, which left the drums' rows unnamed; a lane
+ *  of notes is not so short that a kit cannot be read.
+ *
+ *  It grows with the scale, as the plate's text does. It does not shrink with
+ *  it: the row names are 9 px whatever the scale, so six of them need these
+ *  pixels on a smaller one too. */
 const MIN_PX = 73
+const MIN_HEIGHT = `max(${MIN_PX}px, ${MIN_PX / 16}rem)`
 
 /**
  * The plate beside a lane of notes: what the notes are, the port they came
@@ -20,7 +25,7 @@ const MIN_PX = 73
  * the half above. On its own, for a track that records MIDI only, it has the
  * track's icon and name.
  *
- * Its height is what it holds, and no less than MIN_PX: the lane beside it
+ * Its height is what it holds, and no less than MIN_HEIGHT: the lane beside it
  * grows to it. A long name or port goes onto more lines rather than losing
  * its end.
  */
@@ -48,7 +53,7 @@ export function NotesPlate({
       data-missing={missing || undefined}
       half={paired ? "bottom" : undefined}
       className="gap-2"
-      style={{ minHeight: MIN_PX }}
+      style={{ minHeight: MIN_HEIGHT }}
     >
       <div className="flex items-center gap-2">
         {paired ? (

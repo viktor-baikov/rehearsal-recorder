@@ -17,11 +17,13 @@ import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 /** A press that never travelled this far is a click, and a click seeks. */
 const DRAG_THRESHOLD_PX = 5
 const GUTTER_PX = 200
-/** The name row of 20, the fader and its meter of 16 under it, 4 apart, and 8
- *  above and below. No taller than that: at 160 a lane's plate was mostly empty
- *  card, and at 96 five tracks took a laptop's screen and more. A lane of
- *  notes has neither, and is as tall as its plate needs instead. */
-const LANE_PX = 56
+/** The name row of 1.25rem, the fader and its meter of 1rem under it, 0.25rem
+ *  apart, and 0.5rem above and below: 3.5rem, 56 px at the Appearance scale of
+ *  1. In rem because all of that is, and a row that stayed 56 px at 150 % left
+ *  the fader on top of M and S. No taller than that: at 160 a lane's plate was
+ *  mostly empty card, and at 96 five tracks took a laptop's screen and more. A
+ *  lane of notes has neither, and is as tall as its plate needs instead. */
+const LANE_REM = 3.5
 const RULER_PX = 44
 /** What a tick label needs to the right of its line: "10:00" at 11 px and
  *  its padding, with a little to spare. */
@@ -304,11 +306,11 @@ export function Timeline({
             // arrives (never, once loadError is set). A lane of notes is as
             // tall as its plate, which a long name or port makes taller. No
             // row takes a share of what is left, so two tracks in a tall
-            // window are two lanes of 56 px and the room under them stays
+            // window are two lanes of 3.5rem and the room under them stays
             // empty, which is honest about there being room for more tracks.
             gridTemplateRows: [
               `${RULER_PX}px`,
-              ...lanes.map((lane) => (lane.kind === "audio" ? `${LANE_PX}px` : "min-content")),
+              ...lanes.map((lane) => (lane.kind === "audio" ? `${LANE_REM}rem` : "min-content")),
             ].join(" "),
             gap: `${ROW_GAP_PX}px ${COLUMN_GAP_PX}px`,
           }}

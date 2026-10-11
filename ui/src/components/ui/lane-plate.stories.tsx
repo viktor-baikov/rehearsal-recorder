@@ -50,6 +50,32 @@ function Audio({ paired = false }: { paired?: boolean }) {
   )
 }
 
+/* The primitive on its own: the card's fill, 12 px across and 8 above and
+   below, and whatever the caller puts in it. */
+function Bare({ half }: { half?: "top" | "bottom" }) {
+  return (
+    <div className="h-14">
+      <LanePlate half={half}>
+        <span className="text-sm">{half ? `Half: ${half}` : "A plate"}</span>
+        <span className="text-xs text-muted-foreground">Whatever the caller puts in</span>
+      </LanePlate>
+    </div>
+  )
+}
+
+/** The plate with nothing of ours in it: a card of 12 px corners, no frame. */
+export const Plain: Story = { render: () => <Bare /> }
+export const PlainLight: Story = { ...Plain, globals: { theme: "light" } }
+
+/** The upper half of a Both track's card: its lower corners are square. */
+export const Top: Story = { render: () => <Bare half="top" /> }
+export const TopLight: Story = { ...Top, globals: { theme: "light" } }
+
+/** The lower half: its upper corners are square, under a 1 px line in the
+ *  border colour. */
+export const Bottom: Story = { render: () => <Bare half="bottom" /> }
+export const BottomLight: Story = { ...Bottom, globals: { theme: "light" } }
+
 /** A track's plate in its row of 56 px: the card's fill with no frame, the
  *  name with M and S on one row and the fader under it. */
 export const Single: Story = { render: () => <Audio /> }

@@ -479,9 +479,10 @@ test.describe("notes in the player", () => {
       expect(Math.abs(lane.height - (await box(p)).height)).toBeLessThan(1)
     }
     // The keyboard's plate is taller than a lane, and its lane with it; the
-    // drums' half card is left what it needs, which is less.
+    // drums' half card is left what it needs, which is the least a notes plate
+    // is: its text takes 69 and the floor is 73.
     expect((await box(keys)).height).toBeGreaterThan(2 * 56)
-    expect((await box(notesPlate(page, "Drums"))).height).toBeLessThan((await box(keys)).height)
+    expect((await box(notesPlate(page, "Drums"))).height).toBeCloseTo(73, 0)
     // Its rows are named all the same: a lane of notes is never so short that
     // a kit cannot be read.
     await expect(notesLane(page, "Drums").getByText("Kick", { exact: true })).toBeVisible()

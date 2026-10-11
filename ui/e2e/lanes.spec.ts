@@ -32,6 +32,10 @@ const BOTH = {
 
 const light = "window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'light', ui_scale:1}));"
 
+/** The Appearance scale, as Settings stores it: the root font size follows. */
+const scaled = (scale: number) =>
+  `window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:${scale}}));`
+
 /** The first take of a band up for review. */
 async function review(page: Page, setup: { before?: string; after?: string }, theme = "") {
   await openApp(page, { before: theme + (setup.before ?? ""), after: setup.after })
@@ -45,6 +49,9 @@ const plate = (page: Page, name: string) => page.locator(`[data-plate='${name}']
 const lane = (page: Page, name: string) => page.locator(`[data-lane='${name}'] > div`)
 const notesPlate = (page: Page, name: string) => page.locator(`[data-notes-plate='${name}']`)
 const notesLane = (page: Page, name: string) => page.locator(`[data-notes-lane='${name}']`)
+/** The master's strip, where the page's own scroll holds it. */
+const strip = (page: Page) =>
+  page.getByRole("slider", { name: "Master volume" }).locator("xpath=ancestor::div[contains(@class, 'sticky')][1]")
 
 async function box(locator: Locator) {
   const b = await locator.boundingBox()
@@ -76,6 +83,8 @@ test.describe("track lanes", () => {
       expect((await box(plate(page, name))).height).toBeCloseTo(56, 0)
       expect((await box(lane(page, name))).height).toBeCloseTo(56, 0)
     }
+    // The master's plate is a lane's height.
+    expect((await box(strip(page).locator(":scope > div"))).height).toBeCloseTo(56, 0)
     // And no taller in a tall window: the extra room stays empty.
     await page.setViewportSize({ width: 1180, height: 1400 })
     for (const name of NAMES.slice(0, 4)) {
@@ -84,13 +93,13 @@ test.describe("track lanes", () => {
     }
   })
 
-  test("M and S are 20 by 20 and at least 4 px apart", async ({ page }) => {
+  test("M and S are 20 by 20 and 6 px apart", async ({ page }) => {
     await review(page, band(4))
     for (const name of NAMES.slice(0, 4)) {
       const m = await box(plate(page, name).getByRole("button", { name: `Mute ${name}` }))
       const s = await box(plate(page, name).getByRole("button", { name: `Solo ${name}` }))
       expect([m.width, m.height, s.width, s.height]).toEqual([20, 20, 20, 20])
-      expect(s.x - (m.x + m.width)).toBeGreaterThanOrEqual(4)
+      expect(s.x - (m.x + m.width)).toBeCloseTo(6, 0)
       expect(Math.abs(s.y - m.y)).toBeLessThan(1)
     }
     const m = plate(page, "Drums").getByRole("button", { name: "Mute Drums" })
@@ -99,6 +108,59 @@ test.describe("track lanes", () => {
       "border-top-left-radius": "4px",
     })
   })
+
+  // Everything on a plate is rem, so a lane is too: at 150 % a 56 px row would
+  // leave the fader on top of M and S, and at 130 % squeeze it to nothing.
+  for (const scale of [0.9, 1.15, 1.3, 1.5]) {
+    test(`at the Appearance scale ${scale} a lane grows with it and a plate holds all it has`, async ({
+      page,
+    }) => {
+      await review(page, band(4), scaled(scale))
+      const rem = 16 * scale
+      expect(
+        parseFloat(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize))
+      ).toBeCloseTo(rem, 1)
+      for (const name of NAMES.slice(0, 4)) {
+        const p = plate(page, name)
+        const at = await box(p)
+        // 3.5rem: 56 px at the scale of 1.
+        expect(at.height).toBeCloseTo(3.5 * rem, 0)
+        expect((await box(lane(page, name))).height).toBeCloseTo(3.5 * rem, 0)
+        expect(await p.evaluate((e) => e.scrollHeight - e.clientHeight)).toBeLessThanOrEqual(0)
+        // The fader keeps its 1rem, whole and inside the plate, and M and S
+        // are above it, not over it.
+        const fader = await box(page.getByRole("meter", { name: `${name} level` }).locator("xpath=.."))
+        expect(fader.height).toBeCloseTo(rem, 0)
+        expect(fader.y + fader.height).toBeLessThanOrEqual(at.y + at.height + 0.5)
+        for (const label of ["Mute", "Solo"]) {
+          const b = await box(p.getByRole("button", { name: `${label} ${name}` }))
+          expect(b.height).toBeCloseTo(1.25 * rem, 0)
+          expect(b.y + b.height).toBeLessThanOrEqual(fader.y + 0.5)
+          expect(b.y).toBeGreaterThanOrEqual(at.y - 0.5)
+        }
+      }
+      // The master is a lane's height as well.
+      expect((await box(strip(page).locator(":scope > div"))).height).toBeCloseTo(3.5 * rem, 0)
+    })
+  }
+
+  for (const scale of [0.9, 1.5]) {
+    test(`at the Appearance scale ${scale} the notes plate keeps its text and its drum rows are named`, async ({
+      page,
+    }) => {
+      await review(page, BOTH, scaled(scale))
+      const midi = notesPlate(page, "Drums")
+      const at = await box(midi)
+      // At least what six named rows need in px, and with the scale once it
+      // is past 1 (the plate's own text is rem).
+      expect(at.height).toBeGreaterThanOrEqual(73 - 0.5)
+      expect(at.height).toBeGreaterThanOrEqual(73 * scale - 0.5)
+      expect(await midi.evaluate((e) => e.scrollHeight - e.clientHeight)).toBeLessThanOrEqual(0)
+      await expect(notesLane(page, "Drums").getByText("Kick", { exact: true })).toBeVisible()
+      // The audio half above it is 3.5rem.
+      expect((await box(plate(page, "Drums"))).height).toBeCloseTo(3.5 * 16 * scale, 0)
+    })
+  }
 
   for (const theme of ["dark", "light"]) {
     test(`a plate has no frame and the card's colour, in the ${theme} theme`, async ({ page }) => {
@@ -203,10 +265,6 @@ test.describe("track lanes", () => {
     const pad = ["padding-left", "padding-top"]
     expect(await style(keys, ...pad)).toEqual(await style(plate(page, "Gtr"), ...pad))
   })
-
-  /** The master's strip, where the page's own scroll holds it. */
-  const strip = (page: Page) =>
-    page.getByRole("slider", { name: "Master volume" }).locator("xpath=ancestor::div[contains(@class, 'sticky')][1]")
 
   /** How far the strip's lower edge is above the page's (the bottom of the
    *  scrolling area, which is the window's above a footer). */
