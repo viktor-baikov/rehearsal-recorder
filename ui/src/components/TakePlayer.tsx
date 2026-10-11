@@ -13,10 +13,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Timeline } from "@/components/Timeline"
-import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { PlayerKeys } from "@/components/PlayerKeys"
 import { useKey } from "@/hooks/useSpacebar"
-import { canBePutBack, goesTo } from "@/lib/deletion"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
@@ -99,7 +97,8 @@ export function TakePlayer({
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
   onRemoveMarker?: (seconds: number) => void
-  /** Trim the take down to the region. Absent where that is not offered. */
+  /** Trim the take down to the region, at once: the take as it was can be
+   *  had back with the notice's Undo. Absent where that is not offered. */
   onCrop?: (startSec: number, endSec: number) => void
   /** False while a crop is already running. Rewriting eight long tracks takes
    *  real seconds, and a second click is not a no-op: Python re-reads the now
@@ -115,7 +114,6 @@ export function TakePlayer({
   goKeys?: boolean
 }) {
   const labels = useLabels()
-  const [cropping, setCropping] = useState(false)
   const notesRead = useTakeNotes(notes, notesMissing)
   // The same rule the timeline draws by: one end set reaches to the take's
   // own start or end.
@@ -125,9 +123,6 @@ export function TakePlayer({
       ? { a: region.a ?? 0, b: region.b ?? duration }
       : null
   const lost = band ? duration - (band.b - band.a) : 0
-  const lostMarkers = band
-    ? markers.filter((m) => m.at < band.a || m.at > band.b).length
-    : 0
   const tooShort = band === null || band.b - band.a < MIN_CROP_SEC
   const cropRegionOk = !tooShort && lost > WHOLE_TAKE_SLACK_SEC
 
@@ -165,7 +160,7 @@ export function TakePlayer({
         crop={
           onCrop
             ? {
-                onClick: () => setCropping(true),
+                onClick: () => band && onCrop(band.a, band.b),
                 enabled: cropRegionOk && canCrop && !player.loading,
                 // The two reasons the button can be off are opposite
                 // mistakes, and the advice for one is no help at all with
@@ -244,26 +239,6 @@ export function TakePlayer({
           })}
         </div>
       )}
-
-      <ConfirmDialog
-        open={cropping}
-        onOpenChange={setCropping}
-        title={
-          band
-            ? `Keep only ${formatMMSS(band.a)} – ${formatMMSS(band.b)}?`
-            : "Keep only this part?"
-        }
-        description={`The rest of the take — ${formatMMSS(lost)} — ${goesTo()}${
-          lostMarkers > 0
-            ? `, and ${lostMarkers} ${
-                lostMarkers === 1 ? "marker" : "markers"
-              } outside it go with it`
-            : ""
-        }. ${canBePutBack()}`}
-        confirmLabel="Crop"
-        cancelLabel="Keep it all"
-        onConfirm={() => band && onCrop?.(band.a, band.b)}
-      />
     </div>
   )
 }
@@ -310,7 +285,7 @@ function Transport({
     >
       <Button
         variant="ghost"
-        size="icon-sm"
+        size="icon-row"
         onClick={player.restart}
         aria-label="To start"
         aria-keyshortcuts="Home"
@@ -321,7 +296,7 @@ function Transport({
       </Button>
       <Button
         variant="ghost"
-        size="icon-sm"
+        size="icon-row"
         onClick={() => player.skip(-SKIP_SECONDS)}
         aria-label={`Back ${SKIP_SECONDS} seconds`}
         aria-keyshortcuts="ArrowLeft"
@@ -331,7 +306,7 @@ function Transport({
       </Button>
 
       <Button
-        size="icon-lg"
+        size="player"
         className="rounded-full"
         onClick={player.toggle}
         disabled={player.loading || !!player.loadError}
@@ -349,7 +324,7 @@ function Transport({
 
       <Button
         variant="ghost"
-        size="icon-sm"
+        size="icon-row"
         onClick={() => player.skip(SKIP_SECONDS)}
         aria-label={`Forward ${SKIP_SECONDS} seconds`}
         aria-keyshortcuts="ArrowRight"
@@ -368,7 +343,7 @@ function Transport({
           region, and sit under its times on the timeline. */}
       <Button
         variant={looping ? "default" : "outline"}
-        size="sm"
+        size="row"
         onClick={player.toggleLoop}
         disabled={player.loading}
         aria-pressed={looping}
@@ -385,7 +360,7 @@ function Transport({
         {onAddMarker && (
           <Button
             variant={nearby !== undefined ? "default" : "outline"}
-            size="sm"
+            size="row"
             onClick={mark}
             disabled={player.loading}
             aria-label={nearby !== undefined ? "Edit marker" : "Add marker"}

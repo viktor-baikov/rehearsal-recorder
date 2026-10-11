@@ -738,10 +738,10 @@ test("a few songs show no arrows", async ({ page }) => {
 const down = (page: Page) => page.locator("main").evaluate((el) => el.scrollTop)
 
 test("the mouse wheel moves the songs sideways", async ({ page }) => {
-  // The app's smallest window, and a second track, so the window's content
-  // scrolls: a wheel turn that went to it would show.
+  // The app's smallest window, and enough tracks (lanes are 56 px) for the
+  // window's content to scroll: a wheel turn that went to it would show.
   await page.setViewportSize({ width: 1180, height: 680 })
-  await openOf(page, TWENTY, 1, ["Guitar", "Bass"])
+  await openOf(page, TWENTY, 1, ["Guitar", "Bass", "Drums", "Vocals"])
   expect(await page.locator("main").evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
   await strip(page).locator("[data-tab='song:Viasna']").hover()
   await page.mouse.wheel(0, 300)

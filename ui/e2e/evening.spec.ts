@@ -1,4 +1,13 @@
-import { calls, callCount, expect, openApp, openHistory, startRehearsal, test } from "./app.ts"
+import {
+  calls,
+  callCount,
+  expect,
+  notices,
+  openApp,
+  openHistory,
+  startRehearsal,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Sorting the evening on the rehearsal screen: false starts drawn as such,
@@ -149,28 +158,23 @@ test("the songs under the takes nobody named are asked for once", async ({ page 
   await expect.poll(asked).toBe(2)
 })
 
-test("Clear false starts asks first and removes only them", async ({ page }) => {
+test("Clear false starts removes only them at once, and Undo puts them back", async ({ page }) => {
   const overview = await openEvening(page)
   const clear = overview.getByRole("button", { name: /Clear false starts/ })
   await expect(clear).toHaveText(/Clear false starts\s*2/)
   await clear.click()
-  const dialog = page.getByRole("dialog")
-  await expect(dialog.getByRole("heading")).toHaveText("Move 2 false starts to the Trash?")
-  await expect(dialog).toContainText("Pałyn")
-  await expect(dialog).toContainText("0:12")
-  await expect(dialog).toContainText("Take 10")
-  await expect(dialog).toContainText("0:08")
-  await dialog.getByRole("button", { name: "Cancel" }).click()
-  expect(await callCount(page, "delete_takes")).toBe(0)
-  await expect(row(overview, 4)).toBeVisible()
-
-  await clear.click()
-  await page.getByRole("dialog").getByRole("button", { name: "Move to the Trash" }).click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
   expect((await calls(page, "delete_takes")).at(-1)?.args).toEqual([await folderOf(page), [4, 10]])
   await expect(row(overview, 4)).toHaveCount(0)
   await expect(row(overview, 10)).toHaveCount(0)
   await expect(row(overview, 2)).toBeVisible()
   await expect(clear).toBeDisabled()
+
+  const notice = notices(page).filter({ hasText: "2 false starts went to the Trash." })
+  await notice.getByRole("button", { name: "Undo" }).click()
+  await expect(row(overview, 4)).toBeVisible()
+  await expect(row(overview, 10)).toBeVisible()
+  await expect(clear).toHaveText(/Clear false starts\s*2/)
 })
 
 test("Send starred says which take it could not send, and why", async ({ page }) => {
@@ -185,11 +189,9 @@ test("Clear false starts is off while it clears", async ({ page }) => {
   const overview = await openEvening(page, "window.__DELETE_MS__ = 3000;")
   const clear = overview.getByRole("button", { name: /Clear false starts/ })
   await clear.click()
-  await page.getByRole("dialog").getByRole("button", { name: "Move to the Trash" }).click()
-  // Still clearing: pressed again, it asks nothing.
+  // Still clearing: pressed again, it does nothing.
   await expect(clear).toBeDisabled({ timeout: 2000 })
   await clear.click({ force: true })
-  await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(row(overview, 4)).toHaveCount(0)
   expect(await callCount(page, "delete_takes")).toBe(1)
 })
@@ -201,7 +203,6 @@ test("Not named goes once its last take is cleared", async ({ page }) => {
   ])
   await expect(overview.getByRole("group", { name: "Not named" })).toBeVisible()
   await overview.getByRole("button", { name: /Clear false starts/ }).click()
-  await page.getByRole("dialog").getByRole("button", { name: "Move to the Trash" }).click()
   await expect(overview.getByRole("group", { name: "Not named" })).toHaveCount(0)
   await expect(overview.getByRole("group", { name: "Pałyn" })).toBeVisible()
 })
@@ -221,7 +222,6 @@ test("clearing a false start playing in the overview lets the player go", async 
   await expect(overview.getByRole("button", { name: "Pause Pałyn 3" })).toBeVisible()
   const closes = await callCount(page, "player_close")
   await overview.getByRole("button", { name: /Clear false starts/ }).click()
-  await page.getByRole("dialog").getByRole("button", { name: "Move to the Trash" }).click()
   await expect(row(overview, 4)).toHaveCount(0)
   await expect.poll(() => callCount(page, "player_close")).toBeGreaterThan(closes)
   await expect(overview.getByRole("button", { name: /^Pause / })).toHaveCount(0)
@@ -245,11 +245,13 @@ test("in History a rehearsal has its false starts and both buttons", async ({ pa
     "No take has ★"
   )
   await overview.getByRole("button", { name: /Clear false starts/ }).click()
-  const dialog = page.getByRole("dialog")
-  await expect(dialog.getByRole("heading")).toHaveText("Move 1 false start to the Trash?")
-  await dialog.getByRole("button", { name: "Move to the Trash" }).click()
   expect((await calls(page, "delete_takes")).at(-1)?.args).toEqual(["/rec/old", [1]])
   await expect(page.getByText("No takes", { exact: true })).toBeVisible()
+  await notices(page)
+    .filter({ hasText: "1 false start went to the Trash." })
+    .getByRole("button", { name: "Undo" })
+    .click()
+  await expect(row(overview, 1)).toHaveAttribute("data-false-start")
 })
 
 test("in History Send starred sends the starred takes of that rehearsal", async ({ page }) => {

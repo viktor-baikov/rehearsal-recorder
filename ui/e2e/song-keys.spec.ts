@@ -211,15 +211,18 @@ test("the arrows do nothing while a dialog is open", async ({ page }) => {
   await expect(field(page)).toHaveValue("Pałyn")
 })
 
-test("the arrows do nothing while Delete take asks", async ({ page }) => {
+test("the arrows do nothing to the next take while Rename take has its field", async ({
+  page,
+}) => {
   await openApp(page, { before: withSet(["Pałyn", "Viasna"]) })
   await startRehearsal(page)
   await recordTake(page, 1)
   await page.getByRole("button", { name: /Save take/ }).click()
   await page.hover("[data-take='1']")
-  await page.getByRole("button", { name: "Delete take Pałyn 1" }).click()
+  await page.getByRole("button", { name: "Rename take Pałyn 1" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog).toBeVisible()
+  await expect(dialog.locator("#rename-take")).toBeFocused()
   const sent = await callCount(page, "set_next_take_name")
   await page.keyboard.press("ArrowDown")
   await page.keyboard.press("ArrowUp")

@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils"
 import type { Take } from "@/lib/api"
 import { formatDayIn, formatMMSS, goesLabel, takesLabel } from "@/lib/format"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
+import { motionOff } from "@/lib/motion"
 import { hereFor, placed, type PlacedPlayback, type PlacedTake, type Rung } from "@/lib/songs"
 import { TakeRow } from "@/components/RehearsalOverview"
 
@@ -88,7 +89,8 @@ export function SongLadder({
             >
               <ChevronRight
                 className={cn(
-                  "size-3.5 text-muted-foreground transition-transform motion-reduce:transition-none",
+                  "size-3.5 text-muted-foreground",
+                  !motionOff() && "transition-transform",
                   isOpen && "rotate-90"
                 )}
               />
@@ -116,7 +118,7 @@ export function SongLadder({
                       // them all a little narrower, rather than hide some:
                       // each gives way by its own length, so they keep scale.
                       className={cn(
-                        "relative flex h-6 min-w-0 shrink items-center overflow-hidden rounded-[5px] border",
+                        "relative flex h-6 min-w-0 shrink items-center overflow-hidden rounded-sm border",
                         rung.missing
                           ? "border-dashed border-muted-foreground/45"
                           : take.starred
@@ -131,6 +133,7 @@ export function SongLadder({
                           aria-hidden
                           data-mark-colour={labelOf(labels, m.label_id).colour}
                           className={cn(
+                            // design-ok(radius): a 2 px mark tick on a take's bar, a graphic that keeps its own corner
                             "absolute inset-y-1 w-0.5 rounded-[1px]",
                             labelLook(labelOf(labels, m.label_id).colour).dot
                           )}

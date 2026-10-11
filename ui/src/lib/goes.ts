@@ -56,3 +56,16 @@ export function goFor(text: string, choices: SongChoices | null): number | null 
   if (name === "" || UNNAMED.test(name) || !choices) return null
   return songFor(name, choices)?.choice.go ?? 1
 }
+
+/**
+ * A take as the screen after it calls it while its name field holds
+ * `text`: its song and the go it will be, "Pałyn 3", as a list names a take
+ * once it is kept; the text alone for a take nobody named, or while the
+ * choices have not arrived. TakeSummary draws the same two parts.
+ */
+export function nameWithGo(text: string, choices: SongChoices | null): string {
+  const typed = text.trim()
+  const go = goFor(typed, choices)
+  if (go === null) return typed
+  return `${songFor(typed, choices)?.choice.song ?? typed} ${go}`
+}

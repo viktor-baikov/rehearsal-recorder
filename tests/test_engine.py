@@ -613,15 +613,20 @@ def main():
 
     # Everything that acts on the world stays on the bridge, where it can be
     # ordered — a GET must never be able to delete a rehearsal.
+    # Undo and the end of its notice move a removal out of the holding folder,
+    # one way or the other, so they stay there too.
     blocked = []
-    for name in ("delete_rehearsal", "finish_rehearsal", "stop_take",
-                 "player_close", "set_recordings_dir"):
+    acting = ("delete_rehearsal", "finish_rehearsal", "stop_take",
+              "player_close", "set_recordings_dir", "undo_trash", "end_trash")
+    for name in acting:
         try:
             urllib.request.urlopen(base + "api/" + name, timeout=5)
         except urllib.error.HTTPError as e:
             blocked.append(e.code)
     ok("calls that change things are not reachable over http",
-       blocked == [404] * 5)
+       blocked == [404] * len(acting))
+    ok("though each of them is there on the bridge",
+       all(callable(getattr(api_s, name, None)) for name in acting))
 
     print("\n[5d] 24-bit all the way through")
     deep = tmp / "deep"
@@ -1914,9 +1919,15 @@ def main():
        abs(frames / SR - take1["duration_sec"]) < 0.01
        and take1["duration_sec"] < 2.0)
 
+    # A deletion can be undone until its notice ends (end_trash), and Undo
+    # puts back a take whose copy is still there: the copy leaves with the
+    # take, at that end, and not before.
     mix2 = Path(copy_of(2)[1].get("mix", ""))
-    fc.delete_take(str(cf), 2)
-    ok("a deleted take takes its copy out of the cloud",
+    deleted2 = fc.delete_take(str(cf), 2)
+    ok("a deleted take keeps its copy in the cloud while its Undo waits",
+       mix2.name and mix2.exists())
+    fc.end_trash(deleted2.get("undo"))
+    ok("a deleted take takes its copy out of the cloud once its notice ends",
        mix2.name and not mix2.exists())
     ok("and leaves the other take's alone",
        is_file(copy_of(1)[1].get("mix")))
@@ -1924,8 +1935,10 @@ def main():
     listed = next(r for r in fc.list_rehearsals() if r["folder"] == str(cf))
     ok("History says how many of a rehearsal's takes are in the cloud, "
        "for the question before deleting it", listed.get("in_cloud") == 1)
-    fc.delete_rehearsal(str(cf))
-    ok("a deleted rehearsal takes its copies, and its emptied folder, with it",
+    deleted = fc.delete_rehearsal(str(cf))
+    ok("a deleted rehearsal keeps its copies while its Undo waits", new_sub.is_dir())
+    fc.end_trash(deleted.get("undo"))
+    ok("and takes them, and its emptied folder, with it once its notice ends",
        not new_sub.exists())
     ok("and nothing of it is left in the cloud folder", listing() == [])
 
@@ -2138,6 +2151,24 @@ def main():
     ok("and the bin is not mistaken for a rehearsal",
        "_deleted" not in {r["name"] for r in d.list_rehearsals()})
 
+    # Nor what waits for its Undo: a take deleted moves into the holding
+    # folder, which sits beside the rehearsals too, never inside one, so the
+    # rehearsal stops being charged for it at once.
+    vesna16 = sized / "02 - Vesna 1"
+    vesna16.mkdir()
+    (vesna16 / "Gtr.wav").write_bytes(b"\0" * 7000)
+    d._lib.add_take(sized, {"take_number": 2, "name": "Vesna", "duration_sec": 1.0,
+                            "tracks": [{"name": "Gtr", "file": str(vesna16 / "Gtr.wav")}]})
+    with_vesna = bytes_of("Sized")
+    waiting16 = d.delete_take(str(sized), 2).get("undo")
+    ok("what waits for its Undo is charged to nobody either",
+       with_vesna - with_audio == 7000 and waiting16 is not None
+       and (tmp4 / "Rec" / "_deleting" / waiting16).is_dir() and not vesna16.exists()
+       and bytes_of("Sized") == with_audio)
+    ok("and the holding folder is not mistaken for a rehearsal",
+       "_deleting" not in {Path(r["folder"]).name for r in d.list_rehearsals()})
+    d.undo_trash(waiting16)
+
     print("\n[16c] The evening as it went, and last time on the setup screen")
     # History draws each rehearsal as a strip of its takes and the setup
     # screen goes over the last one song by song. Marks are few in practice,
@@ -2252,11 +2283,12 @@ def main():
     write_wav(draft / "Gtr.wav", 1000, seconds=1.0)
 
     gone = e.discard_take(str(draft))
-    ok("discarding a take says where it went", gone["ok"])
+    ok("discarding a take answers an Undo",
+       gone["ok"] and isinstance(gone.get("undo"), str) and "trashed" not in gone)
     ok("it leaves the rehearsal", not draft.exists())
-    ok("but it is somewhere, not gone",
-       gone.get("trashed") is True
-       or Path(gone.get("location") or "/nowhere").exists())
+    ok("but it is somewhere, not gone: waiting under _deleting for its Undo",
+       (e.recordings_dir / "_deleting" / str(gone.get("undo")) / "0" / "take 1"
+        / "Gtr.wav").is_file())
 
     outside = tmp5 / "not-ours"
     outside.mkdir()
@@ -2364,9 +2396,12 @@ def main():
        [m["at"] for m in res["take"]["markers"]] == [1.0])
     ok("and the ones outside it are counted, not silently dropped",
        res["markers_dropped"] == 2)
-    ok("the originals leave as one folder, not eight loose files",
-       res["trashed"] is True
-       or Path(res["location"] or "").name.endswith("(before crop)"))
+    held19 = (c.recordings_dir / "_deleting" / str(res.get("undo")) / "0"
+              / f"{take_dir.name} (before crop)")
+    ok("the originals wait for the crop's Undo as one folder, not eight loose files",
+       "trashed" not in res and "location" not in res and held19.is_dir()
+       and sorted(p.name for p in held19.iterdir()) == ["Bass.wav", "Gtr.wav"]
+       and all(wav_frames(p) == 4 * SR for p in held19.iterdir()))
     ok("and the take folder is left with only its tracks",
        sorted(p.name for p in take_dir.iterdir()) == ["Bass.wav", "Gtr.wav"])
 
@@ -2377,36 +2412,17 @@ def main():
     c._copy_to_cloud(folder, 1, "mix")
     ok("a shared take knows where its copy is",
        bool((c.session_state()["takes"][0].get("cloud") or {}).get("mix")))
-    c.crop_take(folder, 1, 0.25, 1.75)
+    recropped = c.crop_take(folder, 1, 0.25, 1.75)
     ok("cropping forgets a copy that is now of a different take",
        not (c.session_state()["takes"][0].get("cloud") or {}).get("mix"))
+    # Its notice ends: the uncut take goes on, before anything below stands
+    # in for the file system.
+    c.end_trash(recropped.get("undo"))
 
     ok("a region shorter than a second is refused",
        not c.crop_take(folder, 1, 0.1, 0.4)["ok"])
     ok("and a folder outside the recordings directory is refused",
        not c.crop_take(str(tmp7 / "elsewhere"), 1, 0.0, 2.0)["ok"])
-
-    # By the time the originals are swept up, the crop has already succeeded
-    # — the new files are in place. A full disk or a permissions problem on
-    # the sweep must not be reported as a failed crop, and it must not lose
-    # track of where the originals actually are: that folder is the only way
-    # back to them. Full range, so the take's duration comes out exactly
-    # what it already was — the checks below still assume a 1.5s take.
-    real_move_to_trash = apimod7.move_to_trash
-    apimod7.move_to_trash = lambda *a, **k: {"ok": False, "error": "no room"}
-    try:
-        stuck = c.crop_take(folder, 1, 0.0, 1.5)
-    finally:
-        apimod7.move_to_trash = real_move_to_trash
-    ok("a crop still succeeds even when the sweep of the originals fails",
-       stuck["ok"])
-    ok("and is not mistaken for having reached the Trash",
-       stuck["trashed"] is False)
-    stuck_dir = Path(stuck["location"] or "")
-    ok("its location names the folder the originals are actually still in",
-       stuck_dir.name.endswith("(before crop)") and stuck_dir.is_dir())
-    ok("with the originals really inside it, not just a claim",
-       sorted(p.name for p in stuck_dir.iterdir()) == ["Bass.wav", "Gtr.wav"])
 
     # Moving the originals aside is the one step that can stop half way: on
     # Windows, renaming a file another process holds open raises. Half the
@@ -2874,6 +2890,20 @@ def main():
        g.locate_rehearsal(str(lost), str(trashed))
        == {"ok": False, "error": "That folder is where deleted things go"})
 
+    # So is the folder where a removal waits for its Undo: a rehearsal
+    # pointed there would go to the Trash with the entry it was pointed at.
+    holding23 = rec13 / "_deleting"
+    waiting23 = holding23 / "0123abcd" / "0" / "Old rehearsal - 2026-09-01 20-00"
+    waiting23.mkdir(parents=True)
+    ok("the folder where removals wait for their Undo is refused",
+       g.locate_rehearsal(str(lost), str(holding23))
+       == {"ok": False, "error": "That folder is where deleted things go"})
+    ok("and so is anything under it",
+       g.locate_rehearsal(str(lost), str(waiting23))
+       == {"ok": False, "error": "That folder is where deleted things go"})
+    for empty23 in (waiting23, waiting23.parent, waiting23.parent.parent, holding23):
+        empty23.rmdir()
+
     g.finish_rehearsal()
 
     # What the app itself left behind is still cleared away.
@@ -2962,7 +2992,7 @@ def main():
     finally:
         del g._crop_tracks
     ok("a take deleted during its crop is reported as not found",
-       vanished == {"ok": False, "error": "Take not found"})
+       vanished == {"ok": False, "error": "Take not found", "ended": []})
     g.finish_rehearsal()
 
     print("\n[25] A rehearsal whose record vanishes during a rename")
@@ -6424,8 +6454,9 @@ def main():
 
     take4_dir59 = Path(s59._lib.take(live59, 4)["tracks"][0]["file"]).parent
     gone59 = s59.delete_takes(live59, [2, 4, 99])
-    ok("several takes are deleted",
-       gone59.get("ok") is True and gone59.get("deleted") == [2, 4])
+    ok("several takes are deleted, with one Undo for them all",
+       gone59.get("ok") is True and gone59.get("deleted") == [2, 4]
+       and isinstance(gone59.get("undo"), str) and "trashed" not in gone59)
     ok("and the one that could not be is said",
        gone59.get("failed") == [{"take_number": 99, "error": "Take not found"}])
     ok("their folders are gone and the rest stay",
@@ -8961,7 +8992,7 @@ def main():
         listed = [(d["tracks"], d["notes"]) for d in b.list_drafts()]
         res = b.recover_draft(str(temp))
         ok("a draft whose audio is lost is listed by its notes, and Recover refuses it as having no audio",
-           listed == [([], ["Drums"])] and res == {"ok": False, "error": "Draft has no audio"})
+           listed == [([], ["Drums"])] and res == {"ok": False, "error": "Draft has no audio", "ended": []})
         ok("it is still listed afterwards, its notes now a .mid",
            [(d["tracks"], d["notes"]) for d in b.list_drafts()] == [([], ["Drums"])] and "Drums.mid" in names67(temp))
         b.shutdown()
@@ -9114,9 +9145,10 @@ def main():
     (gone_dir68 / "Keys.midraw").write_bytes(b"t 1\n")
     res = a68.delete_take(str(folder68), 8)
     ok("(a guard, as it passed before: the take still names its .wav files) a take whose .wav files "
-       "were deleted by hand is trashed with its folder",
+       "were deleted by hand goes with its folder, the .midraw in it, to wait for its Undo",
        res["ok"] and not gone_dir68.exists() and a68._lib.take(folder68, 8) is None
-       and res["trashed"] is True)
+       and (a68.recordings_dir / "_deleting" / str(res.get("undo")) / "0" / gone_dir68.name
+            / "Keys.midraw").is_file())
     make68(9, "Only notes", audio=())
     only_dir68 = folder68 / "09 - Only notes 1"
     res = a68.delete_take(str(folder68), 9)
@@ -9141,12 +9173,13 @@ def main():
 
     left68 = ["Keys.midraw", "take.clock", "take.json"]
     leave68(cut_dir68)
-    real_trash68 = apimod68.move_to_trash
-    apimod68.move_to_trash = lambda *a, **k: {"ok": False, "error": "no room"}
-    try:
-        res = a68.crop_take(str(folder68), 11, 1.0, 3.0)
-    finally:
-        apimod68.move_to_trash = real_trash68
+
+    def held68(answer, take_dir):
+        """The folder of originals a crop's answer has waiting for its Undo."""
+        return (a68.recordings_dir / "_deleting" / str(answer.get("undo")) / "0"
+                / f"{take_dir.name} (before crop)")
+
+    res = a68.crop_take(str(folder68), 11, 1.0, 3.0)
     ok("cropping a take crops its notes with its audio: the take is two seconds, notes and all",
        res["ok"] and abs(res["take"]["duration_sec"] - 2.0) < 0.01
        and wav_frames(cut_dir68 / "Gtr.wav") == 2 * SR and wav_frames(cut_dir68 / "Drums.wav") == 2 * SR
@@ -9155,17 +9188,19 @@ def main():
        kit_ticks68(cut_dir68 / "Drums.mid") == [
            (0, b"\xB9\x04\x5A"), (960, b"\x99\x24\x64"), (1152, b"\x89\x24\x00"),
            (2880, b"\x99\x24\x64"), (3072, b"\x89\x24\x00")])
-    aside68 = Path(res["location"])
-    ok("the originals, .mid and .wav, are in the (before crop) folder together, as they were",
-       aside68.name.endswith("(before crop)")
-       and [n for n in files68(aside68) if n not in left68] == ["Drums.mid", "Drums.wav", "Gtr.wav"]
+    aside68 = held68(res, cut_dir68)
+    ok("the originals, .mid and .wav, wait for the crop's Undo in the (before crop) folder together, as they were",
+       aside68.is_dir() and [n for n in files68(aside68) if n not in left68] == ["Drums.mid", "Drums.wav", "Gtr.wav"]
        and kit_ticks68(aside68 / "Drums.mid") == whole68 and wav_frames(aside68 / "Gtr.wav") == 4 * SR
        and wav_frames(aside68 / "Drums.wav") == 4 * SR)
     ok("the unconverted .midraw, with its clock and its record, is aside with the originals it was timed from",
-       files68(aside68) == ["Drums.mid", "Drums.wav", "Gtr.wav", *left68]
+       aside68.is_dir() and files68(aside68) == ["Drums.mid", "Drums.wav", "Gtr.wav", *left68]
        and all((aside68 / name).read_bytes() == b"t 1\n" for name in left68))
     ok("and the cropped take keeps none of them, nor a .writing- file",
        files68(cut_dir68) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
+
+    # Its notice ends before anything below stands in for the file system.
+    a68.end_trash(res.get("undo"))
 
     # A crop that stops half way leaves the take exactly as it was, every kind of file.
     leave68(cut_dir68)
@@ -9265,15 +9300,12 @@ def main():
     write_wav(left_draft68 / "Gtr.wav", 1000, seconds=4.0)
     left_note68 = kit68(left_draft68 / "Drums.mid")
     leave68(left_draft68)
-    apimod68.move_to_trash = lambda *a, **k: {"ok": False, "error": "no room"}
-    try:
-        res = a68.crop_draft(str(left_draft68), [{"name": "Gtr", "file": str(left_draft68 / "Gtr.wav")}],
-                             1.0, 3.0, notes=[left_note68])
-    finally:
-        apimod68.move_to_trash = real_trash68
-    ok("a draft's unconverted leftovers go aside with its originals, and the cropped draft keeps none",
+    res = a68.crop_draft(str(left_draft68), [{"name": "Gtr", "file": str(left_draft68 / "Gtr.wav")}],
+                         1.0, 3.0, notes=[left_note68])
+    ok("a draft's unconverted leftovers wait with its originals, and the cropped draft keeps none",
        res["ok"] and files68(left_draft68) == ["Drums.mid", "Gtr.wav"]
-       and files68(Path(res["location"])) == ["Drums.mid", "Gtr.wav", *left68])
+       and held68(res, left_draft68).is_dir()
+       and files68(held68(res, left_draft68)) == ["Drums.mid", "Gtr.wav", *left68])
 
     # A .mid in the draft that the screen did not list (an older screen) is the draft's all the same: Keep keeps
     # it, so Crop cuts it, and the take does not keep notes that start before its audio does.
@@ -9663,6 +9695,2563 @@ def main():
     a70._config["tracks"] = None
     ok("a band that is not set yet leaves every file to its channel",
        a70.take_notes([{"name": "Drums", "file": drums70}])[0]["drums"] is False)
+
+    print("\n[71] Undo instead of asking")
+    # Deleting a take or a rehearsal, clearing false starts and discarding a
+    # take no longer ask first (B1 of docs/superpowers/specs/2026-10-08-
+    # design-system-design.md): the item moves into <recordings>/_deleting/
+    # <token>/ at once, and the interface offers Undo. It reaches the Trash
+    # only when that notice ends (end_trash), or at quit, at the next start,
+    # before the recordings folder changes, or once it has waited too long.
+    # Undo moves it back and puts its rows back. The Trash here is a stand-in
+    # that keeps what it is sent, under the name it was sent with, and counts
+    # it: nothing reaches the real one.
+    import os as os71
+
+    tmp71 = Path(tempfile.mkdtemp())
+    apimod71, u = fresh_api(tmp71)
+    rec71 = u.recordings_dir
+    drive71 = tmp71 / "Drive"
+    bin71 = tmp71 / "Bin"
+    sent71 = []
+
+    def trash71(path, fallback_root=None):
+        path = Path(path)
+        if not path.exists():
+            return {"ok": False, "error": "It is not there any more"}
+        bin71.mkdir(exist_ok=True)
+        path.rename(bin71 / f"{len(sent71)} {path.name}")
+        sent71.append(path)
+        return {"ok": True, "trashed": True, "location": None}
+
+    def binned71(name):
+        """What the Trash was sent under this name, in the order it came."""
+        if not bin71.exists():
+            return []
+        return sorted((p for p in bin71.iterdir() if p.name.split(" ", 1)[1] == name),
+                      key=lambda p: int(p.name.split(" ", 1)[0]))
+
+    def entries71(where=None):
+        """The tokens waiting in a recordings folder's holding folder."""
+        holding = (where or rec71) / "_deleting"
+        return sorted(p.name for p in holding.iterdir()) if holding.is_dir() else []
+
+    def bytes71(folder):
+        """Every file under a folder, by its path there, with what is in it."""
+        return {p.relative_to(folder).as_posix(): p.read_bytes()
+                for p in sorted(Path(folder).rglob("*")) if p.is_file()}
+
+    def add71(api, folder, number, title, notes_dir=None):
+        """A take as keep_take leaves one: a folder named after it with a WAV and
+        a .mid (or the .mid in `notes_dir`), a mark, and its rows."""
+        named = api._lib.resolve_name(folder, title, number)
+        take_dir = folder / f"{number:02d} - {named['name']}"
+        write_wav(take_dir / "Gtr.wav", 700 + number, seconds=1.0)
+        mid_dir = notes_dir or take_dir
+        mid_dir.mkdir(parents=True, exist_ok=True)
+        (mid_dir / "Gtr.mid").write_bytes(b"MThd, the notes of take %d" % number)
+        return api._lib.add_take(folder, {
+            "take_number": number, "name": title, "duration_sec": 1.0,
+            "tracks": [{"name": "Gtr", "file": str(take_dir / "Gtr.wav")}],
+            "notes": [{"name": "Gtr", "file": str(mid_dir / "Gtr.mid")}],
+            "markers": [{"at": 0.5, "note": "here"}]})
+
+    def past71(api, name, created_at, titles):
+        """A finished rehearsal, played by a set, with a take for each title."""
+        stamp = f"{created_at[:10]} {created_at[11:16].replace(':', '-')}"
+        folder = api.recordings_dir / f"{name} - {stamp}"
+        api._lib.create_rehearsal(folder, name, created_at, SR, 16,
+                                  [{"name": "Gtr", "channel": 1}],
+                                  set_copy={"name": "Usual", "songs": ["Polyn", "Vesna"]})
+        for number, title in enumerate(titles, 1):
+            add71(api, folder, number, title)
+        return folder
+
+    def numbers71(folder):
+        return [t["take_number"] for t in u.get_rehearsal(str(folder))["takes"]]
+
+    import rehearsal_recorder.platform_support as ps71
+
+    def gone71():
+        """What an Undo too late answers: that it has gone, in the words of
+        the system (spec P2), which CI runs on all three of; with
+        send2trash installed each has its own bin."""
+        where = "the Recycle Bin" if ps71.WINDOWS else "the Trash"
+        return {"ok": False, "gone": True, "error": f"It has already gone to {where}."}
+
+    # What an Undo answers once what went is back where it was, by an Undo
+    # or by an end: not that it has gone to the Trash.
+    BACK71 = {"ok": False, "back": True, "error": "It is back where it was."}
+
+    def listed71():
+        return {r["folder"] for r in u.list_rehearsals()}
+
+    real_trash71 = apimod71.move_to_trash
+    apimod71.move_to_trash = trash71
+    u.set_cloud_dir(str(drive71))
+    u.set_auto_publish(False, "mix")
+    tue71 = past71(u, "Tuesday", "2026-09-29T19:00:00",
+                   ["Polyn", "Vesna", "Polyn", "Ogon", "Ogon"])
+    u.set_take_star(str(tue71), 1, True)
+    u._copy_to_cloud(str(tue71), 1, "mix")
+
+    dir2 = Path(u._lib.take(tue71, 2)["tracks"][0]["file"]).parent
+    gone2 = u.delete_take(str(tue71), 2)
+    token2 = gone2.get("undo") or ""
+    held2 = rec71 / "_deleting" / token2
+    ok("a. deleting a take answers an Undo token, and says nothing of a Trash yet",
+       gone2.get("ok") is True and re.fullmatch(r"[0-9a-f]{8}", token2) is not None
+       and gone2.get("takes_left") == 4 and "trashed" not in gone2 and "location" not in gone2)
+    ok("its folder waits under _deleting/<token>/, by its own name, with a record of it",
+       not dir2.exists() and (held2 / "0" / dir2.name / "Gtr.wav").is_file()
+       and (held2 / "record.json").is_file())
+    ok("the rehearsal no longer lists it", numbers71(tue71) == [1, 3, 4, 5])
+    ok("and nothing went to the Trash", sent71 == [])
+
+    before1 = u._lib.take(tue71, 1)
+    dir1 = Path(before1["tracks"][0]["file"]).parent
+    files1 = bytes71(dir1)
+    mix1 = Path((before1.get("cloud") or {}).get("mix", "nowhere"))
+    back1 = u.undo_trash(u.delete_take(str(tue71), 1).get("undo"))
+    after1 = u._lib.take(tue71, 1) or {}
+    ok("b. Undo brings a deleted take back, and says which",
+       back1 == {"ok": True, "kind": "take", "folder": str(tue71), "take_numbers": [1]})
+    ok("at the same paths, with the same bytes",
+       after1.get("tracks") == before1["tracks"] and bytes71(dir1) == files1)
+    ok("with its name, star, marks and notes files",
+       (after1.get("name"), after1.get("starred")) == ("Polyn 1", True)
+       and after1.get("markers") == before1["markers"] and before1["markers"][0]["note"] == "here"
+       and after1.get("notes") == before1["notes"] and Path(before1["notes"][0]["file"]).is_file())
+    ok("and its cloud copy, which never left the cloud folder",
+       after1.get("cloud") == before1["cloud"] and mix1.is_file())
+    ok("the same take as before; its entry gone and nothing sent to the Trash",
+       after1 == before1 and entries71() == [token2] and sent71 == [])
+
+    gone1 = u.delete_take(str(tue71), 1)
+    ok("c. while its Undo waits, the take's copy stays in the cloud folder", mix1.is_file())
+    ended1 = u.end_trash(gone1.get("undo"))
+    ok("when its notice ends its folder goes to the Trash once, by its own name, whole",
+       ended1 == {"ok": True} and [p.name for p in sent71].count(dir1.name) == 1
+       and len(binned71(dir1.name)) == 1 and bytes71(binned71(dir1.name)[0]) == files1)
+    ok("its entry is gone", entries71() == [token2])
+    ok("and only now is its copy taken out of the cloud", not mix1.exists() and mix1 in sent71)
+
+    ok("n. Undo of a take that has gone to the Trash says so",
+       u.undo_trash(gone1.get("undo")) == gone71())
+    ok("as does Undo of a token there never was, or one that is no token at all",
+       u.undo_trash("0123abcd") == gone71()
+       and u.undo_trash("../" + token2) == gone71()
+       and u.undo_trash(None) == gone71())
+    ok("and its notice ending again has nothing left to do",
+       u.end_trash(gone1.get("undo")) == {"ok": True} and entries71() == [token2])
+
+    print("  the same item twice")
+    # Deleted, put back and deleted again: one entry, nothing in the Trash.
+    dir4 = Path(u._lib.take(tue71, 4)["tracks"][0]["file"]).parent
+    u.undo_trash(u.delete_take(str(tue71), 4).get("undo"))
+    again4 = u.delete_take(str(tue71), 4).get("undo")
+    ok("a take deleted, put back and deleted again waits in one entry, none of it in the Trash",
+       entries71() == sorted([token2, again4]) and binned71(dir4.name) == [])
+    u.undo_trash(again4)
+    # A number given again (recover_draft takes one past the highest): the
+    # older take's entry ends before the newer one's is made.
+    dir5 = Path(u._lib.take(tue71, 5)["tracks"][0]["file"]).parent
+    old5 = u.delete_take(str(tue71), 5).get("undo")
+    add71(u, tue71, 5, "Ogon")
+    new5 = u.delete_take(str(tue71), 5).get("undo")
+    ok("a take of a number whose earlier take waits: that entry goes to the Trash first",
+       old5 not in entries71() and new5 in entries71() and len(binned71(dir5.name)) == 1)
+    back5 = u.undo_trash(new5)
+    ok("and Undo brings back the later one",
+       back5.get("ok") is True and u._lib.take(tue71, 5)["name"] == "Ogon 3")
+
+    three = u.delete_takes(str(tue71), [3, 4, 5, 9])
+    record3 = json.loads((rec71 / "_deleting" / str(three.get("undo")) / "record.json")
+                         .read_text(encoding="utf-8")) if three.get("undo") else {}
+    ok("d. clearing three takes answers one Undo for all of them",
+       three.get("ok") is True and three.get("deleted") == [3, 4, 5]
+       and three.get("failed") == [{"take_number": 9, "error": "Take not found"}]
+       and isinstance(three.get("undo"), str) and numbers71(tue71) == [])
+    ok("one entry, a folder for each, its record naming every take",
+       len(record3.get("items", [])) == 3
+       and [i.get("take_number") for i in record3.get("record", {}).get("item", [])] == [3, 4, 5])
+    ok("Undo brings all three back",
+       u.undo_trash(three.get("undo")) == {"ok": True, "kind": "takes", "folder": str(tue71),
+                                           "take_numbers": [3, 4, 5]}
+       and numbers71(tue71) == [3, 4, 5])
+
+    print("  a folder that will not move")
+    # A take whose files are in two folders, the second held open by another
+    # program, which Windows refuses to move.
+    add71(u, tue71, 7, "Split", notes_dir=tue71 / "07 - Split notes")
+    stuck71 = tue71 / "07 - Split notes"
+    first7 = tue71 / "07 - Split 1"
+    files7 = (bytes71(first7), bytes71(stuck71))
+
+    class Refusing71:
+        """os, except that a folder another program holds will not move."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def rename(self, src, dst):
+            if Path(src) == stuck71:
+                raise PermissionError(13, "The file is being used by another process", str(src))
+            return os71.rename(src, dst)
+
+    import rehearsal_recorder.holding as holding71
+
+    waiting7 = entries71()
+    holding71.os = Refusing71()
+    refused7 = u.delete_take(str(tue71), 7)
+    holding71.os = os71
+    ok("g. a take whose second folder will not move is not deleted, and says why",
+       refused7.get("ok") is False and "being used" in str(refused7.get("error")))
+    ok("its row is still there", u._lib.take(tue71, 7) is not None)
+    ok("and both its folders are where they were, whole",
+       (bytes71(first7), bytes71(stuck71)) == files7)
+    ok("with no entry left behind and nothing sent to the Trash",
+       entries71() == waiting7 and binned71(first7.name) == [])
+    holding71.os = Refusing71()
+    some7 = u.delete_takes(str(tue71), [3, 7])
+    holding71.os = os71
+    ok("clearing it with another: the other goes, and the one that would not move is said",
+       some7.get("deleted") == [3] and [f["take_number"] for f in some7.get("failed", [])] == [7]
+       and u._lib.take(tue71, 7) is not None and (bytes71(first7), bytes71(stuck71)) == files7)
+    u.undo_trash(some7.get("undo"))
+
+    print("  the last take of a past rehearsal")
+    mon71 = past71(u, "Monday", "2026-09-28T19:00:00", ["Vesna"])
+    last = u.delete_take(str(mon71), 1)
+    ok("h. its rehearsal is still listed while the take's Undo waits, though listing cleans up",
+       str(mon71) in listed71() and mon71.is_dir())
+    ok("and Undo brings the take back into it",
+       u.undo_trash(last.get("undo")).get("ok") is True and numbers71(mon71) == [1])
+    u.end_trash(u.delete_take(str(mon71), 1).get("undo"))
+    ok("once its notice ends, the emptied rehearsal is cleaned up as before",
+       str(mon71) not in listed71() and not mon71.exists())
+
+    print("  a take of a rehearsal whose drive is not plugged in")
+    away71 = past71(u, "Away", "2026-09-27T19:00:00", ["Vesna", "Ogon"])
+    os71.rename(away71, tmp71 / "unplugged")
+
+    def rows71(folder):
+        return [t["take_number"] for t in u._lib.rehearsal(folder)["takes"]]
+
+    off71 = u.delete_take(str(away71), 2)
+    ok("its take is deleted all the same, with an Undo and nothing to hold",
+       off71.get("ok") is True and rows71(away71) == [1]
+       and (holding71.read(rec71, off71.get("undo")) or {}).get("items") == [])
+    ok("and Undo brings its rows back without the folder being there",
+       u.undo_trash(off71.get("undo")) == {"ok": True, "kind": "take", "folder": str(away71),
+                                          "take_numbers": [2]}
+       and rows71(away71) == [1, 2] and off71.get("undo") not in entries71())
+    os71.rename(tmp71 / "unplugged", away71)
+
+    print("  renamed while it waits")
+    wed71 = past71(u, "Wednesday", "2026-09-30T19:00:00", ["Zima", "Zima"])
+    u._copy_to_cloud(str(wed71), 1, "mix")
+    u._copy_to_cloud(str(wed71), 2, "mix")
+    zima = u.delete_take(str(wed71), 2)
+    thu71 = Path(u.rename_rehearsal(str(wed71), "Thursday")["folder"])
+    u.rename_song(u._lib.song_id("Zima"), "Zyma")
+    back2 = u.undo_trash(zima.get("undo"))
+    took2 = u._lib.take(thu71, 2) or {"tracks": [{"file": "nowhere"}]}
+    ok("i. Undo puts the take into its rehearsal's new folder",
+       back2 == {"ok": True, "kind": "take", "folder": str(thu71), "take_numbers": [2]}
+       and Path(took2["tracks"][0]["file"]).is_file()
+       and Path(took2["tracks"][0]["file"]).parent.parent == thu71 and not wed71.exists())
+    ok("under its song's new title, with its go", took2.get("name") == "Zyma 2")
+    ok("its cloud copy where the rename moved it, the record following it there",
+       Path((took2.get("cloud") or {}).get("mix", "nowhere")).is_file()
+       and Path(took2["cloud"]["mix"]).parent == drive71 / thu71.name)
+    # A rename moves the rehearsal's whole folder in the cloud when no copy
+    # of it is on its way, the copy waiting with its take in it: the record
+    # follows it there.
+    oct71 = past71(u, "October", "2026-10-08T19:00:00", ["Vesna", "Vesna"])
+    u._copy_to_cloud(str(oct71), 1, "mix")
+    u._copy_to_cloud(str(oct71), 2, "mix")
+    stays_oct = Path(u._lib.take(oct71, 1)["cloud"]["mix"]).name
+    mix_oct = Path(u._lib.take(oct71, 2)["cloud"]["mix"])
+    waiting_oct = u.delete_take(str(oct71), 2).get("undo")
+    sub_oct = drive71 / Path(u.rename_rehearsal(str(oct71), "October best")["folder"]).name
+    ok("(the rename moved the rehearsal's folder in the cloud, the waiting copy in it)",
+       (sub_oct / mix_oct.name).is_file() and not mix_oct.parent.exists())
+    u.end_trash(waiting_oct)
+    ok("a copy waiting with its take is taken out of the cloud where a rename moved it",
+       sorted(p.name for p in sub_oct.iterdir()) == [stays_oct]
+       and len(binned71(mix_oct.name)) == 1)
+
+    print("  a whole rehearsal")
+    fri71 = past71(u, "Friday", "2026-10-02T19:00:00", ["Polyn", "Vesna", "Ogon"])
+    u._copy_to_cloud(str(fri71), 2, "mix")
+    mix_fri = Path(u._lib.take(fri71, 2)["cloud"]["mix"])
+    dir3f = Path(u._lib.take(fri71, 3)["tracks"][0]["file"]).parent
+    first_gone = u.delete_take(str(fri71), 3).get("undo")
+    whole = u._lib.rehearsal(fri71)
+    files_fri = bytes71(fri71)
+    gone_fri = u.delete_rehearsal(str(fri71))
+    ok("e. deleting a rehearsal answers an Undo, and its folder waits whole",
+       gone_fri.get("ok") is True and set(gone_fri) == {"ok", "undo", "ended"} and not fri71.exists()
+       and bytes71(rec71 / "_deleting" / str(gone_fri.get("undo")) / "0" / fri71.name) == files_fri)
+    ok("a take of it waiting already went to the Trash before it",
+       first_gone not in entries71() and len(binned71(dir3f.name)) == 1)
+    ok("History no longer lists it, and its cloud copies stay while its Undo waits",
+       str(fri71) not in listed71() and mix_fri.is_file())
+    ok("Undo lists it again, with its tracks, set and takes",
+       u.undo_trash(gone_fri.get("undo")) == {"ok": True, "kind": "rehearsal",
+                                               "folder": str(fri71)}
+       and u._lib.rehearsal(fri71) == whole and str(fri71) in listed71()
+       and whole["set"]["name"] == "Usual" and numbers71(fri71) == [1, 2])
+    ok("every file back where it was", bytes71(fri71) == files_fri)
+    gone_fri = u.delete_rehearsal(str(fri71))
+    ok("ended instead, the whole folder goes to the Trash",
+       u.end_trash(gone_fri.get("undo")) == {"ok": True} and not fri71.exists()
+       and len(binned71(fri71.name)) == 1 and bytes71(binned71(fri71.name)[0]) == files_fri)
+    ok("and its cloud copies with it", not mix_fri.exists() and mix_fri in sent71)
+
+    print("  discarding")
+    u.start_rehearsal("Live", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    live71 = Path(u._session["folder"])
+    draft71 = live71 / "_drafts" / "take 1"
+    write_wav(draft71 / "Gtr.wav", 900, seconds=1.0)
+    (draft71 / "Gtr.mid").write_bytes(b"MThd, the notes of the draft")
+    files_draft = bytes71(draft71)
+    u._session["take_counter"] = 1
+    dropped = u.discard_take(str(draft71))
+    ok("f. discarding a take answers an Undo, and its draft waits",
+       dropped.get("ok") is True and set(dropped) == {"ok", "undo", "ended"} and not draft71.exists())
+    ok("Undo puts the folder back at _drafts/take 1, every file in it",
+       u.undo_trash(dropped.get("undo")) == {"ok": True, "kind": "draft",
+                                              "temp_dir": str(draft71), "folder": str(live71)}
+       and bytes71(draft71) == files_draft)
+    # Renamed while the discard waits: Undo follows the rehearsal.
+    dropped = u.discard_take(str(draft71))
+    live71 = Path(u.rename_rehearsal(str(live71), "Live renamed")["folder"])
+    draft71 = live71 / "_drafts" / "take 1"
+    ok("and into its rehearsal's new folder when it was renamed meanwhile",
+       u.undo_trash(dropped.get("undo")).get("temp_dir") == str(draft71)
+       and bytes71(draft71) == files_draft)
+    u.finish_rehearsal()
+    ok("a draft left at Finish is a draft on the Drafts screen",
+       [d["dir"] for d in u.list_drafts()] == [str(draft71)])
+    dropped = u.discard_draft(str(draft71))
+    ok("discarding it there takes it off the list, and its Undo puts it back on",
+       dropped.get("ok") is True and u.list_drafts() == []
+       and u.undo_trash(dropped.get("undo")).get("ok") is True
+       and [d["dir"] for d in u.list_drafts()] == [str(draft71)])
+    dropped = u.discard_draft(str(draft71))
+
+    print("  waiting too long")
+    sun71 = past71(u, "Sunday", "2026-10-04T19:00:00", ["Polyn", "Vesna"])
+    dir1s = Path(u._lib.take(sun71, 1)["tracks"][0]["file"]).parent
+    stale = u.delete_take(str(sun71), 1).get("undo")
+    stale_record = rec71 / "_deleting" / str(stale) / "record.json"
+    written = json.loads(stale_record.read_text(encoding="utf-8"))
+    written["time"] -= 121
+    stale_record.write_text(json.dumps(written), encoding="utf-8")
+    young = entries71()
+    young.remove(stale)
+    fresh = u.delete_take(str(sun71), 2).get("undo")
+    ok("m. an entry that waited longer than two minutes goes to the Trash at the next removal",
+       stale not in entries71() and len(binned71(dir1s.name)) == 1)
+    ok("and the younger ones keep waiting", all(t in entries71() for t in young + [fresh]))
+
+    print("  never a rehearsal, never a draft")
+    sized71 = past71(u, "Sized", "2026-10-05T19:00:00", ["Polyn", "Vesna"])
+
+    def size71():
+        return next(r["disk_bytes"] for r in u.list_rehearsals() if r["folder"] == str(sized71))
+
+    whole_bytes = size71()
+    dir2o = Path(u._lib.take(sized71, 2)["tracks"][0]["file"]).parent
+    take_bytes = sum(len(b) for b in bytes71(dir2o).values())
+    waiting_o = u.delete_take(str(sized71), 2).get("undo")
+    ok("o. a take waiting for its Undo is charged to no rehearsal",
+       take_bytes > 0 and size71() == whole_bytes - take_bytes)
+    ok("and _deleting is not listed as a rehearsal",
+       "_deleting" not in {Path(f).name for f in listed71()})
+    lost71 = rec71 / "Lost - 2026-09-01 20-00"
+    u._lib.create_rehearsal(lost71, "Lost", "2026-09-01T20:00:00", SR, 16,
+                            [{"name": "Gtr", "channel": 1}])
+    refused_o = {"ok": False, "error": "That folder is where deleted things go"}
+    ok("locating a missing rehearsal onto _deleting is refused",
+       u.locate_rehearsal(str(lost71), str(rec71 / "_deleting")) == refused_o)
+    ok("and onto anything waiting in it",
+       u.locate_rehearsal(str(lost71), str(rec71 / "_deleting" / str(waiting_o) / "0"
+                                           / dir2o.name)) == refused_o)
+    ok("a discarded draft waiting in it is no draft on the Drafts screen",
+       dropped.get("undo") in entries71() and u.list_drafts() == [])
+    u.forget_rehearsal(str(lost71))
+
+    print("  every end")
+    waiting_l = entries71()
+    other71 = tmp71 / "Other recordings"
+    switched = u.set_recordings_dir(str(other71))
+    ok("l. changing the recordings folder sends everything waiting to the Trash first",
+       switched.get("ok") is True and waiting_l != [] and entries71(rec71) == []
+       and len(binned71(dir2o.name)) == 1 and len(binned71("take 1")) == 1)
+    u.set_recordings_dir(str(rec71))
+
+    mar71 = past71(u, "March", "2026-10-06T19:00:00", ["Polyn"])
+    dir_j = Path(u._lib.take(mar71, 1)["tracks"][0]["file"]).parent
+    u.delete_take(str(mar71), 1)
+    u.shutdown()
+    ok("j. quitting with a take waiting sends it to the Trash",
+       len(binned71(dir_j.name)) == 1 and not dir_j.exists())
+    ok("and leaves _deleting empty", entries71() == [])
+
+    # The app died with an entry waiting: the next start sends it on, and the
+    # cloud copy its record names leaves with it.
+    _, w = fresh_api(tmp71)
+    apr71 = past71(w, "April", "2026-10-07T19:00:00", ["Polyn"])
+    w._copy_to_cloud(str(apr71), 1, "mix")
+    mix_k = Path(w._lib.take(apr71, 1)["cloud"]["mix"])
+    dir_k = Path(w._lib.take(apr71, 1)["tracks"][0]["file"]).parent
+    left_k = w.delete_take(str(apr71), 1).get("undo")
+    ok("k. (an entry is left waiting, its copy still in the cloud)",
+       entries71() == [left_k] and mix_k.is_file())
+    _, k = fresh_api(tmp71)
+    ok("at the next start an entry left waiting goes to the Trash",
+       entries71() == [] and len(binned71(dir_k.name)) == 1)
+    ok("and the cloud copy its record names is taken out", not mix_k.exists() and mix_k in sent71)
+    k.shutdown()
+    w._library.close()
+    apimod71.move_to_trash = real_trash71
+
+    print("\n[72] An unfinished removal goes back, not to the Trash")
+    # A removal is two steps, the files into _deleting and the rows out of
+    # the library, and an Undo the same two the other way. Whatever stops in
+    # between (the app dying, a move that fails and cannot be taken back, a
+    # library that refuses) must leave neither files in the Trash under rows
+    # that are still there, nor files back with no rows. The entry's record
+    # says how far it got, and its end follows it: the Trash once the rows
+    # are gone, back where it came from while they are not.
+    tmp72 = Path(tempfile.mkdtemp())
+    apimod72, x72 = fresh_api(tmp72)
+    rec72 = x72.recordings_dir
+    drive72 = tmp72 / "Drive"
+    apimod72.move_to_trash = trash71
+    x72.set_cloud_dir(str(drive72))
+    x72.set_auto_publish(False, "mix")
+    opened72 = [x72]
+
+    class Crash72(BaseException):
+        """The app dying here: nothing after it runs, no except catches it."""
+
+    def crash72(*args, **kwargs):
+        raise Crash72()
+
+    def restart72():
+        """The app started again over the same folder, the one before it
+        never having quit."""
+        _, api = fresh_api(tmp72)
+        opened72.append(api)
+        return api
+
+    def rows72(api, folder):
+        r = api._lib.rehearsal(folder)
+        return [] if r is None else [t["take_number"] for t in r["takes"]]
+
+    def record72(token):
+        return (holding71.read(rec72, token) or {}).get("record") or {}
+
+    def dir72(api, folder, n):
+        return Path(api._lib.take(folder, n)["tracks"][0]["file"]).parent
+
+    sat72 = past71(x72, "Saturday", "2026-10-03T19:00:00", ["Polyn", "Vesna", "Ogon"])
+    x72._copy_to_cloud(str(sat72), 1, "mix")
+    dir1 = dir72(x72, sat72, 1)
+    files1 = bytes71(dir1)
+    mix1 = Path(x72._lib.take(sat72, 1)["cloud"]["mix"])
+
+    print("  the app dies between moving the files and dropping the rows")
+    mark72 = len(sent71)
+    x72._lib.delete_takes = crash72
+    try:
+        x72.delete_take(str(sat72), 1)
+    except Crash72:
+        pass
+    del x72._lib.delete_takes
+    ok("a. (the take's folder is in _deleting, its rows still in the library)",
+       len(entries71(rec72)) == 1 and not dir1.exists() and rows72(x72, sat72) == [1, 2, 3])
+    y72 = restart72()
+    ok("the next start puts it back where it was, every file, and sends nothing to the Trash",
+       bytes71(dir1) == files1 and entries71(rec72) == [] and sent71[mark72:] == [])
+    ok("the take is as it was, its copy still in the cloud",
+       y72._lib.take(sat72, 1) is not None and mix1.is_file())
+
+    print("  the app dies between dropping the rows and the record saying so")
+    dir2 = dir72(y72, sat72, 2)
+    real_update72 = holding71.update
+    holding71.update = crash72
+    try:
+        y72.delete_take(str(sat72), 2)
+    except Crash72:
+        pass
+    holding71.update = real_update72
+    waiting72 = entries71(rec72)
+    ok("(its rows are gone, and its record still says they were kept)",
+       rows72(y72, sat72) == [1, 3] and len(waiting72) == 1
+       and record72(waiting72[0]).get("rows") == "kept")
+    z72 = restart72()
+    ok("the next start finds its rows gone, and sends it to the Trash after all",
+       entries71(rec72) == [] and not dir2.exists()
+       and [p.name for p in sent71[mark72:]] == [dir2.name])
+
+    print("  the app dies during an Undo")
+    dir3 = dir72(z72, sat72, 3)
+    files3 = bytes71(dir3)
+    gone3 = z72.delete_take(str(sat72), 3).get("undo")
+    mark72 = len(sent71)
+    z72._lib.restore_takes = crash72
+    z72._lib.restore_take = crash72
+    try:
+        z72.undo_trash(gone3)
+    except Crash72:
+        pass
+    del z72._lib.restore_takes, z72._lib.restore_take
+    ok("(its files are back, its rows not yet, and its entry says an Undo was under way)",
+       bytes71(dir3) == files3 and rows72(z72, sat72) == [1] and gone3 in entries71(rec72)
+       and record72(gone3).get("rows") == "restoring")
+    q72 = restart72()
+    ok("b. the next start finishes the Undo: the take is back, files and rows, nothing in the Trash",
+       bytes71(dir3) == files3 and rows72(q72, sat72) == [1, 3] and entries71(rec72) == []
+       and sent71[mark72:] == [])
+
+    print("  a move that fails, and what had moved will not go back")
+    add71(q72, sat72, 7, "Split", notes_dir=sat72 / "07 - Split notes")
+    first72 = dir72(q72, sat72, 7)
+    notes72 = sat72 / "07 - Split notes"
+    files7 = (bytes71(first72), bytes71(notes72))
+
+    class Jammed72:
+        """os, except that the notes folder will not move, and the take's
+        folder, once moved, will not move back."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def rename(self, src, dst):
+            if Path(src) == notes72 or Path(dst) == first72:
+                raise PermissionError(13, "The file is being used by another process", str(src))
+            return os71.rename(src, dst)
+
+    holding71.os = Jammed72()
+    jammed72 = q72.delete_take(str(sat72), 7)
+    holding71.os = os71
+    waiting72 = entries71(rec72)
+    ok("c. a take whose move fails and whose moved folder will not go back is not deleted, "
+       "and says where its folder is",
+       jammed72.get("ok") is False and first72.name in str(jammed72.get("error"))
+       and q72._lib.take(sat72, 7) is not None)
+    ok("(its folder waits in _deleting, its record saying its rows were never dropped)",
+       len(waiting72) == 1 and record72(waiting72[0]).get("rows") == "kept")
+    ended72 = q72.end_trash(waiting72[0])
+    ok("its end puts the folder back, whole, and sends nothing to the Trash",
+       ended72 == {"ok": True} and (bytes71(first72), bytes71(notes72)) == files7
+       and entries71(rec72) == [] and sent71[mark72:] == [])
+
+    print("  the library refuses, and the files will not go back")
+
+    def locked72(*args, **kwargs):
+        raise RuntimeError("database is locked")
+
+    class Stays72:
+        """os, except that nothing moves back to where it came from."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def rename(self, src, dst):
+            if Path(dst) in (first72, notes72, sun72):
+                raise PermissionError(13, "The file is being used by another process", str(dst))
+            return os71.rename(src, dst)
+
+    sun72 = past71(q72, "Sunday", "2026-10-04T19:00:00", ["Polyn"])
+    files_sun = bytes71(sun72)
+    q72._lib.delete_takes = locked72
+    try:
+        q72.delete_take(str(sat72), 7)
+        raised72 = None
+    except RuntimeError as e:
+        raised72 = str(e)
+    del q72._lib.delete_takes
+    ok("a library that refuses to drop a take's rows has its files put straight back, "
+       "no entry left",
+       raised72 == "database is locked" and (bytes71(first72), bytes71(notes72)) == files7
+       and entries71(rec72) == [] and q72._lib.take(sat72, 7) is not None)
+    q72._lib.forget_rehearsal = locked72
+    try:
+        q72.delete_rehearsal(str(sun72))
+        raised72 = None
+    except RuntimeError as e:
+        raised72 = str(e)
+    del q72._lib.forget_rehearsal
+    ok("and so has a rehearsal's folder",
+       raised72 == "database is locked" and bytes71(sun72) == files_sun
+       and entries71(rec72) == [] and q72._lib.rehearsal(sun72) is not None)
+    q72._lib.delete_takes = locked72
+    holding71.os = Stays72()
+    try:
+        q72.delete_take(str(sat72), 7)
+        raised72 = None
+    except RuntimeError as e:
+        raised72 = str(e)
+    holding71.os = os71
+    del q72._lib.delete_takes
+    waiting72 = entries71(rec72)
+    ok("d. a library that refuses to drop a take's rows is said, its rows left as they were",
+       raised72 == "database is locked" and q72._lib.take(sat72, 7) is not None)
+    ended72 = q72.end_trash(waiting72[0]) if len(waiting72) == 1 else None
+    ok("and when its files will not go back to them then, its end puts them back, "
+       "sending nothing to the Trash",
+       ended72 == {"ok": True} and (bytes71(first72), bytes71(notes72)) == files7
+       and entries71(rec72) == [] and sent71[mark72:] == [])
+    q72._lib.forget_rehearsal = locked72
+    holding71.os = Stays72()
+    try:
+        q72.delete_rehearsal(str(sun72))
+        raised72 = None
+    except RuntimeError as e:
+        raised72 = str(e)
+    holding71.os = os71
+    del q72._lib.forget_rehearsal
+    waiting72 = entries71(rec72)
+    ended72 = q72.end_trash(waiting72[0]) if len(waiting72) == 1 else None
+    ok("so with a whole rehearsal: its end puts its folder back, whole",
+       raised72 == "database is locked" and ended72 == {"ok": True}
+       and bytes71(sun72) == files_sun and str(sun72) in {r["folder"] for r in q72.list_rehearsals()}
+       and entries71(rec72) == [] and sent71[mark72:] == [])
+
+    print("  a delete tried again after a move failed and could not be taken back")
+    mark72 = len(sent71)
+    holding71.os = Jammed72()
+    q72.delete_take(str(sat72), 7)
+    holding71.os = os71
+    again72 = q72.delete_take(str(sat72), 7)
+    ended72 = q72.end_trash(again72.get("undo"))
+    ok("the retry takes the whole take: once its notice ends, nothing of it is left "
+       "outside the Trash, and every file of it reached the Trash",
+       again72.get("ok") is True and ended72 == {"ok": True}
+       and not first72.exists() and not notes72.exists() and entries71(rec72) == []
+       and [p.name for p in sent71[mark72:]] == [first72.name, notes72.name]
+       and (bytes71(binned71(first72.name)[-1]), bytes71(binned71(notes72.name)[-1])) == files7)
+
+    print("  a cloud copy a later take has now")
+    mon72 = past71(q72, "Monday", "2026-09-28T19:00:00", ["Polyn"])
+    add71(q72, mon72, 2, "")
+    q72._copy_to_cloud(str(mon72), 2, "mix")
+    copy72 = Path(q72._lib.take(mon72, 2)["cloud"]["mix"])
+    old72 = q72.delete_take(str(mon72), 2).get("undo")
+    # recover_draft numbers the next take one past the highest: 2 again,
+    # named "Take 2" again, so its copy lands on the same path.
+    add71(q72, mon72, 2, "")
+    q72._copy_to_cloud(str(mon72), 2, "mix")
+    ok("(the later take's copy is where the deleted one's was)",
+       q72._lib.take(mon72, 2)["name"] == "Take 2"
+       and q72._lib.take(mon72, 2)["cloud"]["mix"] == str(copy72) and copy72.is_file())
+    q72.end_trash(old72)
+    ok("e. the deleted take's end leaves the copy the later take has there",
+       copy72.is_file() and copy72 not in sent71[mark72:]
+       and q72._lib.take(mon72, 2)["cloud"].get("mix") == str(copy72))
+    later72 = q72.delete_take(str(mon72), 2).get("undo")
+    q72._lib.set_cloud_copy(mon72, 1, {"mix": str(copy72), "mix_format": "wav"}, drive72)
+    back72 = q72.undo_trash(later72)
+    ok("and Undo of a take whose copy another take names now brings it back without that copy",
+       back72.get("ok") is True and q72._lib.take(mon72, 2)["cloud"] == {}
+       and q72._lib.take(mon72, 1)["cloud"].get("mix") == str(copy72) and copy72.is_file())
+    q72._lib.set_cloud_copy(mon72, 1, None, None)
+
+    add71(q72, mon72, 3, "")
+    q72._copy_to_cloud(str(mon72), 3, "mix")
+    copy3 = Path(q72._lib.take(mon72, 3)["cloud"]["mix"])
+    waiting3 = q72.delete_take(str(mon72), 3).get("undo")
+    landed72 = []
+
+    def landing72(path, fallback_root=None):
+        """The Trash, while the copy worker (which runs outside the files
+        lock) finishes a copy of take 1 onto that very path."""
+        if not landed72:
+            landed72.append(path)
+            q72._lib.set_cloud_copy(mon72, 1, {"mix": str(copy3), "mix_format": "wav"}, drive72)
+        return trash71(path, fallback_root)
+
+    apimod72.move_to_trash = landing72
+    q72.end_trash(waiting3)
+    apimod72.move_to_trash = trash71
+    ok("a copy that lands in that place while the entry's files go to the Trash stays",
+       copy3.is_file() and q72._lib.take(mon72, 1)["cloud"].get("mix") == str(copy3))
+    add71(q72, mon72, 4, "")
+    q72._copy_to_cloud(str(mon72), 4, "mix")
+    copy4 = Path(q72._lib.take(mon72, 4)["cloud"]["mix"])
+    waiting4 = q72.delete_take(str(mon72), 4).get("undo")
+    q72._lib.set_cloud_copy(mon72, 1, {"mix": str(copy4.parent / copy4.name.upper()),
+                                       "mix_format": "wav"}, drive72)
+    q72.end_trash(waiting4)
+    ok("and one another take names spelled in another case is taken for the same place, "
+       "as a Mac's or Windows' folder takes it, and stays",
+       copy4.is_file())
+    q72._lib.set_cloud_copy(mon72, 1, None, None)
+
+    print("  the recordings folder changes with an entry whose rows are kept")
+    tue72 = past71(q72, "Tuesday", "2026-09-29T19:00:00", ["Polyn"])
+    dir_t = dir72(q72, tue72, 1)
+    files_t = bytes71(dir_t)
+    mark72 = len(sent71)
+    q72._lib.delete_takes = crash72
+    try:
+        q72.delete_take(str(tue72), 1)
+    except Crash72:
+        pass
+    del q72._lib.delete_takes
+    switched72 = q72.set_recordings_dir(str(tmp72 / "Elsewhere"))
+    ok("f. changing the folder puts it back, asking the library it belongs to, not the new one",
+       switched72.get("ok") is True and bytes71(dir_t) == files_t
+       and entries71(rec72) == [] and sent71[mark72:] == [])
+    q72.set_recordings_dir(str(rec72))
+
+    print("  saving a draft ends only its crop")
+    q72.start_rehearsal("Live", 0, SR, [{"name": "Gtr", "channel": 1}])
+    live72 = Path(q72._session["folder"])
+    draft72 = live72 / "_drafts" / "take 1"
+    write_wav(draft72 / "Gtr.wav", 300, seconds=1.0)
+    discarded72 = q72.discard_take(str(draft72)).get("undo")
+    # Recorded again under the same name, and cropped: the uncut file waits.
+    write_wav(draft72 / "Gtr.wav", 400, seconds=1.0)
+    write_wav(draft72 / "Gtr.uncut.wav", 400, seconds=2.0)
+    crop72 = holding71.hold(rec72, {"kind": "crop", "reason": "crop", "rows": "none",
+                                    "item": q72._draft_identity(draft72)},
+                            [draft72 / "Gtr.uncut.wav"])
+    mark72 = len(sent71)
+    q72.keep_take(1, str(draft72), "Polyn", 1.0,
+                  [{"name": "Gtr", "file": str(draft72 / "Gtr.wav")}])
+    ok("g. saving a draft sends its crop's uncut files on, and leaves another draft's discard waiting",
+       crop72 not in entries71(rec72) and discarded72 in entries71(rec72))
+    ok("a crop's entry, with no rows to wait for, goes to the Trash",
+       [p.name for p in sent71[mark72:]] == ["Gtr.uncut.wav"])
+    q72.end_trash(discarded72)
+    q72.finish_rehearsal()
+
+    print("  a rehearsal brought back is copied again, as a take is")
+    q72.set_auto_publish(True, "mix")
+    wed72 = past71(q72, "Wednesday", "2026-09-30T19:00:00", ["Polyn"])
+    q72.undo_trash(q72.delete_rehearsal(str(wed72)).get("undo"))
+    ok("h. Undo of a rehearsal asks for its takes to be copied, when sending is on",
+       q72._cloud_queue.states(str(wed72)) == {1: "queued"})
+    q72.set_auto_publish(False, "mix")
+
+    print("  an Undo that is refused leaves everything as it is")
+    thu72 = past71(q72, "Thursday", "2026-10-01T19:00:00", ["Polyn", "Vesna"])
+    dir_h = dir72(q72, thu72, 1)
+    waiting_h = q72.delete_take(str(thu72), 1).get("undo")
+    dir_h.mkdir()
+    (dir_h / "Theirs.wav").write_bytes(b"someone else's")
+    refused72 = q72.undo_trash(waiting_h)
+    ok("i. an Undo whose place is taken on disk says so, and leaves the entry and what is there",
+       refused72 == {"ok": False, "error": f"Something else is in its place now: {dir_h}"}
+       and waiting_h in entries71(rec72) and record72(waiting_h).get("rows") == "dropped"
+       and sorted(os71.listdir(dir_h)) == ["Theirs.wav"]
+       and (dir_h / "Theirs.wav").read_bytes() == b"someone else's")
+    (dir_h / "Theirs.wav").unlink()
+    dir_h.rmdir()
+    add71(q72, thu72, 1, "Ogon")
+    dir_o = dir72(q72, thu72, 1)
+    files_o = bytes71(dir_o)
+    refused72 = q72.undo_trash(waiting_h)
+    ok("one whose number another take has now says so, and leaves both as they are",
+       refused72 == {"ok": False, "error": "Take 1 is taken by another take now."}
+       and waiting_h in entries71(rec72) and bytes71(dir_o) == files_o
+       and q72._lib.take(thu72, 1)["name"].startswith("Ogon"))
+    waiting_v = q72.delete_take(str(thu72), 2).get("undo")
+    q72.forget_rehearsal(str(thu72))
+    refused72 = q72.undo_trash(waiting_v)
+    ok("one whose rehearsal is gone says so, and leaves the entry and the folder",
+       refused72 == {"ok": False, "error": "Its rehearsal is gone."}
+       and waiting_v in entries71(rec72) and bytes71(dir_o) == files_o)
+    q72.end_trash(waiting_h)
+    q72.end_trash(waiting_v)
+
+    print("  a Trash that refuses part of an entry")
+    fri72 = past71(q72, "Friday", "2026-10-02T19:00:00", [])
+    add71(q72, fri72, 1, "Split", notes_dir=fri72 / "01 - Split notes")
+    dir_f = dir72(q72, fri72, 1)
+    split72 = q72.delete_take(str(fri72), 1).get("undo")
+    mark72 = len(sent71)
+
+    def full72(path, fallback_root=None):
+        if Path(path).name == "01 - Split notes":
+            return {"ok": False, "error": "The Trash is full"}
+        return trash71(path, fallback_root)
+
+    apimod72.move_to_trash = full72
+    first_end72 = q72.end_trash(split72)
+    apimod72.move_to_trash = trash71
+    ok("j. a Trash that refuses part of an entry leaves the entry, with what it did not take",
+       first_end72 == {"ok": False, "error": "The Trash is full"} and split72 in entries71(rec72)
+       and (rec72 / "_deleting" / split72 / "1" / "01 - Split notes").is_dir())
+    second_end72 = q72.end_trash(split72)
+    ok("and the next end sends only what is left: each folder reaches the Trash once",
+       second_end72 == {"ok": True} and split72 not in entries71(rec72)
+       and [p.name for p in sent71[mark72:]] == [dir_f.name, "01 - Split notes"])
+
+    print("  an Undo broken off part way, its rehearsal renamed before it is finished")
+    nov72 = past71(q72, "November", "2026-10-09T19:00:00", [])
+    add71(q72, nov72, 1, "Split", notes_dir=nov72 / "01 - Split notes")
+    first_n = dir72(q72, nov72, 1)
+    notes_n = nov72 / "01 - Split notes"
+    files_n = (bytes71(first_n), bytes71(notes_n))
+    broken72 = q72.delete_take(str(nov72), 1).get("undo")
+    entry_n = rec72 / "_deleting" / broken72
+
+    class Partway72:
+        """os, except that the notes folder will not come out of the entry,
+        and the take's folder, once out, will not go back in."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def rename(self, src, dst):
+            if Path(src) == entry_n / "1" / notes_n.name or Path(dst) == entry_n / "0" / first_n.name:
+                raise PermissionError(13, "The file is being used by another process", str(src))
+            return os71.rename(src, dst)
+
+    holding71.os = Partway72()
+    partway72 = q72.undo_trash(broken72)
+    holding71.os = os71
+    ok("(an Undo that stops part way says so, its entry saying an Undo is under way)",
+       partway72.get("ok") is False and record72(broken72).get("rows") == "restoring"
+       and bytes71(first_n) == files_n[0])
+    dec72 = Path(q72.rename_rehearsal(str(nov72), "December")["folder"])
+    q72.end_trash(broken72)
+    took_n = q72._lib.take(dec72, 1) or {}
+    ok("its end finishes it into the rehearsal's new folder, not the old one",
+       not nov72.exists() and bytes71(dec72 / first_n.name) == files_n[0]
+       and bytes71(dec72 / notes_n.name) == files_n[1] and broken72 not in entries71(rec72)
+       and [Path(f["file"]).parent.parent for f in took_n.get("tracks", [])] == [dec72])
+
+    print("  putting back part way")
+    hand72 = rec72 / "Hand"
+    for name in ("a", "b"):
+        (hand72 / name).mkdir(parents=True)
+        (hand72 / name / "f.wav").write_bytes(name.encode())
+    hand_token = holding71.hold(rec72, {"kind": "test", "rows": "none"},
+                                [hand72 / "a", hand72 / "b"])
+    entry72 = rec72 / "_deleting" / hand_token
+
+    class Halfway72:
+        """os, except that b will not come out, and a, once out, will not go back in."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def rename(self, src, dst):
+            if Path(src).name == "b" or Path(dst) == entry72 / "0" / "a":
+                raise PermissionError(13, "The file is being used by another process", str(src))
+            return os71.rename(src, dst)
+
+    holding71.os = Halfway72()
+    try:
+        holding71.put_back(rec72, hand_token, [hand72 / "a", hand72 / "b"])
+        said72 = ""
+    except OSError as e:
+        said72 = str(e)
+    holding71.os = os71
+    ok("k. a put-back that fails part way says where what would not go back in is",
+       str(hand72 / "a") in said72 and (hand72 / "a" / "f.wav").read_bytes() == b"a"
+       and (entry72 / "1" / "b" / "f.wav").is_file() and (entry72 / "record.json").is_file())
+    holding71.put_back(rec72, hand_token, [hand72 / "a", hand72 / "b"])
+    holding71.drop(rec72, hand_token)
+
+    print("  a record that cannot be written")
+    sat_dir = dir72(q72, sat72, 1)
+    files_s = bytes71(sat_dir)
+    waiting_s = entries71(rec72)
+    real_write72 = holding71._write
+
+    def no_room72(entry, data):
+        raise OSError(28, "No space left on device")
+
+    holding71._write = no_room72
+    failed72 = q72.delete_take(str(sat72), 1)
+    holding71._write = real_write72
+    ok("l. a removal whose record cannot be written leaves no entry behind, and the take as it was",
+       failed72.get("ok") is False and "No space" in str(failed72.get("error"))
+       and entries71(rec72) == waiting_s and bytes71(sat_dir) == files_s
+       and q72._lib.take(sat72, 1) is not None)
+
+    gone72 = q72.delete_take(str(sat72), 1).get("undo")
+    real_put_back72 = holding71.put_back
+
+    def vanished72(*args, **kwargs):
+        raise holding71.Gone()
+
+    holding71.put_back = vanished72
+    vanished_answer = q72.undo_trash(gone72)
+    holding71.put_back = real_put_back72
+    ok("m. an entry gone from under an Undo says, plainly, that it has gone to the Trash",
+       vanished_answer == gone71())
+    q72.undo_trash(gone72)
+
+    print("  a record that cannot be read")
+    dir_g = dir72(q72, sat72, 1)
+    files_g = bytes71(dir_g)
+    garbled72 = q72.delete_take(str(sat72), 1).get("undo")
+    (rec72 / "_deleting" / garbled72 / "record.json").write_text("{not json", encoding="utf-8")
+    mark72 = len(sent71)
+
+    class Caught72(logging.Handler):
+        """What the app logs at ERROR: what a windowed build keeps."""
+
+        def __init__(self):
+            super().__init__(logging.ERROR)
+            self.said = []
+
+        def emit(self, record):
+            self.said.append(record.getMessage())
+
+    caught72 = Caught72()
+    logging.getLogger("rehearsal_recorder").addHandler(caught72)
+    ended72 = q72.end_trash(garbled72)
+    logging.getLogger("rehearsal_recorder").removeHandler(caught72)
+    ok("n. an entry whose record cannot be read is kept, files and all, never sent to the Trash",
+       ended72.get("ok") is False and garbled72 in entries71(rec72)
+       and bytes71(rec72 / "_deleting" / garbled72 / "0" / dir_g.name) == files_g
+       and sent71[mark72:] == [])
+    ok("and the log a windowed build keeps says so, naming it",
+       any(garbled72 in said for said in caught72.said))
+    q72.shutdown()
+    s72 = restart72()
+    problems72 = s72.startup_problems()
+    ok("o. at the next start it is still kept, and said once among the start problems, "
+       "naming its folder",
+       garbled72 in entries71(rec72) and sent71[mark72:] == []
+       and [p["name"] for p in problems72] == ["RemovalKept"]
+       and str(rec72 / "_deleting" / garbled72) in problems72[0]["message"]
+       and s72.startup_problems() == [])
+
+    print("  the recordings folder changes with an entry that stays")
+    moved72 = s72.set_recordings_dir(str(tmp72 / "Elsewhere"))
+    ok("p. changing the folder names, in its answer, an entry that stays in the old one",
+       moved72.get("ok") is True
+       and moved72.get("kept") == [str(rec72 / "_deleting" / garbled72)]
+       and garbled72 in entries71(rec72))
+    back72 = s72.set_recordings_dir(str(rec72))
+    ok("and names none when none stays", back72.get("ok") is True and back72.get("kept") == [])
+
+    print("  a draft discarded twice")
+    dec72 = past71(s72, "December", "2026-10-10T19:00:00", ["Polyn", "Vesna"])
+    twice72 = dec72 / "_drafts" / "take 8"
+    write_wav(twice72 / "Gtr.wav", 800, seconds=1.0)
+    files_d = bytes71(twice72)
+    mark72 = len(sent71)
+    first_d = s72.discard_draft(str(twice72))
+    second_d = s72.discard_draft(str(twice72))
+    ok("q. a second discard of a draft already gone says so, and the first one's entry waits on",
+       first_d.get("ok") is True
+       and second_d == {"ok": False, "error": "It is not there any more"}
+       and first_d.get("undo") in entries71(rec72) and sent71[mark72:] == [])
+    undone_d = s72.undo_trash(first_d.get("undo"))
+    ok("and its Undo brings the draft back",
+       undone_d.get("ok") is True and bytes71(twice72) == files_d)
+
+    print("  a record of takes that names none")
+    bare72 = rec72 / "Loose" / "f"
+    bare72.mkdir(parents=True)
+    (bare72 / "f.wav").write_bytes(b"bare")
+    bare_token = holding71.hold(rec72, {"kind": "take", "reason": "delete", "rows": "kept",
+                                        "takes": []}, [bare72])
+    mark72 = len(sent71)
+    ended_b = s72.end_trash(bare_token)
+    ok("r. an entry whose record names no rows to ask about goes back, not to the Trash",
+       ended_b.get("ok") is True and (bare72 / "f.wav").is_file()
+       and (bare72 / "f.wav").read_bytes() == b"bare"
+       and bare_token not in entries71(rec72) and sent71[mark72:] == [])
+    ok("and an Undo of it then says it is back where it was, not that it has gone",
+       s72.undo_trash(bare_token) == BACK71)
+
+    print("  what stays, said at start")
+    # A second record that cannot be read; a discard the Trash will refuse;
+    # and an Undo the app died in, whose rows will not come back (a take has
+    # its number now), so it ends with its files back and its entry gone.
+    garbled2 = s72.delete_take(str(dec72), 2).get("undo")
+    (rec72 / "_deleting" / garbled2 / "record.json").write_text("{not json", encoding="utf-8")
+    refused_d = dec72 / "_drafts" / "take 5"
+    write_wav(refused_d / "Gtr.wav", 500, seconds=1.0)
+    refused_tok = s72.discard_draft(str(refused_d)).get("undo")
+    dir_u = dir72(s72, dec72, 1)
+    files_u = bytes71(dir_u)
+    gone_u = s72.delete_take(str(dec72), 1).get("undo")
+    s72._lib.restore_takes = crash72
+    s72._lib.restore_take = crash72
+    try:
+        s72.undo_trash(gone_u)
+    except Crash72:
+        pass
+    del s72._lib.restore_takes, s72._lib.restore_take
+    add71(s72, dec72, 1, "Ogon")
+    ok("(the Undo's files are back, its entry says it was under way, and take 1 is another take)",
+       bytes71(dir_u) == files_u and record72(gone_u).get("rows") == "restoring"
+       and dir72(s72, dec72, 1) != dir_u)
+
+    def refusing72(path, fallback_root=None):
+        return {"ok": False, "error": "The Trash said no"}
+
+    apimod72.move_to_trash = refusing72
+    caught72 = Caught72()
+    logging.getLogger("rehearsal_recorder").addHandler(caught72)
+    t72 = restart72()
+    logging.getLogger("rehearsal_recorder").removeHandler(caught72)
+    apimod72.move_to_trash = trash71
+    problems_t = t72.startup_problems()
+    said_t = problems_t[0]["message"] if problems_t else ""
+    kept_t = [str(rec72 / "_deleting" / t) for t in (garbled72, garbled2, refused_tok)]
+    ok("s. every entry that stays is said in one start problem, naming each folder",
+       [p["name"] for p in problems_t] == ["RemovalKept"]
+       and all(k in said_t for k in kept_t) and said_t.startswith("3 things"))
+    ok("t. an entry an end gave up on, and that is gone, is never said to stay: "
+       "not to the person, not in the log",
+       gone_u not in entries71(rec72) and gone_u not in said_t
+       and not any(gone_u in line and "stays" in line for line in caught72.said)
+       and bytes71(dir_u) == files_u)
+    ok("u. one whose record cannot be read is said plainly: where it came from cannot be "
+       "told, and what is needed can be moved out of it; only the other is tried again",
+       said_t.count("cannot tell where it came from") == 2
+       and said_t.count("can be moved out of that folder") == 2
+       and said_t.count("tried again next time") == 1
+       and "(The Trash said no): it will be tried again next time" in said_t)
+    t72.end_trash(refused_tok)
+    t72.shutdown()
+    for api72 in opened72[:3] + [s72]:
+        api72._library.close()
+
+    print("  what stays only because the library cannot be opened")
+    tmp73 = Path(tempfile.mkdtemp())
+    rec73 = newer_folder(tmp73 / "Rec")
+    held73 = rec73 / "Sunday - 2026-10-04 19-00" / "01 - Polyn"
+    write_wav(held73 / "Gtr.wav", 730, seconds=1.0)
+    files73 = bytes71(held73)
+    ref73 = {"id": 1, "created_at": "2026-10-04T19:00:00", "folder": "Sunday - 2026-10-04 19-00"}
+    token73 = holding71.hold(rec73, {
+        "kind": "take", "reason": "delete", "rows": "kept",
+        "item": {"kind": "take", "rehearsal_id": 1, "take_number": 1},
+        "rehearsal": ref73,
+        "takes": [{"take": {"id": 1, "take_number": 1}, "rehearsal": ref73,
+                   "files": [{"file": str(held73 / "Gtr.wav")}]}],
+        "shared": []}, [held73])
+    _, u73 = fresh_api(tmp73)
+    ok("v. an entry that stays only for want of the library adds nothing to the library's "
+       "own start problem, which is not buried",
+       u73.startup_problems() == [{"name": "LibraryUnavailable", "message": NEWER_DATABASE}]
+       and entries71(rec73) == [token73]
+       and bytes71(rec73 / "_deleting" / token73 / "0" / held73.name) == files73)
+    loose73 = rec73 / "Loose"
+    loose73.mkdir()
+    (loose73 / "f.wav").write_bytes(b"loose")
+    garbled73 = holding71.hold(rec73, {"kind": "draft", "reason": "discard", "rows": "none"},
+                               [loose73])
+    (rec73 / "_deleting" / garbled73 / "record.json").write_text("{not json", encoding="utf-8")
+    _, v73 = fresh_api(tmp73)
+    problems73 = v73.startup_problems()
+    ok("and one that stays for another reason is said first, so the library's comes last, "
+       "on top, and names only itself",
+       [p["name"] for p in problems73] == ["RemovalKept", "LibraryUnavailable"]
+       and str(rec73 / "_deleting" / garbled73) in problems73[0]["message"]
+       and token73 not in problems73[0]["message"]
+       and sorted(entries71(rec73)) == sorted([token73, garbled73]))
+    apimod72.move_to_trash = real_trash71
+
+    print("\n[73] A crop can be undone")
+    # A crop no longer sends the take as it was to the Trash at once: its
+    # "(before crop)" folder waits in _deleting/<token>/ as a removal does,
+    # and the notice offers Undo. Undo exchanges the files, so that the take
+    # has one whole version in its places at every step: the cropped files go
+    # on to the Trash, the uncut ones take their places, and the take's marks,
+    # length and cloud copy come back as they were. The Trash is [71]'s
+    # stand-in.
+    tmp_c = Path(tempfile.mkdtemp())
+    apimod_c, cr = fresh_api(tmp_c)
+    rec_c = cr.recordings_dir
+    drive_c = tmp_c / "Drive"
+    apimod_c.move_to_trash = trash71
+    cr.set_cloud_dir(str(drive_c))
+    cr.set_auto_publish(False, "mix")
+    opened_c = [cr]
+    band_c = [{"name": "Gtr", "channel": 1}, {"name": "Bass", "channel": 2},
+              {"name": "Drums", "mode": "midi", "midi_port": {"name": "TD-17"}}]
+    folder_c = rec_c / "Crops - 2026-10-11 19-00"
+    cr._lib.create_rehearsal(folder_c, "Crops", "2026-10-11T19:00:00", SR, 16, band_c)
+    left_c = ("Keys.midraw", "take.clock", "take.json")
+
+    def take_c(api, folder, number, title, leftovers=False):
+        """A kept take of four seconds, as keep_take leaves one: Gtr.wav and
+        Bass.wav, the kit's Drums.mid, three marks (0.5 s, 1.5 s, 3.8 s), and
+        with `leftovers` a notes file the disk would not make a .mid of, with
+        its clock and its record."""
+        named = api._lib.resolve_name(folder, title, number)
+        take_dir = folder / f"{number:02d} - {named['name']}"
+        write_wav(take_dir / "Gtr.wav", 600 + number, seconds=4.0)
+        write_wav(take_dir / "Bass.wav", 900 + number, seconds=4.0)
+        drums = kit68(take_dir / "Drums.mid")
+        if leftovers:
+            for name in left_c:
+                (take_dir / name).write_bytes(b"%s of take %d" % (name.encode(), number))
+        api._lib.add_take(folder, {
+            "take_number": number, "name": title, "duration_sec": 4.0,
+            "tracks": [{"name": "Gtr", "file": str(take_dir / "Gtr.wav")},
+                       {"name": "Bass", "file": str(take_dir / "Bass.wav")}],
+            "notes": [drums],
+            "markers": [{"at": 0.5, "note": "count-in", "label_id": 1},
+                        {"at": 1.5, "note": "here", "label_id": 2},
+                        {"at": 3.8, "note": "stopped", "label_id": 3}]})
+        return take_dir
+
+    def held_c(token, take_dir):
+        """Where a crop's entry holds the take as it was."""
+        return rec_c / "_deleting" / str(token) / "0" / f"{take_dir.name} (before crop)"
+
+    def marks_c(api, folder, n):
+        return [(m["at"], m["label_id"], m["note"]) for m in api._lib.take(folder, n)["markers"]]
+
+    def length_c(api, folder, n):
+        return api._lib.take(folder, n)["duration_sec"]
+
+    def record_c(token):
+        return (holding71.read(rec_c, token) or {}).get("record") or {}
+
+    def sent_c(mark):
+        """The names of what reached the Trash since `mark`."""
+        return [p.name for p in sent71[mark:]]
+
+    def last_c(name):
+        """What the Trash was last sent under this name, file by file."""
+        found = binned71(name)
+        return bytes71(found[-1]) if found else None
+
+    def drain_c(api):
+        while api._cloud_queue.run_next():
+            pass
+
+    marks_before = [(0.5, 1, "count-in"), (1.5, 2, "here"), (3.8, 3, "stopped")]
+    ref_c = cr._lib.rehearsal_ref(folder_c)
+
+    print("  a crop waits for its Undo")
+    dir1 = take_c(cr, folder_c, 1, "Polyn", leftovers=True)
+    uncut1 = bytes71(dir1)
+    mark_c = len(sent71)
+    cut1 = cr.crop_take(str(folder_c), 1, 1.0, 3.0)
+    token1 = cut1.get("undo") or ""
+    cropped1 = bytes71(dir1)
+    ok("a. a crop answers an Undo token, and says nothing of a Trash",
+       cut1.get("ok") is True and re.fullmatch(r"[0-9a-f]{8}", token1) is not None
+       and "trashed" not in cut1 and "location" not in cut1)
+    ok("the take as it was waits under _deleting/<token>/ as one folder, every file of it "
+       "with its bytes, the notes file not yet made, its clock and record among them",
+       held_c(token1, dir1).is_dir() and bytes71(held_c(token1, dir1)) == uncut1)
+    ok("not beside the take, and not in the Trash",
+       not any(p.name.endswith("(before crop)") for p in folder_c.iterdir())
+       and sent_c(mark_c) == [])
+    ok("its record says it is a crop of take 1, with none of the library's rows going with it",
+       record_c(token1).get("kind") == "crop" and record_c(token1).get("reason") == "crop"
+       and record_c(token1).get("rows") == "none"
+       and record_c(token1).get("item") == {"kind": "take", "rehearsal_id": ref_c["id"],
+                                            "take_number": 1})
+    ok("(the take is cropped: two seconds, the marks outside the region gone, no leftovers)",
+       sorted(cropped1) == ["Bass.wav", "Drums.mid", "Gtr.wav"]
+       and wav_frames(dir1 / "Gtr.wav") == 2 * SR and length_c(cr, folder_c, 1) == 2.0
+       and marks_c(cr, folder_c, 1) == [(0.5, 2, "here")] and cut1.get("markers_dropped") == 2)
+
+    print("  Undo")
+    cr.add_take_marker(str(folder_c), 1, 2.0, "after", 2)
+    cr.player_open(cr._lib.take(folder_c, 1)["tracks"])
+    back1 = cr.undo_trash(token1)
+    ok("b. Undo of a crop says what came back",
+       back1 == {"ok": True, "kind": "crop", "folder": str(folder_c), "take_numbers": [1]})
+    ok("every original is back in its place with its bytes, the notes file, clock and record too",
+       bytes71(dir1) == uncut1)
+    ok("the cropped files went to the Trash, once, as one folder named for the take",
+       sent_c(mark_c) == [f"{dir1.name} (cropped)"] and last_c(f"{dir1.name} (cropped)") == cropped1)
+    ok("the marks are those before the crop, the ones outside the region too, and one placed "
+       "since at 2.0 s is at 2.0 s + the start",
+       marks_c(cr, folder_c, 1) == [(0.5, 1, "count-in"), (1.5, 2, "here"), (3.0, 2, "after"),
+                                    (3.8, 3, "stopped")])
+    ok("the take is as long as it was", length_c(cr, folder_c, 1) == 4.0)
+    ok("its entry is gone", token1 not in entries71(rec_c))
+    ok("the player let go of the cropped take before its files moved",
+       cr.player_state().get("open") is not True)
+    ok("and an Undo done once is done: another says the take is back where it was",
+       cr.undo_trash(token1) == BACK71)
+
+    print("  a take in the cloud")
+    dir2 = take_c(cr, folder_c, 2, "Vesna")
+    cr._copy_to_cloud(str(folder_c), 2, "mix")
+    cut2 = cr.crop_take(str(folder_c), 2, 1.0, 3.0)
+    drain_c(cr)
+    copy2 = Path((cr._lib.take(folder_c, 2)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    ok("(the cropped take is in the cloud folder now, two seconds of it)",
+       copy2.is_file() and wav_frames(copy2) == 2 * SR)
+    mark_c = len(sent71)
+    cr.undo_trash(cut2.get("undo"))
+    ok("c. Undo takes the cropped copy out of the cloud folder",
+       not copy2.exists() and copy2 in sent71[mark_c:])
+    ok("and asks for the whole take to be copied there again, in the shape it had",
+       cr._cloud_queue.states(str(folder_c)).get(2) == "queued"
+       and cr._lib.take(folder_c, 2)["cloud"] == {})
+    drain_c(cr)
+    again2 = Path((cr._lib.take(folder_c, 2)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    ok("which is then the take as it was, four seconds of it",
+       again2.is_file() and wav_frames(again2) == 4 * SR)
+    # A cropped copy another take names now (one that came after it under
+    # the same name): that one stays.
+    cut2 = cr.crop_take(str(folder_c), 2, 1.0, 3.0)
+    drain_c(cr)
+    copy2 = Path((cr._lib.take(folder_c, 2)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    cr._lib.set_cloud_copy(folder_c, 1, {"mix": str(copy2), "mix_format": "wav"}, drive_c)
+    cr.undo_trash(cut2.get("undo"))
+    ok("and leaves a copy another take names now",
+       copy2.is_file() and cr._lib.take(folder_c, 1)["cloud"].get("mix") == str(copy2))
+    cr._lib.set_cloud_copy(folder_c, 1, None, None)
+    drain_c(cr)
+
+    print("  its notice ends")
+    dir3 = take_c(cr, folder_c, 3, "Ogon", leftovers=True)
+    uncut3 = bytes71(dir3)
+    cut3 = cr.crop_take(str(folder_c), 3, 1.0, 3.0)
+    cropped3 = bytes71(dir3)
+    mark_c = len(sent71)
+    ended3 = cr.end_trash(cut3.get("undo"))
+    ok("d. when a crop's notice ends, the take as it was goes to the Trash once, as one folder, "
+       "with its bytes",
+       ended3 == {"ok": True} and sent_c(mark_c) == [f"{dir3.name} (before crop)"]
+       and last_c(f"{dir3.name} (before crop)") == uncut3)
+    ok("its entry is gone, and the take stays cropped",
+       cut3.get("undo") not in entries71(rec_c) and bytes71(dir3) == cropped3
+       and length_c(cr, folder_c, 3) == 2.0)
+
+    print("  cropped twice")
+    dir4 = take_c(cr, folder_c, 4, "Zima")
+    uncut4 = bytes71(dir4)
+    first4 = cr.crop_take(str(folder_c), 4, 1.0, 3.0)
+    once4, marks_once4 = bytes71(dir4), marks_c(cr, folder_c, 4)
+    mark_c = len(sent71)
+    second4 = cr.crop_take(str(folder_c), 4, 0.25, 1.75)
+    ok("f. a take cropped again: the first crop's entry goes to the Trash first, the take as "
+       "it was in it",
+       second4.get("ok") is True and first4.get("undo") not in entries71(rec_c)
+       and sent_c(mark_c) == [f"{dir4.name} (before crop)"]
+       and last_c(f"{dir4.name} (before crop)") == uncut4)
+    ok("and the second crop's entry holds the take as the first one left it",
+       bytes71(held_c(second4.get("undo"), dir4)) == once4)
+    back4 = cr.undo_trash(second4.get("undo"))
+    ok("its Undo brings back the take cropped once: its files, its marks and its length",
+       back4.get("ok") is True and bytes71(dir4) == once4
+       and marks_c(cr, folder_c, 4) == marks_once4 and length_c(cr, folder_c, 4) == 2.0)
+
+    print("  cropped, then deleted")
+    dir5 = take_c(cr, folder_c, 5, "Leto")
+    uncut5 = bytes71(dir5)
+    cut5 = cr.crop_take(str(folder_c), 5, 1.0, 3.0)
+    cropped5 = bytes71(dir5)
+    mark_c = len(sent71)
+    gone5 = cr.delete_take(str(folder_c), 5)
+    ok("g. deleting a cropped take sends its crop's entry to the Trash first, the take as it "
+       "was in it",
+       gone5.get("ok") is True and cut5.get("undo") not in entries71(rec_c)
+       and sent_c(mark_c) == [f"{dir5.name} (before crop)"]
+       and last_c(f"{dir5.name} (before crop)") == uncut5)
+    back5 = cr.undo_trash(gone5.get("undo"))
+    ok("and Undo of the delete brings back the take cropped",
+       back5.get("ok") is True and bytes71(dir5) == cropped5 and length_c(cr, folder_c, 5) == 2.0)
+
+    print("  refused, and failing part way")
+    dir6 = take_c(cr, folder_c, 6, "Osen", leftovers=True)
+    uncut6 = bytes71(dir6)
+    token6 = cr.crop_take(str(folder_c), 6, 1.0, 3.0).get("undo")
+    cropped6 = bytes71(dir6)
+    marks_cut6 = marks_c(cr, folder_c, 6)
+    (dir6 / "take.json").write_bytes(b"someone else's")
+    refused6 = cr.undo_trash(token6)
+    ok("i. an Undo whose uncut file's place is taken says so, and moves nothing",
+       refused6 == {"ok": False, "error": f"Something else is in its place now: {dir6 / 'take.json'}"}
+       and bytes71(dir6) == {**cropped6, "take.json": b"someone else's"}
+       and bytes71(held_c(token6, dir6)) == uncut6 and record_c(token6).get("rows") == "none"
+       and length_c(cr, folder_c, 6) == 2.0)
+    (dir6 / "take.json").unlink()
+
+    class Halting_c:
+        """os, except that the uncut Gtr.wav will not go to its place: the
+        third file, with Bass.wav and Drums.mid exchanged already."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def rename(self, src, dst):
+            if Path(dst) == dir6 / "Gtr.wav" and "(before crop)" in str(src):
+                raise PermissionError(13, "The file is being used by another process", str(src))
+            return os71.rename(src, dst)
+
+    cr.player_open(cr._lib.take(folder_c, 6)["tracks"])
+    holding71.os = Halting_c()
+    stopped6 = cr.undo_trash(token6)
+    holding71.os = os71
+    ok("j. an Undo that fails part way says so, and leaves the take cropped and whole",
+       stopped6.get("ok") is False and "being used" in str(stopped6.get("error"))
+       and bytes71(dir6) == cropped6 and length_c(cr, folder_c, 6) == 2.0
+       and marks_c(cr, folder_c, 6) == marks_cut6)
+    ok("its entry waiting as it was, with no folder of cropped files left in it",
+       bytes71(held_c(token6, dir6)) == uncut6 and record_c(token6).get("rows") == "none"
+       and sorted(os71.listdir(rec_c / "_deleting" / str(token6))) == ["0", "record.json"])
+    ok("and the take it was playing open again", cr.player_state().get("open") is True)
+    cr.player_close()
+    ok("an Undo tried again goes through",
+       cr.undo_trash(token6).get("ok") is True and bytes71(dir6) == uncut6
+       and marks_c(cr, folder_c, 6) == marks_before)
+
+    print("  the library refuses")
+    dir7 = take_c(cr, folder_c, 7, "Pesnya")
+    uncut7 = bytes71(dir7)
+    token7 = cr.crop_take(str(folder_c), 7, 1.0, 3.0).get("undo")
+    cropped7 = bytes71(dir7)
+
+    def locked_c(*args, **kwargs):
+        raise RuntimeError("database is locked")
+
+    cr._lib.uncrop_take = locked_c
+    locked7 = cr.undo_trash(token7)
+    del cr._lib.uncrop_take
+    ok("n. an Undo whose marks and length the library will not take back says so, and the "
+       "cropped take is put back in its places, its entry waiting as it was",
+       locked7 == {"ok": False, "error": "Could not put it back: database is locked"}
+       and bytes71(dir7) == cropped7
+       and bytes71(held_c(token7, dir7)) == uncut7 and record_c(token7).get("rows") == "none"
+       and length_c(cr, folder_c, 7) == 2.0)
+    ok("and it can be undone once the library will",
+       cr.undo_trash(token7).get("ok") is True and bytes71(dir7) == uncut7)
+
+    print("  the Trash refuses the cropped files")
+    dir8 = take_c(cr, folder_c, 8, "Dozhd")
+    uncut8 = bytes71(dir8)
+    token8 = cr.crop_take(str(folder_c), 8, 1.0, 3.0).get("undo")
+    cropped8 = bytes71(dir8)
+
+    def refusing_c(path, fallback_root=None):
+        return {"ok": False, "error": "The Trash said no"}
+
+    apimod_c.move_to_trash = refusing_c
+    back8 = cr.undo_trash(token8)
+    apimod_c.move_to_trash = trash71
+    ok("p. an Undo goes through when the Trash refuses the cropped files, which wait in its "
+       "entry for the next end",
+       back8.get("ok") is True and bytes71(dir8) == uncut8 and length_c(cr, folder_c, 8) == 4.0
+       and token8 in entries71(rec_c) and record_c(token8).get("undone") is True)
+    ok("and Undo again says the take is back where it was",
+       cr.undo_trash(token8) == BACK71)
+    mark_c = len(sent71)
+    ok("its end sends on only the cropped files",
+       cr.end_trash(token8) == {"ok": True} and sent_c(mark_c) == [f"{dir8.name} (cropped)"]
+       and last_c(f"{dir8.name} (cropped)") == cropped8 and token8 not in entries71(rec_c)
+       and bytes71(dir8) == uncut8)
+
+    print("  the uncut take cannot be held")
+    dir9 = take_c(cr, folder_c, 9, "Mart")
+    uncut9 = bytes71(dir9)
+    waiting_c = entries71(rec_c)
+    mark_c = len(sent71)
+    real_write_c = holding71._write
+
+    def no_room_c(entry, data):
+        raise OSError(28, "No space left on device")
+
+    holding71._write = no_room_c
+    cut9 = cr.crop_take(str(folder_c), 9, 1.0, 3.0)
+    holding71._write = real_write_c
+    beside9 = folder_c / f"{dir9.name} (before crop)"
+    ok("m. a crop whose uncut take cannot wait for an Undo is done all the same, with no Undo, "
+       "and says why and where that take is",
+       cut9.get("ok") is True and cut9.get("undo") is None
+       and "No space" in str(cut9.get("error")) and str(beside9) in str(cut9.get("error"))
+       and wav_frames(dir9 / "Gtr.wav") == 2 * SR)
+    ok("which is beside the take, every file with its bytes, and nothing went to the Trash",
+       bytes71(beside9) == uncut9 and sent_c(mark_c) == [] and entries71(rec_c) == waiting_c)
+
+    print("  renamed while it waits")
+    may_c = rec_c / "May - 2026-05-01 19-00"
+    cr._lib.create_rehearsal(may_c, "May", "2026-05-01T19:00:00", SR, 16, band_c)
+    dir_m = take_c(cr, may_c, 1, "Polyn", leftovers=True)
+    uncut_m = bytes71(dir_m)
+    token_m = cr.crop_take(str(may_c), 1, 1.0, 3.0).get("undo")
+    renamed_m = cr.rename_take(str(may_c), 1, "Vesna")
+    june_c = Path(cr.rename_rehearsal(str(may_c), "June")["folder"])
+    now_m = Path(cr._lib.take(june_c, 1)["tracks"][0]["file"]).parent
+    ok("(the take and its rehearsal were renamed while the crop waits)",
+       renamed_m.get("ok") is True and now_m.parent == june_c and now_m.name != dir_m.name
+       and not may_c.exists())
+    mark_c = len(sent71)
+    back_m = cr.undo_trash(token_m)
+    ok("l. Undo puts the take as it was into the take's folder as it is now, in the rehearsal's",
+       back_m == {"ok": True, "kind": "crop", "folder": str(june_c), "take_numbers": [1]}
+       and bytes71(now_m) == uncut_m and not may_c.exists() and not dir_m.exists())
+    ok("and the cropped files reach the Trash named for the take as it is now",
+       sent_c(mark_c) == [f"{now_m.name} (cropped)"])
+
+    print("  a draft")
+    cr.start_rehearsal("Live", None, SR, band_c[:2], 16)
+    live_c = Path(cr._session["folder"])
+
+    def draft_c(n):
+        """A draft on the review screen: two WAVs and the kit's .mid."""
+        where = live_c / "_drafts" / f"take {n}"
+        write_wav(where / "Gtr.wav", 300 + n, seconds=4.0)
+        write_wav(where / "Bass.wav", 400 + n, seconds=4.0)
+        note = kit68(where / "Drums.mid")
+        return where, [{"name": "Gtr", "file": str(where / "Gtr.wav")},
+                       {"name": "Bass", "file": str(where / "Bass.wav")}], note
+
+    d1, tracks_d1, note_d1 = draft_c(1)
+    uncut_d1 = bytes71(d1)
+    cut_d1 = cr.crop_draft(str(d1), tracks_d1, 1.0, 3.0, notes=[note_d1])
+    cropped_d1 = bytes71(d1)
+    ok("(a draft's crop answers an Undo, the draft as it was waiting for it)",
+       cut_d1.get("ok") is True and isinstance(cut_d1.get("undo"), str)
+       and "trashed" not in cut_d1 and "location" not in cut_d1
+       and bytes71(held_c(cut_d1.get("undo"), d1)) == uncut_d1
+       and wav_frames(d1 / "Gtr.wav") == 2 * SR)
+    mark_c = len(sent71)
+    back_d1 = cr.undo_trash(cut_d1.get("undo"))
+    ok("e. Undo of a draft's crop puts its WAVs and its .mid back, and says where",
+       back_d1 == {"ok": True, "kind": "crop", "temp_dir": str(d1)} and bytes71(d1) == uncut_d1)
+    ok("the cropped ones went to the Trash as one folder",
+       sent_c(mark_c) == ["take 1 (cropped)"] and last_c("take 1 (cropped)") == cropped_d1)
+
+    cut_d1 = cr.crop_draft(str(d1), tracks_d1, 1.0, 3.0, notes=[note_d1])
+    live_c = Path(cr.rename_rehearsal(str(live_c), "Live renamed")["folder"])
+    d1 = live_c / "_drafts" / "take 1"
+    ok("and into its rehearsal's new folder when that was renamed meanwhile",
+       cr.undo_trash(cut_d1.get("undo")) == {"ok": True, "kind": "crop", "temp_dir": str(d1)}
+       and bytes71(d1) == uncut_d1)
+
+    d2, tracks_d2, note_d2 = draft_c(2)
+    uncut_d2 = bytes71(d2)
+    cut_d2 = cr.crop_draft(str(d2), tracks_d2, 1.0, 3.0, notes=[note_d2])
+    mark_c = len(sent71)
+    cr._session["take_counter"] = 2
+    kept_d2 = cr.keep_take(2, str(d2), "Kept", cut_d2.get("duration_sec"), tracks_d2,
+                           notes=[note_d2])
+    ok("h. saving a cropped draft sends its crop's entry to the Trash first, the draft as it was in it",
+       kept_d2.get("ok") is True and cut_d2.get("undo") not in entries71(rec_c)
+       and sent_c(mark_c) == ["take 2 (before crop)"] and last_c("take 2 (before crop)") == uncut_d2)
+
+    d3, tracks_d3, note_d3 = draft_c(3)
+    uncut_d3 = bytes71(d3)
+    cut_d3 = cr.crop_draft(str(d3), tracks_d3, 1.0, 3.0, notes=[note_d3])
+    cropped_d3 = bytes71(d3)
+    mark_c = len(sent71)
+    dropped_d3 = cr.discard_take(str(d3))
+    ok("and so does discarding it: the crop's entry first, the draft as it was in it",
+       dropped_d3.get("ok") is True and cut_d3.get("undo") not in entries71(rec_c)
+       and sent_c(mark_c) == ["take 3 (before crop)"] and last_c("take 3 (before crop)") == uncut_d3)
+    ok("and Undo of the discard brings back the draft cropped",
+       cr.undo_trash(dropped_d3.get("undo")).get("ok") is True and bytes71(d3) == cropped_d3)
+
+    # A draft discarded, and another one recorded under its name since: a
+    # crop of the new one ends only an earlier crop of it, not that discard.
+    d5, tracks_d5, note_d5 = draft_c(5)
+    dropped_d5 = cr.discard_take(str(d5))
+    d5, tracks_d5, note_d5 = draft_c(5)
+    cut_d5 = cr.crop_draft(str(d5), tracks_d5, 1.0, 3.0, notes=[note_d5])
+    ok("v. cropping a draft leaves the Undo of another draft discarded under its name waiting",
+       dropped_d5.get("ok") is True and cut_d5.get("ok") is True
+       and dropped_d5.get("undo") in entries71(rec_c) and cut_d5.get("undo") in entries71(rec_c))
+    # A draft the app cannot tell an item for (_draft_identity None: a
+    # folder it cannot place in the recordings folder), with others waiting.
+    d6, tracks_d6, note_d6 = draft_c(6)
+    uncut_d6 = bytes71(d6)
+    cr._draft_identity = lambda *args, **kwargs: None
+    cut_d6 = cr.crop_draft(str(d6), tracks_d6, 1.0, 3.0, notes=[note_d6])
+    del cr._draft_identity
+    ok("a draft the app cannot tell an item for is cropped all the same, and its crop undone",
+       cut_d6.get("ok") is True
+       and cr.undo_trash(cut_d6.get("undo")) == {"ok": True, "kind": "crop", "temp_dir": str(d6)}
+       and bytes71(d6) == uncut_d6)
+    # A discard of the draft arriving while it is being cropped, as from
+    # another thread: before the crop's first os.replace, its files aside.
+    d7, tracks_d7, note_d7 = draft_c(7)
+    during_d7 = {}
+
+    class Discarding_c:
+        """os, except that the crop's first os.replace is preceded by a
+        discard of the draft."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def replace(self, src, dst):
+            if "answer" not in during_d7:
+                during_d7["answer"] = cr.discard_take(str(d7))
+                during_d7["keep"] = cr.keep_take(7, str(d7), "Kept", 4.0, tracks_d7,
+                                                 notes=[note_d7])
+                during_d7["recover"] = cr.recover_draft(str(d7))
+            return os71.replace(src, dst)
+
+    apimod_c.os = Discarding_c()
+    cut_d7 = cr.crop_draft(str(d7), tracks_d7, 1.0, 3.0, notes=[note_d7])
+    apimod_c.os = os71
+    ok("a draft being cropped is not discarded meanwhile: that waits until the crop is done",
+       during_d7.get("answer") == {"ok": False, "error": "Wait until the crop is done."}
+       and cut_d7.get("ok") is True and wav_frames(d7 / "Gtr.wav") == 2 * SR)
+    ok("nor saved, nor rescued as a take",
+       during_d7.get("keep") == {"ok": False, "error": "Wait until the crop is done."}
+       and during_d7.get("recover") == {"ok": False, "error": "Wait until the crop is done."})
+    cr.end_trash(cut_d7.get("undo"))
+    cr.end_trash(cut_d5.get("undo"))
+    cr.end_trash(dropped_d5.get("undo"))
+
+    d4, tracks_d4, note_d4 = draft_c(4)
+    uncut_d4 = bytes71(d4)
+    cut_d4 = cr.crop_draft(str(d4), tracks_d4, 1.0, 3.0, notes=[note_d4])
+    cr.finish_rehearsal()
+    mark_c = len(sent71)
+    recovered_d4 = cr.recover_draft(str(d4))
+    ok("and so does rescuing it from the Drafts screen",
+       recovered_d4.get("ok") is True and cut_d4.get("undo") not in entries71(rec_c)
+       and "take 4 (before crop)" in sent_c(mark_c)
+       and last_c("take 4 (before crop)") == uncut_d4)
+
+    print("  the app dies during an Undo")
+    dir10 = take_c(cr, folder_c, 10, "Iyul", leftovers=True)
+    uncut10 = bytes71(dir10)
+    token10 = cr.crop_take(str(folder_c), 10, 1.0, 3.0).get("undo")
+    cropped10 = bytes71(dir10)
+    cr.add_take_marker(str(folder_c), 10, 2.0, "after", 2)
+    cr._lib.uncrop_take = crash72
+    try:
+        cr.undo_trash(token10)
+    except Crash72:
+        pass
+    del cr._lib.uncrop_take
+    ok("(the uncut files are in their places, the take's marks and length not yet, and its "
+       "entry says an Undo is under way)",
+       bytes71(dir10) == uncut10 and length_c(cr, folder_c, 10) == 2.0
+       and record_c(token10).get("rows") == "restoring")
+    mark_c = len(sent71)
+    cr_k = fresh_api(tmp_c)[1]
+    opened_c.append(cr_k)
+    ok("k. the next start finishes it: the take as it was, its marks and its length, and the "
+       "cropped files in the Trash",
+       bytes71(dir10) == uncut10 and length_c(cr_k, folder_c, 10) == 4.0
+       and marks_c(cr_k, folder_c, 10) == [*marks_before[:2], (3.0, 2, "after"), marks_before[2]]
+       and sent_c(mark_c) == [f"{dir10.name} (cropped)"]
+       and last_c(f"{dir10.name} (cropped)") == cropped10 and token10 not in entries71(rec_c))
+
+    dir11 = take_c(cr_k, folder_c, 11, "Avgust")
+    uncut11 = bytes71(dir11)
+    token11 = cr_k.crop_take(str(folder_c), 11, 1.0, 3.0).get("undo")
+    cr_k.add_take_marker(str(folder_c), 11, 2.0, "after", 2)
+    real_update_c = holding71.update
+
+    def done_dies_c(recordings, token, record):
+        if record.get("undone"):
+            raise Crash72()
+        return real_update_c(recordings, token, record)
+
+    holding71.update = done_dies_c
+    try:
+        cr_k.undo_trash(token11)
+    except Crash72:
+        pass
+    holding71.update = real_update_c
+    ok("(the marks and the length are back, and the record still says an Undo is under way)",
+       length_c(cr_k, folder_c, 11) == 4.0 and record_c(token11).get("rows") == "restoring")
+    cr_k2 = fresh_api(tmp_c)[1]
+    opened_c.append(cr_k2)
+    ok("finished at the next start, the marks are put back once, not shifted again",
+       marks_c(cr_k2, folder_c, 11) == [*marks_before[:2], (3.0, 2, "after"), marks_before[2]]
+       and length_c(cr_k2, folder_c, 11) == 4.0 and bytes71(dir11) == uncut11
+       and token11 not in entries71(rec_c))
+
+    dir12 = take_c(cr_k2, folder_c, 12, "Sentyabr", leftovers=True)
+    uncut12 = bytes71(dir12)
+    token12 = cr_k2.crop_take(str(folder_c), 12, 1.0, 3.0).get("undo")
+    cropped12 = bytes71(dir12)
+    renames_c = {"n": 0}
+
+    class Dying_c:
+        """os, except that the app dies at the fourth rename of the exchange:
+        Bass.wav exchanged, the cropped Drums.mid out of its place, the uncut
+        one not yet in it."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def rename(self, src, dst):
+            renames_c["n"] += 1
+            if renames_c["n"] == 4:
+                raise Crash72()
+            return os71.rename(src, dst)
+
+    holding71.os = Dying_c()
+    try:
+        cr_k2.undo_trash(token12)
+    except Crash72:
+        pass
+    holding71.os = os71
+    ok("(the app died with the take half exchanged, one of its places empty)",
+       not (dir12 / "Drums.mid").exists() and (dir12 / "Bass.wav").read_bytes() == uncut12["Bass.wav"]
+       and (dir12 / "Gtr.wav").read_bytes() == cropped12["Gtr.wav"]
+       and record_c(token12).get("rows") == "restoring")
+    mark_c = len(sent71)
+    cr_k3 = fresh_api(tmp_c)[1]
+    opened_c.append(cr_k3)
+    ok("the next start finishes the exchange: every uncut file in its place, every cropped one in "
+       "the Trash",
+       bytes71(dir12) == uncut12 and length_c(cr_k3, folder_c, 12) == 4.0
+       and sent_c(mark_c) == [f"{dir12.name} (cropped)"]
+       and last_c(f"{dir12.name} (cropped)") == cropped12 and token12 not in entries71(rec_c))
+
+    dir14 = take_c(cr_k3, folder_c, 14, "Noyabr")
+    uncut14 = bytes71(dir14)
+    token14 = cr_k3.crop_take(str(folder_c), 14, 1.0, 3.0).get("undo")
+    cropped14 = bytes71(dir14)
+    real_drop_c = holding71.drop_empty
+    holding71.drop_empty = crash72
+    try:
+        cr_k3.undo_trash(token14)
+    except Crash72:
+        pass
+    holding71.drop_empty = real_drop_c
+    ok("(the app died once the Undo was recorded as done, the folder the uncut files waited in "
+       "still there, empty)",
+       bytes71(dir14) == uncut14 and record_c(token14).get("undone") is True
+       and held_c(token14, dir14).is_dir() and not any(held_c(token14, dir14).iterdir()))
+    ok("q. an Undo done, whatever is left of its entry, is done: another says the take is back "
+       "where it was, and the marks stay as they came back",
+       cr_k3.undo_trash(token14) == BACK71
+       and marks_c(cr_k3, folder_c, 14) == marks_before and length_c(cr_k3, folder_c, 14) == 4.0
+       and bytes71(dir14) == uncut14)
+    mark_c = len(sent71)
+    ok("and its end sends on only the cropped files, not the empty folder",
+       cr_k3.end_trash(token14) == {"ok": True} and sent_c(mark_c) == [f"{dir14.name} (cropped)"]
+       and last_c(f"{dir14.name} (cropped)") == cropped14 and token14 not in entries71(rec_c)
+       and bytes71(dir14) == uncut14)
+
+    print("  two files of one name")
+    # A take whose tracks are in two folders, one file name in both: put
+    # aside into one folder, the second would land on the first.
+    dir15 = folder_c / "15 - Dekabr"
+    other15 = folder_c / "15 - Dekabr, the rest" / "Gtr.wav"
+    write_wav(dir15 / "Gtr.wav", 615, seconds=4.0)
+    write_wav(other15, 915, seconds=4.0)
+    cr_k3._lib.add_take(folder_c, {
+        "take_number": 15, "name": "Dekabr", "duration_sec": 4.0,
+        "tracks": [{"name": "Gtr", "file": str(dir15 / "Gtr.wav")},
+                   {"name": "Bass", "file": str(other15)}],
+        "notes": [], "markers": []})
+    both15 = (bytes71(dir15), bytes71(other15.parent))
+    mark_c = len(sent71)
+    cut15 = cr_k3.crop_take(str(folder_c), 15, 1.0, 3.0)
+    ok("r. a crop of a take two of whose files have one name, in two folders, is refused, and "
+       "both stay as they were",
+       cut15.get("ok") is False
+       and "two of the take's files are called Gtr.wav" in str(cut15.get("error"))
+       and (bytes71(dir15), bytes71(other15.parent)) == both15
+       and length_c(cr_k3, folder_c, 15) == 4.0 and sent_c(mark_c) == []
+       and not (folder_c / f"{dir15.name} (before crop)").exists())
+
+    print("  its marks changed meanwhile")
+    take_c(cr_k3, folder_c, 16, "Yanvar")
+    token16 = cr_k3.crop_take(str(folder_c), 16, 1.0, 3.0).get("undo")
+    cr_k3.update_take_marker(str(folder_c), 16, 0.5, note="there")
+    ok("s. a mark the crop kept, its note changed since, comes back at its time before the crop "
+       "with its new note",
+       cr_k3.undo_trash(token16).get("ok") is True
+       and marks_c(cr_k3, folder_c, 16) == [(0.5, 1, "count-in"), (1.5, 2, "there"),
+                                            (3.8, 3, "stopped")])
+    take_c(cr_k3, folder_c, 17, "Fevral")
+    token17 = cr_k3.crop_take(str(folder_c), 17, 1.0, 3.0).get("undo")
+    cr_k3.remove_take_marker(str(folder_c), 17, 0.5)
+    ok("and one deleted since stays deleted",
+       cr_k3.undo_trash(token17).get("ok") is True
+       and marks_c(cr_k3, folder_c, 17) == [(0.5, 1, "count-in"), (3.8, 3, "stopped")])
+
+    print("  a place taken while the app is down")
+    dir18 = take_c(cr_k3, folder_c, 18, "Aprel", leftovers=True)
+    uncut18 = bytes71(dir18)
+    token18 = cr_k3.crop_take(str(folder_c), 18, 1.0, 3.0).get("undo")
+    cropped18 = bytes71(dir18)
+    renames_c["n"] = 0
+    holding71.os = Dying_c()
+    try:
+        cr_k3.undo_trash(token18)
+    except Crash72:
+        pass
+    holding71.os = os71
+    (dir18 / "take.json").write_bytes(b"someone else's")
+    mark_c = len(sent71)
+    cr_t = fresh_api(tmp_c)[1]
+    opened_c.append(cr_t)
+    ok("t. an Undo the app died in, one of whose places something else took meanwhile, is taken "
+       "back at the next start: the take cropped and whole, and that something as it was",
+       bytes71(dir18) == {**cropped18, "take.json": b"someone else's"}
+       and length_c(cr_t, folder_c, 18) == 2.0 and marks_c(cr_t, folder_c, 18) == [(0.5, 2, "here")])
+    ok("and its notice being over, the take as it was goes to the Trash, every file of it",
+       sent_c(mark_c) == [f"{dir18.name} (before crop)"]
+       and last_c(f"{dir18.name} (before crop)") == uncut18 and token18 not in entries71(rec_c))
+
+    print("  its rehearsal's folder not there at the next start")
+    dir19 = take_c(cr_t, folder_c, 19, "Maiskaya", leftovers=True)
+    uncut19 = bytes71(dir19)
+    token19 = cr_t.crop_take(str(folder_c), 19, 1.0, 3.0).get("undo")
+    cropped19 = bytes71(dir19)
+    renames_c["n"] = 0
+    holding71.os = Dying_c()
+    try:
+        cr_t.undo_trash(token19)
+    except Crash72:
+        pass
+    holding71.os = os71
+    entry19 = rec_c / "_deleting" / str(token19)
+    held19 = bytes71(entry19)
+    os71.rename(folder_c, tmp_c / "unplugged")
+    mark_c = len(sent71)
+    cr_u = fresh_api(tmp_c)[1]
+    opened_c.append(cr_u)
+    problems_u = cr_u.startup_problems()
+    ok("u. an Undo the app died in, its rehearsal's folder not on disk at the next start, waits "
+       "as it is, and nothing goes to the Trash",
+       record_c(token19).get("rows") == "restoring" and bytes71(entry19) == held19
+       and sent_c(mark_c) == [])
+    ok("said once among the start problems, naming its folder",
+       [p["name"] for p in problems_u] == ["RemovalKept"]
+       and str(entry19) in problems_u[0]["message"])
+    os71.rename(tmp_c / "unplugged", folder_c)
+    cr_u2 = fresh_api(tmp_c)[1]
+    opened_c.append(cr_u2)
+    ok("and once the folder is back, the next start finishes the Undo",
+       bytes71(dir19) == uncut19 and length_c(cr_u2, folder_c, 19) == 4.0
+       and marks_c(cr_u2, folder_c, 19) == marks_before
+       and sent_c(mark_c) == [f"{dir19.name} (cropped)"]
+       and last_c(f"{dir19.name} (cropped)") == cropped19 and token19 not in entries71(rec_c))
+
+    print("  its take gone from the library")
+    dir20 = take_c(cr_u2, folder_c, 20, "Iyun")
+    uncut20 = bytes71(dir20)
+    token20 = cr_u2.crop_take(str(folder_c), 20, 1.0, 3.0).get("undo")
+    cropped20 = bytes71(dir20)
+    cr_u2._lib.delete_take(folder_c, 20)
+    ok("w. Undo of a crop whose take the library no longer has says so, and moves nothing",
+       cr_u2.undo_trash(token20) == {"ok": False, "error": "Its take is gone."}
+       and bytes71(dir20) == cropped20 and bytes71(held_c(token20, dir20)) == uncut20
+       and record_c(token20).get("rows") == "none")
+    cr_u2.end_trash(token20)
+
+    print("  the library failing before anything moves")
+    dir21 = take_c(cr_u2, folder_c, 21, "Rassvet")
+    uncut21 = bytes71(dir21)
+    token21 = cr_u2.crop_take(str(folder_c), 21, 1.0, 3.0).get("undo")
+    cropped21 = bytes71(dir21)
+    cr_u2._lib.take_record = locked_c
+    read21 = cr_u2.undo_trash(token21)
+    del cr_u2._lib.take_record
+    ok("an Undo whose take the library cannot read says so, and moves nothing",
+       read21 == {"ok": False, "error": "Could not put it back: database is locked"}
+       and bytes71(dir21) == cropped21 and bytes71(held_c(token21, dir21)) == uncut21
+       and record_c(token21).get("rows") == "none")
+    cr_u2.end_trash(token21)
+
+    print("  a second crop that fails")
+    dir22 = take_c(cr_u2, folder_c, 22, "Zakat")
+    uncut22 = bytes71(dir22)
+    first22 = cr_u2.crop_take(str(folder_c), 22, 1.0, 3.0)
+    cropped22 = bytes71(dir22)
+    real_crop_wav_c = apimod_c.crop_wav
+
+    def unreadable_c(src, dst, start_sec, end_sec, progress=None, **kwargs):
+        return {"ok": False, "error": "The file cannot be read"}
+
+    apimod_c.crop_wav = unreadable_c
+    second22 = cr_u2.crop_take(str(folder_c), 22, 0.25, 1.75)
+    apimod_c.crop_wav = real_crop_wav_c
+    ok("a second crop that fails leaves the first one's Undo waiting",
+       second22.get("ok") is False and bytes71(dir22) == cropped22
+       and first22.get("undo") in entries71(rec_c))
+    ok("and that Undo brings back the take as it was",
+       cr_u2.undo_trash(first22.get("undo")).get("ok") is True and bytes71(dir22) == uncut22
+       and length_c(cr_u2, folder_c, 22) == 4.0)
+
+    print("  an Undo that cannot be taken back")
+    dir23 = take_c(cr_u2, folder_c, 23, "Polden")
+    uncut23 = bytes71(dir23)
+    token23 = cr_u2.crop_take(str(folder_c), 23, 1.0, 3.0).get("undo")
+    cropped23 = bytes71(dir23)
+    jammed_c = {"place": dir23 / "Gtr.wav"}
+
+    class Jammed_c:
+        """os, except that nothing goes into one place: neither the uncut
+        Gtr.wav nor, when that is taken back, the cropped one."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def rename(self, src, dst):
+            if Path(dst) == jammed_c["place"]:
+                raise PermissionError(13, "The file is being used by another process", str(src))
+            return os71.rename(src, dst)
+
+    holding71.os = Jammed_c()
+    stuck23 = cr_u2.undo_trash(token23)
+    holding71.os = os71
+    ok("an Undo that fails part way and cannot be taken back says it will be finished",
+       stuck23 == {"ok": False, "finishing": True,
+                   "error": "It is being put back; it will be finished when the notice goes."}
+       and record_c(token23).get("rows") == "restoring")
+    mark_c = len(sent71)
+    ok("and the end of its notice finishes it: the take as it was, the cropped files in the Trash",
+       cr_u2.end_trash(token23) == {"ok": True} and bytes71(dir23) == uncut23
+       and length_c(cr_u2, folder_c, 23) == 4.0 and marks_c(cr_u2, folder_c, 23) == marks_before
+       and sent_c(mark_c) == [f"{dir23.name} (cropped)"]
+       and last_c(f"{dir23.name} (cropped)") == cropped23 and token23 not in entries71(rec_c))
+    dir24 = take_c(cr_u2, folder_c, 24, "Polnoch")
+    uncut24 = bytes71(dir24)
+    token24 = cr_u2.crop_take(str(folder_c), 24, 1.0, 3.0).get("undo")
+    jammed_c["place"] = dir24 / "Gtr.wav"
+    holding71.os = Jammed_c()
+    cr_u2.undo_trash(token24)
+    holding71.os = os71
+    again24 = cr_u2.crop_take(str(folder_c), 24, 1.0, 3.0)
+    ok("a crop of a take whose Undo was left part way finishes that Undo first, and crops the "
+       "take as it was",
+       again24.get("ok") is True and token24 not in entries71(rec_c)
+       and bytes71(held_c(again24.get("undo"), dir24)) == uncut24
+       and wav_frames(dir24 / "Gtr.wav") == 2 * SR and length_c(cr_u2, folder_c, 24) == 2.0)
+    cr_u2.end_trash(again24.get("undo"))
+
+    print("  the app dies before an Undo's cloud step")
+    take_c(cr_u2, folder_c, 25, "Tuman")
+    cr_u2._copy_to_cloud(str(folder_c), 25, "mix")
+    token25 = cr_u2.crop_take(str(folder_c), 25, 1.0, 3.0).get("undo")
+    drain_c(cr_u2)
+    copy25 = Path((cr_u2._lib.take(folder_c, 25)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    holding71.drop_empty = crash72
+    try:
+        cr_u2.undo_trash(token25)
+    except Crash72:
+        pass
+    holding71.drop_empty = real_drop_c
+    ok("(the app died with the Undo recorded as done, the cropped copy still in the cloud folder)",
+       record_c(token25).get("undone") is True and copy25.is_file()
+       and wav_frames(copy25) == 2 * SR)
+    cr_v = fresh_api(tmp_c)[1]
+    opened_c.append(cr_v)
+    ok("the next start takes the cropped copy out of the cloud folder, and asks for the take as "
+       "it was to be copied there",
+       not copy25.exists() and copy25 in sent71
+       and cr_v._cloud_queue.states(str(folder_c)).get(25) == "queued"
+       and token25 not in entries71(rec_c))
+    drain_c(cr_v)
+    again25 = Path((cr_v._lib.take(folder_c, 25)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    ok("which is then the take as it was", again25.is_file() and wav_frames(again25) == 4 * SR)
+
+    dir26 = take_c(cr_v, folder_c, 26, "Veter")
+    uncut26 = bytes71(dir26)
+    cr_v._copy_to_cloud(str(folder_c), 26, "mix")
+    token26 = cr_v.crop_take(str(folder_c), 26, 1.0, 3.0).get("undo")
+    drain_c(cr_v)
+    copy26 = Path((cr_v._lib.take(folder_c, 26)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    cr_v._lib.cloud_paths = locked_c
+    back26 = cr_v.undo_trash(token26)
+    del cr_v._lib.cloud_paths
+    ok("an Undo whose cloud step the library refuses is done all the same",
+       back26.get("ok") is True and bytes71(dir26) == uncut26
+       and length_c(cr_v, folder_c, 26) == 4.0)
+    ok("and its entry waits with that step, which its end does",
+       token26 in entries71(rec_c) and isinstance(record_c(token26).get("cloud"), dict)
+       and cr_v.end_trash(token26) == {"ok": True} and not copy26.exists()
+       and cr_v._cloud_queue.states(str(folder_c)).get(26) == "queued"
+       and token26 not in entries71(rec_c))
+    drain_c(cr_v)
+
+    print("  its cloud copy changed while the crop waited")
+    take_c(cr_v, folder_c, 27, "Grom")
+    cr_v._copy_to_cloud(str(folder_c), 27, "mix")
+    token27 = cr_v.crop_take(str(folder_c), 27, 1.0, 3.0).get("undo")
+    drain_c(cr_v)
+    cr_v.unshare_take(str(folder_c), 27)
+    cr_v.undo_trash(token27)
+    ok("a take taken out of the cloud folder since its crop is not sent there again by its Undo",
+       length_c(cr_v, folder_c, 27) == 4.0 and cr_v._lib.take(folder_c, 27)["cloud"] == {}
+       and cr_v._cloud_queue.states(str(folder_c)).get(27) is None)
+    take_c(cr_v, folder_c, 28, "Sneg")
+    token28 = cr_v.crop_take(str(folder_c), 28, 1.0, 3.0).get("undo")
+    cr_v.share_take(str(folder_c), 28, "mix")
+    drain_c(cr_v)
+    copy28 = Path((cr_v._lib.take(folder_c, 28)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    ok("(the cropped take was sent to the cloud folder while its crop waited)",
+       copy28.is_file() and wav_frames(copy28) == 2 * SR)
+    cr_v.undo_trash(token28)
+    ok("and one sent there since has its cropped copy taken out, and is sent there again",
+       not copy28.exists() and copy28 in sent71
+       and cr_v._cloud_queue.states(str(folder_c)).get(28) == "queued")
+    drain_c(cr_v)
+    again28 = Path((cr_v._lib.take(folder_c, 28)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    ok("the take as it was, as a mix", again28.is_file() and wav_frames(again28) == 4 * SR)
+
+    print("  an Undo that cannot say it is under way")
+    dir29 = take_c(cr_v, folder_c, 29, "Led")
+    token29 = cr_v.crop_take(str(folder_c), 29, 1.0, 3.0).get("undo")
+    cropped29 = bytes71(dir29)
+    cr_v.player_open(cr_v._lib.take(folder_c, 29)["tracks"])
+
+    def restoring_full_c(recordings, token, record):
+        if record.get("rows") == "restoring":
+            raise OSError(28, "No space left on device")
+        return real_update_c(recordings, token, record)
+
+    holding71.update = restoring_full_c
+    full29 = cr_v.undo_trash(token29)
+    holding71.update = real_update_c
+    ok("an Undo that cannot record that it is under way says so, moves nothing, and opens "
+       "again the take it was playing",
+       full29.get("ok") is False and "No space" in str(full29.get("error"))
+       and bytes71(dir29) == cropped29 and record_c(token29).get("rows") == "none"
+       and cr_v.player_state().get("open") is True)
+    cr_v.player_close()
+    cr_v.end_trash(token29)
+
+    print("  a crop and a copy another take names")
+    take_c(cr_v, folder_c, 30, "Iney")
+    cr_v._copy_to_cloud(str(folder_c), 30, "mix")
+    copy30 = Path((cr_v._lib.take(folder_c, 30)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    cr_v._lib.set_cloud_copy(folder_c, 29, {"mix": str(copy30), "mix_format": "wav"}, drive_c)
+    token30 = cr_v.crop_take(str(folder_c), 30, 1.0, 3.0).get("undo")
+    ok("a crop leaves its take's cloud copy when another take names it now",
+       copy30.is_file() and wav_frames(copy30) == 4 * SR
+       and cr_v._lib.take(folder_c, 29)["cloud"].get("mix") == str(copy30))
+    cr_v._lib.set_cloud_copy(folder_c, 29, None, None)
+    drain_c(cr_v)
+    cr_v.end_trash(token30)
+
+    print("  an Undo while the take is cropped again")
+    dir31 = take_c(cr_v, folder_c, 31, "Kapel")
+    uncut31 = bytes71(dir31)
+    first31 = cr_v.crop_take(str(folder_c), 31, 1.0, 3.0)
+    cropped31 = bytes71(dir31)
+    during31 = {}
+
+    class Racing_c:
+        """os, except that before the second crop's first os.replace (its
+        originals aside, its new files written) the first crop is undone and
+        the take deleted, as from other threads; then that replace fails, and
+        the second crop with it."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def replace(self, src, dst):
+            if "undo" not in during31:
+                during31["undo"] = cr_v.undo_trash(first31.get("undo"))
+                during31["delete"] = cr_v.delete_take(str(folder_c), 31)
+                during31["takes"] = cr_v.delete_takes(str(folder_c), [31])
+                during31["rehearsal"] = cr_v.delete_rehearsal(str(folder_c))
+                during31["rename"] = cr_v.rename_take(str(folder_c), 31, "Kapel renamed")
+                during31["rehearsal_rename"] = cr_v.rename_rehearsal(str(folder_c), "Crops renamed")
+                during31["held"] = bytes71(held_c(first31.get("undo"), dir31))
+                during31["aside"] = bytes71(folder_c / f"{dir31.name} (before crop)")
+                during31["writing"] = sorted(
+                    n for n in bytes71(dir31) if n.startswith(apimod_c.WRITING_PREFIX))
+                raise OSError(5, "Input/output error", str(dst))
+            return os71.replace(src, dst)
+
+    apimod_c.os = Racing_c()
+    second31 = cr_v.crop_take(str(folder_c), 31, 0.25, 1.75)
+    apimod_c.os = os71
+    wait_c = {"ok": False, "error": "Wait until the crop is done."}
+    ok("an Undo of a take's crop while the take is being cropped again waits until that crop "
+       "is done, and so does deleting the take",
+       during31.get("undo") == wait_c and during31.get("delete") == wait_c)
+    ok("on its own, with others, or with its rehearsal",
+       during31.get("takes") == {"ok": True, "deleted": [], "undo": None, "ended": [], "failed": [
+           {"take_number": 31, "error": "Wait until the crop is done."}]}
+       and during31.get("rehearsal") == wait_c)
+    ok("and renaming the take or its rehearsal",
+       during31.get("rename") == wait_c and during31.get("rehearsal_rename") == wait_c)
+    ok("every version of the take on disk meanwhile: as it was, in the first crop's entry; "
+       "cropped once, beside the take; cropped twice, being written",
+       during31.get("held") == uncut31 and during31.get("aside") == cropped31
+       and during31.get("writing") == sorted(apimod_c.WRITING_PREFIX + n
+                                             for n in ("Bass.wav", "Drums.mid", "Gtr.wav")))
+    ok("the second crop failing, the take is as the first one left it, and that crop's Undo "
+       "still waits",
+       second31.get("ok") is False and bytes71(dir31) == cropped31
+       and first31.get("undo") in entries71(rec_c))
+    ok("and brings back the take as it was",
+       cr_v.undo_trash(first31.get("undo")).get("ok") is True and bytes71(dir31) == uncut31
+       and length_c(cr_v, folder_c, 31) == 4.0)
+
+    print("  an end that cannot finish an Undo")
+
+    def aside_c(token, take_dir):
+        """Where a crop's entry holds the cropped files during its Undo."""
+        return rec_c / "_deleting" / str(token) / "1" / f"{take_dir.name} (cropped)"
+
+    def versions_c(take_dir, token):
+        """Every file of a take's two versions, wherever each is: in its
+        place, or in its crop's entry."""
+        entry = rec_c / "_deleting" / str(token)
+        return sorted([*bytes71(take_dir).values(),
+                       *(b for name, b in bytes71(entry).items()
+                         if not name.endswith("record.json"))])
+
+    def stuck_c(api, number, title):
+        """A take cropped, and its crop's Undo left part way, as the 23rd
+        was: Gtr.wav's place would take neither version."""
+        take_dir = take_c(api, folder_c, number, title)
+        uncut = bytes71(take_dir)
+        token = api.crop_take(str(folder_c), number, 1.0, 3.0).get("undo")
+        cropped = bytes71(take_dir)
+        jammed_c["place"] = take_dir / "Gtr.wav"
+        holding71.os = Jammed_c()
+        api.undo_trash(token)
+        holding71.os = os71
+        return take_dir, uncut, cropped, token
+
+    dir32, uncut32, cropped32, token32 = stuck_c(cr_v, 32, "Rosa")
+    cr_v._lib.uncrop_take = locked_c
+    mark_c = len(sent71)
+    ended32 = cr_v.end_trash(token32)
+    del cr_v._lib.uncrop_take
+    ok("an end whose library refuses an Undo left part way keeps it under way, both versions "
+       "of the take on disk, and nothing in the Trash",
+       ended32 == {"ok": False, "error": "database is locked"}
+       and record_c(token32).get("rows") == "restoring"
+       and bytes71(dir32) == uncut32 and bytes71(aside_c(token32, dir32)) == cropped32
+       and sent_c(mark_c) == [])
+    ok("and the next end finishes it",
+       cr_v.end_trash(token32) == {"ok": True} and bytes71(dir32) == uncut32
+       and length_c(cr_v, folder_c, 32) == 4.0 and marks_c(cr_v, folder_c, 32) == marks_before
+       and sent_c(mark_c) == [f"{dir32.name} (cropped)"] and token32 not in entries71(rec_c))
+
+    dir33, uncut33, cropped33, token33 = stuck_c(cr_v, 33, "Lilia")
+
+    def unavailable_c(*args, **kwargs):
+        raise apimod_c.LibraryUnavailable("The library is not open")
+
+    cr_v._lib.uncrop_take = unavailable_c
+    mark_c = len(sent71)
+    ended33 = cr_v.end_trash(token33)
+    del cr_v._lib.uncrop_take
+    ok("and so does one whose library is not open",
+       ended33 == {"ok": False, "error": "The library is not open"}
+       and record_c(token33).get("rows") == "restoring"
+       and bytes71(dir33) == uncut33 and bytes71(aside_c(token33, dir33)) == cropped33
+       and sent_c(mark_c) == [])
+    cr_x = fresh_api(tmp_c)[1]
+    opened_c.append(cr_x)
+    ok("which the next start finishes",
+       bytes71(dir33) == uncut33 and length_c(cr_x, folder_c, 33) == 4.0
+       and sent_c(mark_c) == [f"{dir33.name} (cropped)"] and token33 not in entries71(rec_c))
+
+    dir34, uncut34, cropped34, token34 = stuck_c(cr_x, 34, "Fialka")
+    forward_c = {"place": dir34 / "Gtr.wav"}
+
+    class Forward_c:
+        """os, except that the uncut Gtr.wav will not go into its place
+        (Windows holding it, say); the cropped one would go back."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def rename(self, src, dst):
+            if Path(dst) == forward_c["place"] and "(before crop)" in str(src):
+                raise PermissionError(13, "The file is being used by another process", str(src))
+            return os71.rename(src, dst)
+
+    holding71.os = Forward_c()
+    mark_c = len(sent71)
+    ended34 = cr_x.end_trash(token34)
+    holding71.os = os71
+    ok("an end whose exchange fails on the way keeps the Undo under way, what moved staying "
+       "moved, every file of both versions on disk, and nothing in the Trash",
+       ended34.get("ok") is False and "being used" in str(ended34.get("error"))
+       and record_c(token34).get("rows") == "restoring" and sent_c(mark_c) == []
+       and versions_c(dir34, token34) == sorted([*uncut34.values(), *cropped34.values()])
+       and (dir34 / "Bass.wav").read_bytes() == uncut34["Bass.wav"])
+    ok("and the next end finishes it",
+       cr_x.end_trash(token34) == {"ok": True} and bytes71(dir34) == uncut34
+       and length_c(cr_x, folder_c, 34) == 4.0
+       and sent_c(mark_c) == [f"{dir34.name} (cropped)"] and token34 not in entries71(rec_c))
+
+    print("  an end the library fails")
+    take_c(cr_x, folder_c, 35, "Romashka")
+    cr_x._copy_to_cloud(str(folder_c), 35, "mix")
+    token35 = cr_x.crop_take(str(folder_c), 35, 1.0, 3.0).get("undo")
+    drain_c(cr_x)
+    copy35 = Path((cr_x._lib.take(folder_c, 35)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    cr_x._lib.cloud_paths = locked_c
+    cr_x.undo_trash(token35)
+    try:
+        ended35 = cr_x.end_trash(token35)
+    except RuntimeError as e:
+        ended35 = {"raised": str(e)}
+    del cr_x._lib.cloud_paths
+    ok("an end the library fails part way says so, and its entry waits for the next end",
+       ended35 == {"ok": False, "error": "database is locked"} and token35 in entries71(rec_c))
+    ok("which does it: the cropped copy out of the cloud folder, the take as it was asked for",
+       copy35.is_file() and cr_x.end_trash(token35) == {"ok": True}
+       and token35 not in entries71(rec_c) and not copy35.exists()
+       and cr_x._cloud_queue.states(str(folder_c)).get(35) == "queued")
+    drain_c(cr_x)
+
+    print("  a crop whose library fails before it starts")
+    dir36 = take_c(cr_x, folder_c, 36, "Vasilek")
+    uncut36 = bytes71(dir36)
+    waiting36 = entries71(rec_c)
+    cr_x._lib.cloud_paths = locked_c
+    try:
+        cut36 = cr_x.crop_take(str(folder_c), 36, 1.0, 3.0)
+    except RuntimeError as e:
+        cut36 = {"raised": str(e)}
+    del cr_x._lib.cloud_paths
+    ok("a crop whose library fails before it starts says so, and changes nothing: the take's "
+       "files, marks and length as they were, and nothing held",
+       cut36 == {"ok": False, "error": "Could not crop: database is locked", "ended": []}
+       and bytes71(dir36) == uncut36 and length_c(cr_x, folder_c, 36) == 4.0
+       and marks_c(cr_x, folder_c, 36) == marks_before and entries71(rec_c) == waiting36
+       and not (folder_c / f"{dir36.name} (before crop)").exists())
+
+    print("  a copy another take came to name during the crop")
+    take_c(cr_x, folder_c, 37, "Klever")
+    cr_x._copy_to_cloud(str(folder_c), 37, "mix")
+    copy37 = Path((cr_x._lib.take(folder_c, 37)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    named37 = {}
+
+    class Recording_c:
+        """os, except that at the crop's first os.replace the copy worker
+        records another take's copy in this take's place in the cloud
+        folder, as from its own thread."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def replace(self, src, dst):
+            if not named37:
+                named37["done"] = cr_x._lib.set_cloud_copy(
+                    folder_c, 36, {"mix": str(copy37), "mix_format": "wav"}, drive_c)
+            return os71.replace(src, dst)
+
+    apimod_c.os = Recording_c()
+    token37 = cr_x.crop_take(str(folder_c), 37, 1.0, 3.0).get("undo")
+    apimod_c.os = os71
+    ok("a crop leaves its take's cloud copy when another take came to name it during the crop",
+       named37.get("done") is True and isinstance(token37, str)
+       and copy37.is_file() and wav_frames(copy37) == 4 * SR
+       and cr_x._lib.take(folder_c, 36)["cloud"].get("mix") == str(copy37))
+    cr_x._lib.set_cloud_copy(folder_c, 36, None, None)
+    drain_c(cr_x)
+    cr_x.end_trash(token37)
+
+    take_c(cr_x, folder_c, 38, "Myata")
+    cr_x._copy_to_cloud(str(folder_c), 38, "mix")
+    copy38 = Path((cr_x._lib.take(folder_c, 38)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    real_paths_c = cr_x._lib.cloud_paths
+    asked38 = []
+
+    def once_c(but=None):
+        """cloud_paths, answering before the crop and failing after it."""
+        asked38.append(but)
+        if len(asked38) > 1:
+            raise RuntimeError("database is locked")
+        return real_paths_c(but=but)
+
+    cr_x._lib.cloud_paths = once_c
+    cut38 = cr_x.crop_take(str(folder_c), 38, 1.0, 3.0)
+    del cr_x._lib.cloud_paths
+    ok("and when which copies other takes name cannot be read after the crop, the crop is done "
+       "and the old copy is left in the cloud folder",
+       cut38.get("ok") is True and length_c(cr_x, folder_c, 38) == 2.0
+       and copy38.is_file() and wav_frames(copy38) == 4 * SR)
+    drain_c(cr_x)
+    cr_x.end_trash(cut38.get("undo"))
+
+    print("  its rehearsal gone")
+    dir13 = take_c(cr_x, folder_c, 13, "Oktyabr")
+    token13 = cr_x.crop_take(str(folder_c), 13, 1.0, 3.0).get("undo")
+    cropped13 = bytes71(dir13)
+    cr_x.forget_rehearsal(str(folder_c))
+    ok("o. Undo of a crop whose rehearsal is gone says so, and moves nothing",
+       cr_x.undo_trash(token13) == {"ok": False, "error": "Its rehearsal is gone."}
+       and bytes71(dir13) == cropped13 and token13 in entries71(rec_c))
+    cr_x.end_trash(token13)
+
+    cr_x.shutdown()
+    for api_c in opened_c[:-1]:
+        api_c._library.close()
+    apimod_c.move_to_trash = real_trash71
+
+    print("\n[74] Python says which removals it ended")
+    # A removal's Undo is offered by a notice. Python ends a waiting entry of
+    # its own accord when the same item is removed again (_end_before): a
+    # second crop of a take ends the first's, deleting the take ends its
+    # crop's, deleting a rehearsal ends everything of it, saving a draft ends
+    # its crop's. A notice still offering Undo for one of those would only
+    # be told it has gone, so every call that ends one answers which:
+    # "ended", the tokens. The interface lets their notices go. Python knows
+    # an item by its rehearsal's id, which a rename does not change, so the
+    # interface has no matching of its own to do.
+    tmp74 = Path(tempfile.mkdtemp())
+    apimod74, e74 = fresh_api(tmp74)
+    rec74 = e74.recordings_dir
+    apimod74.move_to_trash = trash71
+    folder74 = rec74 / "Ends - 2026-10-11 20-00"
+    e74._lib.create_rehearsal(folder74, "Ends", "2026-10-11T20:00:00", SR, 16, band_c)
+
+    take_c(e74, folder74, 1, "Polyn")
+    first74 = e74.crop_take(str(folder74), 1, 0.5, 3.5)
+    second74 = e74.crop_take(str(folder74), 1, 0.5, 2.5)
+    ok("a. a first crop ends nothing, and says so",
+       first74.get("ok") is True and first74.get("ended") == [])
+    ok("a second crop of the take answers the first crop's token as ended",
+       second74.get("ok") is True and second74.get("ended") == [first74.get("undo")]
+       and first74.get("undo") not in entries71(rec74))
+    gone74 = e74.delete_take(str(folder74), 1)
+    ok("b. deleting the take after its crop answers the crop's token as ended",
+       gone74.get("ok") is True and gone74.get("ended") == [second74.get("undo")])
+
+    take_c(e74, folder74, 2, "Vesna")
+    take_c(e74, folder74, 3, "Ogon")
+    crop74 = e74.crop_take(str(folder74), 2, 0.5, 3.5)
+    cleared74 = e74.delete_takes(str(folder74), [2, 3])
+    ok("and so does clearing it with others",
+       cleared74.get("ok") is True and cleared74.get("ended") == [crop74.get("undo")])
+
+    wed74 = past71(e74, "Wednesday", "2026-09-30T19:00:00", ["Polyn", "Vesna"])
+    take74 = e74.delete_take(str(wed74), 2)
+    draft74 = wed74 / "_drafts" / "take 3"
+    write_wav(draft74 / "Gtr.wav", 74, seconds=1.0)
+    dropped74 = e74.discard_draft(str(draft74))
+    whole74 = e74.delete_rehearsal(str(wed74))
+    ok("c. deleting a rehearsal answers the tokens of its take's and its draft's entries",
+       whole74.get("ok") is True
+       and sorted(whole74.get("ended") or []) == sorted([take74.get("undo"), dropped74.get("undo")]))
+    e74.end_trash(whole74.get("undo"))
+
+    e74.start_rehearsal("Live", None, SR, band_c[:2], 16)
+    live74 = Path(e74._session["folder"])
+
+    def draft74_(n):
+        """A draft on the review screen, four seconds of two WAVs."""
+        where = live74 / "_drafts" / f"take {n}"
+        write_wav(where / "Gtr.wav", 740 + n, seconds=4.0)
+        write_wav(where / "Bass.wav", 750 + n, seconds=4.0)
+        return where, [{"name": "Gtr", "file": str(where / "Gtr.wav")},
+                       {"name": "Bass", "file": str(where / "Bass.wav")}]
+
+    d74, tracks74 = draft74_(1)
+    cut74 = e74.crop_draft(str(d74), tracks74, 1.0, 3.0)
+    again74 = e74.crop_draft(str(d74), tracks74, 0.5, 1.5)
+    ok("a draft cropped twice answers the first crop's token as ended",
+       again74.get("ok") is True and again74.get("ended") == [cut74.get("undo")])
+    e74._session["take_counter"] = 1
+    kept74 = e74.keep_take(1, str(d74), "Kept", again74.get("duration_sec"), tracks74)
+    ok("d. saving a cropped draft answers its crop's token as ended",
+       kept74.get("ok") is True and kept74.get("ended") == [again74.get("undo")])
+
+    d74, tracks74 = draft74_(2)
+    cut74 = e74.crop_draft(str(d74), tracks74, 1.0, 3.0)
+    thrown74 = e74.discard_take(str(d74))
+    ok("e. and so does discarding one",
+       thrown74.get("ok") is True and thrown74.get("ended") == [cut74.get("undo")])
+
+    d74, tracks74 = draft74_(3)
+    cut74 = e74.crop_draft(str(d74), tracks74, 1.0, 3.0)
+    e74.finish_rehearsal()
+    saved74 = e74.recover_draft(str(d74))
+    ok("and rescuing one from the Drafts screen",
+       saved74.get("ok") is True and saved74.get("ended") == [cut74.get("undo")])
+
+    waiting74 = entries71(rec74)
+    moved74 = e74.set_recordings_dir(str(tmp74 / "Elsewhere"))
+    ok("f. switching the recordings folder answers every token it ended there",
+       moved74.get("ok") is True and thrown74.get("undo") in waiting74
+       and sorted(moved74.get("ended") or []) == waiting74)
+
+    e74.shutdown()
+    apimod74.move_to_trash = real_trash71
+
+    print("\n[75] Undo names the system's bin")
+    # Spec P2: what the app says of the Trash is in the system's own words,
+    # "the Recycle Bin" on Windows, and "the _deleted folder" where there is
+    # no Trash to reach (platform_support.trash_kind). Python's own sentences
+    # say it too: an Undo too late, which also answers "gone" so that the
+    # interface can word it itself, the start problem for removals kept, and
+    # a Trash that refused without saying why. An Undo of what is back where
+    # it was, by an Undo or by an end, says that instead: it is not gone.
+    tmp75 = Path(tempfile.mkdtemp())
+    apimod75, g75 = fresh_api(tmp75)
+    rec75 = g75.recordings_dir
+    apimod75.move_to_trash = trash71
+    sat75 = past71(g75, "Saturday", "2026-10-03T19:00:00", ["Polyn", "Vesna", "Ogon"])
+    late75 = g75.delete_take(str(sat75), 1).get("undo")
+    g75.end_trash(late75)
+    held75 = rec75 / "Loose" / "f"
+    held75.mkdir(parents=True)
+    (held75 / "f.wav").write_bytes(b"loose")
+    refused75 = holding71.hold(rec75, {"kind": "draft", "reason": "discard", "rows": "none"},
+                               [held75])
+    kept75 = [{"folder": "/rec/_deleting/0123abcd", "error": "busy", "library": False}]
+    was75 = ps71._send2trash, ps71._system_trash_dir, ps71.WINDOWS
+
+    def said75():
+        """(the Undo too late, the start problem, a refusal that says nothing)
+        as Python words them now."""
+        return (g75.undo_trash(late75), apimod75._removals_kept(kept75),
+                holding71.send_on(rec75, refused75, lambda path, root: {"ok": False}))
+
+    try:
+        ps71._send2trash, ps71._system_trash_dir = (lambda: None), (lambda: None)
+        late, start, refused = said75()
+        ok("a. with no Trash on the machine an Undo too late says it moved to the _deleted "
+           "folder, and answers that it is gone",
+           late == {"ok": False, "gone": True,
+                    "error": "It has already moved to the _deleted folder."})
+        ok("and so do the start problem and a refusal that gives no reason",
+           "could not be put back or moved to the _deleted folder, so it is kept" in start
+           and refused == {"ok": False, "error": "Could not move it to the _deleted folder"}
+           and (rec75 / "_deleting" / refused75 / "0" / "f" / "f.wav").is_file())
+        ps71._send2trash = lambda: (lambda path: None)
+        ps71.WINDOWS = True
+        late, start, refused = said75()
+        ok("b. on Windows they say the Recycle Bin",
+           late == {"ok": False, "gone": True, "error": "It has already gone to the Recycle Bin."}
+           and "could not be put back or moved to the Recycle Bin, so it is kept" in start
+           and refused == {"ok": False, "error": "Could not move it to the Recycle Bin"})
+        ps71.WINDOWS = False
+        late, start, refused = said75()
+        ok("c. and on a Mac or Linux, the Trash",
+           late == {"ok": False, "gone": True, "error": "It has already gone to the Trash."}
+           and "could not be put back or moved to the Trash, so it is kept" in start
+           and refused == {"ok": False, "error": "Could not move it to the Trash"})
+    finally:
+        ps71._send2trash, ps71._system_trash_dir, ps71.WINDOWS = was75
+
+    undone75 = g75.delete_take(str(sat75), 2).get("undo")
+    first75 = g75.undo_trash(undone75)
+    ok("d. an Undo done, asked again, says the take is back where it was",
+       first75.get("ok") is True and g75.undo_trash(undone75) == BACK71
+       and g75._lib.take(sat75, 2) is not None)
+    back75 = rec75 / "Loose" / "g"
+    back75.mkdir(parents=True)
+    (back75 / "g.wav").write_bytes(b"back")
+    put75 = holding71.hold(rec75, {"kind": "rehearsal", "reason": "delete", "rows": "kept",
+                                   "rehearsal": None}, [back75])
+    ended75 = g75.end_trash(put75)
+    ok("e. so does one an end put back, its rows never dropped",
+       ended75 == {"ok": True} and (back75 / "g.wav").read_bytes() == b"back"
+       and put75 not in entries71(rec75) and g75.undo_trash(put75) == BACK71)
+    ok("and one that went on is still gone, a token there never was too",
+       g75.undo_trash(late75) == gone71() and g75.undo_trash("89abcdef") == gone71())
+    g75.end_trash(refused75)
+    g75.shutdown()
+    apimod75.move_to_trash = real_trash71
+
+    print("\n[76] The folder in use chosen again; a crop whose marks cannot follow")
+    # Choosing the recordings folder that is in use already is no switch:
+    # the Undos waiting in it stay, and nothing is opened anew. And a crop
+    # whose take's record cannot follow it, the library refusing once the
+    # files are cut, answers where the uncut take is: it is beside the take,
+    # whole, and nothing on screen would name it otherwise.
+    tmp76 = Path(tempfile.mkdtemp())
+    apimod76, h76 = fresh_api(tmp76)
+    rec76 = h76.recordings_dir
+    apimod76.move_to_trash = trash71
+    sun76 = past71(h76, "Sunday", "2026-10-04T19:00:00", ["Polyn", "Vesna"])
+    wait76 = h76.delete_take(str(sun76), 1).get("undo")
+    library76 = h76._library
+    mark76 = len(sent71)
+    same76 = h76.set_recordings_dir(str(rec76))
+    ok("a. choosing the folder in use again ends none of its Undos, and opens nothing anew",
+       same76 == {"ok": True, "recordings_dir": str(rec76), "kept": [], "ended": [],
+                  "same": True}
+       and entries71(rec76) == [wait76] and h76._library is library76 and sent71[mark76:] == [])
+    other76 = h76.set_recordings_dir(str(sun76 / ".."))
+    ok("nor does the same folder spelled another way",
+       other76.get("ok") is True and other76.get("same") is True
+       and other76.get("ended") == [] and other76.get("kept") == []
+       and entries71(rec76) == [wait76] and h76._library is library76)
+    ok("and its Undo still brings the take back", h76.undo_trash(wait76).get("ok") is True)
+
+    folder76 = rec76 / "Cut - 2026-10-12 19-00"
+    h76._lib.create_rehearsal(folder76, "Cut", "2026-10-12T19:00:00", SR, 16, band_c)
+    dir76 = take_c(h76, folder76, 1, "Polyn")
+    uncut76 = bytes71(dir76)
+
+    def locked76(*args, **kwargs):
+        raise RuntimeError("the database is locked")
+
+    h76._library.edit_markers = locked76
+    try:
+        cut76 = h76.crop_take(str(folder76), 1, 1.0, 3.0)
+    except RuntimeError as e:
+        cut76 = {"raised": str(e)}
+    finally:
+        del h76._library.edit_markers
+    beside76 = folder76 / f"{dir76.name} (before crop)"
+    ok("b. a crop whose marks cannot follow answers, naming the folder the uncut take is in",
+       cut76 == {"ok": False, "ended": [],
+                 "error": "The crop is done but its marks could not follow; "
+                          f"the uncut take is in \u201c{beside76}\u201d."})
+    ok("where it is whole, beside the cropped take; nothing of it deleted or sent on",
+       bytes71(beside76) == uncut76
+       and wav_frames(dir76 / "Gtr.wav") == 2 * SR and sent71[mark76:] == []
+       and h76._lib.take(folder76, 1) is not None)
+    ok("and the crop is over: the take can be cropped again",
+       h76._cropping == [])
+    h76.shutdown()
+    apimod76.move_to_trash = real_trash71
+
+    print("\n[77] A copy never lands where another take's copy is")
+    # A copy is filed under its rehearsal's folder name as "NN - name"
+    # (_copy_to_cloud). Within one rehearsal two takes never share that:
+    # their numbers differ, and Undo refuses a number taken meanwhile. Across
+    # rehearsals a song's go is never given twice, so two takes of songs are
+    # never named alike either. Two takes nobody named are, though ("Take 1"
+    # in each), and two rehearsals can be filed under one folder name: Locate
+    # points a missing one at any folder in the recordings folder, one in a
+    # subfolder named like another rehearsal's included. Their takes 1 were
+    # then written onto one file, and an Undo that dropped a restored copy
+    # because the other take named it sent it again onto that same file. Now
+    # a copy takes the next free name, " (2)" as a take's folder does, and
+    # the other take's copy is left as it was. Copies only.
+    tmp77 = Path(tempfile.mkdtemp())
+    apimod77, h77 = fresh_api(tmp77)
+    rec77 = h77.recordings_dir
+    drive77 = tmp77 / "Drive"
+    apimod77.move_to_trash = trash71
+    h77.set_cloud_dir(str(drive77))
+    h77.set_auto_publish(True, "mix")
+    mon77 = past71(h77, "Monday", "2026-09-28T19:00:00", ["", "", ""])
+    gig77 = past71(h77, "Gig", "2026-09-30T19:00:00", ["", "Ogon", ""])
+    # The gig's takes sound unlike Monday's, so a copy shows whose it is.
+    for n77 in (1, 2, 3):
+        write_wav(Path(h77._lib.take(gig77, n77)["tracks"][0]["file"]), 3000 + n77,
+                  seconds=1.0)
+    (rec77 / "Old").mkdir()
+    moved77 = rec77 / "Old" / mon77.name
+    gig77.rename(moved77)
+    located77 = h77.locate_rehearsal(str(gig77), str(moved77))
+    gig77 = moved77
+    there77 = drive77 / mon77.name
+    ok("(the gig, found again in a folder named like Monday's, is filed under the same "
+       "cloud folder name, and its take 1 is named as Monday's is)",
+       located77.get("ok") is True and gig77.name == mon77.name
+       and h77._lib.take(gig77, 1)["name"] == h77._lib.take(mon77, 1)["name"] == "Take 1")
+
+    def run77():
+        while h77._cloud_queue.run_next():
+            pass
+
+    def copy77(folder, n):
+        mix = ((h77._lib.take(folder, n) or {}).get("cloud") or {}).get("mix")
+        return Path(mix) if mix else None
+
+    def sound77(path):
+        return path.read_bytes() if path is not None and path.is_file() else None
+
+    print("  Undo of a take whose copy the other take names now")
+    h77._copy_to_cloud(str(gig77), 1, "mix")
+    held77 = h77.delete_take(str(gig77), 1).get("undo")
+    # Monday's take 1 is sent while the gig's waits for its Undo: nothing
+    # live names that path, so it lands there, on the waiting copy.
+    h77._copy_to_cloud(str(mon77), 1, "mix")
+    mon_copy77 = copy77(mon77, 1)
+    mon_sound77 = sound77(mon_copy77)
+    back77 = h77.undo_trash(held77)
+    dropped77 = h77._lib.take(gig77, 1)["cloud"] == {}
+    run77()
+    gig_copy77 = copy77(gig77, 1)
+    ok("a. Undo brings the take back without the copy the other take names now",
+       mon_copy77 == there77 / "01 - Take 1.wav" and back77.get("ok") is True and dropped77)
+    ok("and sends it again beside it, leaving the other take's copy as it was",
+       sound77(mon_copy77) == mon_sound77 and copy77(mon77, 1) == mon_copy77
+       and gig_copy77 == there77 / "01 - Take 1 (2).wav"
+       and sound77(gig_copy77) not in (None, mon_sound77))
+    h77._copy_to_cloud(str(gig77), 1, "mix")
+    ok("sent again, a copy at ' (2)' stays there, and the other take's is left",
+       copy77(gig77, 1) == gig_copy77 and sound77(gig_copy77) is not None
+       and sound77(mon_copy77) == mon_sound77)
+    ok("and the pass that puts names right takes ' (2)' for its name, as on disk",
+       "cloud" not in h77._out_of_line(h77._lib.take(gig77, 1)))
+
+    print("  sent with no Undo, and renamed")
+    h77._copy_to_cloud(str(mon77), 3, "mix")
+    h77._copy_to_cloud(str(gig77), 3, "mix")
+    ok("b. two takes 3 nobody named, filed under one folder name, each keep their own copy",
+       copy77(mon77, 3) == there77 / "03 - Take 3.wav"
+       and copy77(gig77, 3) == there77 / "03 - Take 3 (2).wav"
+       and sound77(copy77(mon77, 3)) not in (None, sound77(copy77(gig77, 3))))
+    h77._copy_to_cloud(str(mon77), 2, "mix")
+    h77._copy_to_cloud(str(gig77), 2, "mix")
+    mon_two77 = copy77(mon77, 2)
+    mon_two_sound77 = sound77(mon_two77)
+    h77.rename_take(str(gig77), 2, "Take 2")
+    run77()
+    gig_two77 = copy77(gig77, 2)
+    ok("c. a take renamed to the other's name: its copy goes beside the other's, not onto it",
+       copy77(gig77, 2) is not None and h77._lib.take(gig77, 2)["name"] == "Take 2"
+       and mon_two77 == there77 / "02 - Take 2.wav" and sound77(mon_two77) == mon_two_sound77
+       and gig_two77 == there77 / "02 - Take 2 (2).wav"
+       and sound77(gig_two77) not in (None, mon_two_sound77))
+
+    print("  a copy two takes name already")
+    # As one left from before this was fixed: both rows name Monday's copy.
+    h77._lib.set_cloud_copy(gig77, 3, {"mix": str(copy77(mon77, 3)), "mix_format": "wav"},
+                            drive77)
+    mon_three77, mon_three_sound77 = copy77(mon77, 3), sound77(copy77(mon77, 3))
+    h77._copy_to_cloud(str(gig77), 3, "mix")
+    ok("d. sending one of them again takes nothing of the other's out of the cloud folder",
+       sound77(mon_three77) == mon_three_sound77 and copy77(mon77, 3) == mon_three77
+       and copy77(gig77, 3) == there77 / "03 - Take 3 (2).wav")
+    # Both rows naming Monday's copy again, the gig's own copy gone.
+    copy77(gig77, 3).unlink()
+    h77._lib.set_cloud_copy(gig77, 3, {"mix": str(mon_three77), "mix_format": "wav"}, drive77)
+    h77.rename_take(str(gig77), 3, "Intro")
+    run77()
+    ok("renaming one of them leaves the other's where its row says; it is made again",
+       sound77(mon_three77) == mon_three_sound77 and copy77(mon77, 3) == mon_three77
+       and h77._lib.take(gig77, 3)["name"] == "Intro 1"
+       and copy77(gig77, 3) == there77 / "03 - Intro 1.wav"
+       and sound77(copy77(gig77, 3)) not in (None, mon_three_sound77))
+    copy77(gig77, 3).unlink()
+    h77._lib.set_cloud_copy(gig77, 3, {"mix": str(mon_three77), "mix_format": "wav"}, drive77)
+    mark77 = len(sent71)
+    unshared77 = h77.unshare_take(str(gig77), 3)
+    ok("and Remove from the cloud on one of them sends nothing of the other's to the Trash",
+       unshared77.get("ok") is True and sound77(mon_three77) == mon_three_sound77
+       and mon_three77 not in sent71[mark77:] and h77._lib.take(gig77, 3)["cloud"] == {})
+    h77._copy_to_cloud(str(gig77), 3, "mix")
+    ok("and the takes' own files are where they were",
+       all(Path(t["file"]).is_file() for f in (mon77, gig77) for n in (1, 2, 3)
+           for t in h77._lib.take(f, n)["tracks"]))
+
+    print("  the rehearsal that shares the cloud folder renamed")
+    # Its cloud folder is Monday's too: moving the folder whole would carry
+    # Monday's copies off with it, to where Monday's rows do not look.
+    mons77 = {n: (copy77(mon77, n), sound77(copy77(mon77, n))) for n in (1, 2, 3)}
+    renamed77 = h77.rename_rehearsal(str(gig77), "Gig again")
+    gig77 = Path(renamed77.get("folder") or gig77)
+    run77()
+    again77 = drive77 / gig77.name
+    ok("e. renaming the gig leaves Monday's copies where Monday's rows say, as they were",
+       renamed77.get("ok") is True
+       and all(copy77(mon77, n) == path and sound77(path) == sound
+               for n, (path, sound) in mons77.items()))
+    ok("and the gig's copies go to its new cloud folder, by their own names there",
+       [copy77(gig77, n) for n in (1, 2, 3)]
+       == [again77 / "01 - Take 1.wav", again77 / "02 - Take 2.wav", again77 / "03 - Intro 1.wav"]
+       and all(sound77(copy77(gig77, n)) not in (None, mons77[n][1]) for n in (1, 2, 3))
+       and sorted(p.name for p in (drive77 / mon77.name).iterdir())
+       == ["01 - Take 1.wav", "02 - Take 2.wav", "03 - Take 3.wav"])
+    h77.shutdown()
+    apimod77.move_to_trash = real_trash71
 
     print("\n" + "=" * 60)
     if problems:

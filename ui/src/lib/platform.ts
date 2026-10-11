@@ -1,21 +1,90 @@
+import { useSyncExternalStore } from "react"
+
 /**
- * The one thing the interface needs to know about the machine it is on: a
- * Mac's hand goes to ⌘ where everyone else's goes to Ctrl, and a list of
- * keys that says Ctrl there is wrong.
+ * The one place that knows which system the interface is on, and what that
+ * system calls things: a Mac's hand goes to ⌘ where everyone else's goes to
+ * Ctrl, Finder is Explorer on Windows, and the Trash is the Recycle Bin. A
+ * list of keys that says Ctrl on a Mac is wrong.
+ *
+ * It can be told which system to be, so the showcase can show both.
  */
-export const IS_MAC =
-  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+export type System = "mac" | "windows" | "other"
 
-/** The key held with the wheel to zoom a take, as this machine writes it. */
-export const ZOOM_KEY = IS_MAC ? "⌘" : "Ctrl"
+let told: System | null = null
+const listeners = new Set<() => void>()
 
-export const IS_WINDOWS =
-  typeof navigator !== "undefined" && /Win/.test(navigator.platform)
+function fromNavigator(): System {
+  // No navigator at all (a bare runtime): nothing to go by.
+  if (typeof navigator === "undefined") return "other"
+  const p = navigator.platform ?? ""
+  if (/Mac|iPhone|iPad/.test(p)) return "mac"
+  if (/Win/.test(p)) return "windows"
+  return "other"
+}
 
-/** The button that opens a rehearsal's folder, in the words of the system
- *  it opens in. */
-export const FOLDER_BUTTON = IS_MAC
-  ? "Show in Finder"
-  : IS_WINDOWS
-    ? "Show in Explorer"
-    : "Open folder"
+/** The system we are on: the one we were told to be, else the navigator's. */
+export function system(): System {
+  return told ?? fromNavigator()
+}
+
+/** Be this system from now on; null goes back to the navigator's. */
+export function setSystem(s: System | null) {
+  told = s
+  for (const l of listeners) l()
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+/** The system, for a component that shows its words: it is drawn again when
+ *  setSystem changes it. Pass the result to words(). */
+export function useSystem(): System {
+  return useSyncExternalStore(subscribe, system)
+}
+
+export type Words = {
+  /** The key held with the wheel to zoom a take. */
+  mod: "⌘" | "Ctrl"
+  undoKey: "⌘Z" | "Ctrl+Z"
+  fileManager: "Finder" | "Explorer" | "file manager"
+  /** The button that opens a rehearsal's folder, in the words of the system
+   *  it opens in. */
+  folderButton: "Show in Finder" | "Show in Explorer" | "Open folder"
+  trash: "the Trash" | "the Recycle Bin"
+}
+
+// One table a system, handed to every caller: frozen, so that none of them
+// can change the words for the others.
+const MAC: Readonly<Words> = Object.freeze({
+  mod: "⌘",
+  undoKey: "⌘Z",
+  fileManager: "Finder",
+  folderButton: "Show in Finder",
+  trash: "the Trash",
+})
+
+const WINDOWS: Readonly<Words> = Object.freeze({
+  mod: "Ctrl",
+  undoKey: "Ctrl+Z",
+  fileManager: "Explorer",
+  folderButton: "Show in Explorer",
+  trash: "the Recycle Bin",
+})
+
+const OTHER: Readonly<Words> = Object.freeze({
+  mod: "Ctrl",
+  undoKey: "Ctrl+Z",
+  fileManager: "file manager",
+  folderButton: "Open folder",
+  trash: "the Trash",
+})
+
+/** What this system calls things. A component passes useSystem() so it is
+ *  drawn again if the system changes; other code leaves the argument out. */
+export function words(s: System = system()): Readonly<Words> {
+  return s === "mac" ? MAC : s === "windows" ? WINDOWS : OTHER
+}

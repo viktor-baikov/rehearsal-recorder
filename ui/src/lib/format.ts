@@ -139,6 +139,14 @@ export function takesLabel(n: number): string {
   return `${n} ${n === 1 ? "take" : "takes"}`
 }
 
+/** What a rehearsal's takes are, to the person about to leave it: kept, and
+ *  where they were. The verb agrees with the count. */
+export function savedLine(n: number): string {
+  return n === 1
+    ? "1 take is saved and stays where it is."
+    : `${n} takes are saved and stay where they are.`
+}
+
 /** "1 go", "4 goes": takes at one song, which are attempts at it. */
 export function goesLabel(n: number): string {
   return n === 1 ? "1 go" : `${n} goes`
@@ -209,14 +217,4 @@ export function describeRescan(found: string[] = [], gone: string[] = []): strin
   if (found.length) return `Found ${quoted(found)}`
   if (gone.length) return goneText
   return "No new interfaces"
-}
-
-/**
- * A crop that went through, whose original could not be swept away. A
- * warning, not an error: the take the person asked for exists.
- */
-export function croppedButNotSwept(error: string, location?: string | null): string {
-  return `The take was cropped, but the original could not be moved out of the way (${error})${
-    location ? `, and is still at ${location}` : ""
-  }.`
 }

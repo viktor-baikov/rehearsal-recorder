@@ -27,7 +27,7 @@ import sys
 import threading
 import time
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import sounddevice as sd
 
@@ -72,6 +72,7 @@ from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
 from rehearsal_recorder.midi.notes import read_notes
 from rehearsal_recorder import activity as activitymod
 from rehearsal_recorder import cloud as cloudmod
+from rehearsal_recorder import holding
 from rehearsal_recorder.names_pass import NamesPass
 from rehearsal_recorder import layouts
 from rehearsal_recorder import updates
@@ -92,7 +93,8 @@ from rehearsal_recorder.midi.smf import crop_mid
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
 from rehearsal_recorder.store.library import (
-    LabelRefused, Library, SetRefused, SongRefused, as_marker,
+    REHEARSAL_GONE, TAKE_GONE, LabelRefused, Library, SetRefused, SongRefused, as_marker,
+    paths_overlap,
 )
 from rehearsal_recorder.store.db import DB_NAME
 from rehearsal_recorder import diagnostics
@@ -110,6 +112,7 @@ from rehearsal_recorder.platform_support import (
     reveal_in_file_manager,
     safe_filename,
     trash_kind,
+    trash_name,
 )
 
 CONFIG_PATH = Path.home() / ".rehearsal-recorder" / "config.json"
@@ -134,6 +137,25 @@ open_midi_system = midiports.open_system
 MIDI_THREADS = True
 
 log = logging.getLogger(__name__)
+
+# How much of each part of a problem the page sends (log_problem) is kept: a
+# few KB holds a whole stack, and the page decides what it sends.
+PAGE_PROBLEM_CHARS = 4000
+
+
+def _page_problem_text(value):
+    """One part of a problem the page sent, as text no longer than
+    PAGE_PROBLEM_CHARS. Whatever the bridge handed over: None, a number, a
+    list, or something with no words of its own."""
+    if value is None:
+        return ""
+    try:
+        text = value if isinstance(value, str) else str(value)
+    except Exception:  # noqa: BLE001
+        text = f"<{type(value).__name__}>"
+    if len(text) > PAGE_PROBLEM_CHARS:
+        text = f"{text[:PAGE_PROBLEM_CHARS]}... ({len(text) - PAGE_PROBLEM_CHARS} more characters)"
+    return text
 
 
 # What a cloud copy is called while it is still being written. The worker is
@@ -209,6 +231,176 @@ def _unique_path(path):
         if not candidate.exists():
             return candidate
         counter += 1
+
+
+def _free_copy_name(base, lands, taken):
+    """
+    What a take's copies in the cloud folder are called: `base` ("03 - Polyn"),
+    or `base` with " (2)", " (3)"… after it, as _unique_path names a folder,
+    the first whose copies (`lands(name)`, relative to the cloud folder) are
+    on no path another take names as its copy (`taken`, Library.cloud_paths).
+    Compared as the library compares them, paths_overlap, blind to case.
+
+    Within one rehearsal two takes never get one name, their numbers being
+    different. Two rehearsals can be filed under one folder name, though (one
+    pointed by Locate at a folder named like the other's), and a take nobody
+    named in each, "Take 1", would then be written onto the other's copy.
+    """
+    name, counter = base, 2
+    while any(paths_overlap(p, t) for p in lands(name) for t in taken):
+        name, counter = f"{base} ({counter})", counter + 1
+    return name
+
+
+def _identities(record):
+    """
+    What a holding entry's record says it holds, as a list of identities: a
+    take {"kind": "take", "rehearsal_id", "take_number"}, a rehearsal
+    {"kind": "rehearsal", "rehearsal_id", "folder"}, a draft {"kind":
+    "draft", "draft", "rehearsal_id"}. One, or for takes removed together
+    a list of them. A rehearsal is known by its id, which a rename does not
+    change; "folder" and "draft" are relative to the recordings folder.
+    """
+    item = (record or {}).get("item") if isinstance(record, dict) else None
+    if isinstance(item, list):
+        return [i for i in item if isinstance(i, dict)]
+    return [item] if isinstance(item, dict) else []
+
+
+def _same_draft(a, b):
+    """Two draft identities are one draft: the same folder name in the same
+    rehearsal, wherever a rename has put it; with no rehearsal to go by, the
+    same path."""
+    rehearsal = a.get("rehearsal_id")
+    if rehearsal is not None and rehearsal == b.get("rehearsal_id"):
+        return PurePosixPath(a.get("draft") or "").name == PurePosixPath(b.get("draft") or "").name
+    return bool(a.get("draft")) and a.get("draft") == b.get("draft")
+
+
+def _removals_kept(kept):
+    """
+    The one start problem for removals kept in the holding folder (_end_all),
+    each named by its folder with what becomes of it: tried again at the
+    next start, or, for one whose record cannot be read, nothing the app can
+    ever do, since it cannot tell where it came from.
+    """
+    where = trash_name()
+    if len(kept) == 1:
+        said = ["Something that was being removed could not be put back or moved "
+                f"to {where}, so it is kept as it is."]
+    else:
+        said = [f"{len(kept)} things that were being removed could not be put back "
+                f"or moved to {where}, so they are kept as they are."]
+    for k in kept:
+        if k["error"] == holding.UNREADABLE:
+            said.append(f"“{k['folder']}”: its record cannot be read, so the app cannot "
+                        "tell where it came from. Anything in it you need can be moved "
+                        "out of that folder.")
+        else:
+            said.append(f"“{k['folder']}” ({k['error']}): it will be tried again next time.")
+    return " ".join(said)
+
+
+def _ends(new, was):
+    """
+    Whether removing `new` ends a waiting entry of `was`, both identities.
+    Two entries of one item could each be undone over the other, so the
+    older goes on to the Trash first: a take ends its own earlier entries (a
+    crop of it among them, which carries the take's identity); a rehearsal
+    every entry of it, its takes' and its drafts'; a draft its own.
+    """
+    kind = new.get("kind")
+    if kind == "take":
+        return (was.get("kind") == "take" and new.get("rehearsal_id") is not None
+                and was.get("rehearsal_id") == new.get("rehearsal_id")
+                and was.get("take_number") == new.get("take_number"))
+    if kind == "rehearsal":
+        rehearsal = new.get("rehearsal_id")
+        if rehearsal is not None and was.get("rehearsal_id") == rehearsal:
+            return True
+        folder = (new.get("folder") or "").rstrip("/")
+        draft = was.get("draft") or ""
+        return was.get("kind") == "draft" and bool(folder) and draft.startswith(folder + "/")
+    if kind == "draft":
+        return was.get("kind") == "draft" and _same_draft(new, was)
+    return False
+
+
+def _broken_off(record):
+    """Whether an entry's record says an Undo was under way and did not
+    finish: its end moves files back into the item's places (_finish_undo,
+    _end_uncrop), or for a crop undone sends on what it left."""
+    return isinstance(record, dict) and (record.get("rows") == "restoring"
+                                         or bool(record.get("undone")))
+
+
+def _shared_of(takes):
+    """What each of these takes has in the cloud folder, for a removal's
+    record: [{"mix"?, "tracks"?}], absolute. The copies stay while the Undo
+    waits, so Undo has nothing to send again; the end takes them out."""
+    return [{k: t["cloud"][k] for k in ("mix", "tracks") if (t.get("cloud") or {}).get(k)}
+            for t in takes if _shape_of(t.get("cloud"))]
+
+
+def _kept_by_crop(mark, start, end):
+    """Whether a crop of [start, end] keeps this mark: one on the region's
+    edges is kept. Undo of the crop asks the same question (_uncut_marks)."""
+    return start <= mark["at"] <= end
+
+
+def _mark_key(mark):
+    label = mark.get("label_id")
+    return (round(float(mark["at"]), 2), label if isinstance(label, int) else -1,
+            str(mark.get("note") or ""))
+
+
+def _uncut_marks(record, current):
+    """
+    A take's marks once its crop is undone, from those it has now: every
+    mark the crop dropped, as it was; every mark it kept and moved, as it
+    was before (a kept mark changed or deleted since stays as it is now);
+    and a mark placed since the crop, at t, back at t + start, where t is in
+    the uncut take. `record` is the crop's (crop_take): "markers" before the
+    crop, "start" and "end".
+    """
+    start, end = float(record["start"]), float(record["end"])
+    moved = {}
+    out = []
+    for m in record.get("markers") or []:
+        if _kept_by_crop(m, start, end):
+            moved.setdefault(_mark_key({**m, "at": m["at"] - start}), []).append(m)
+        else:
+            out.append(m)
+    for m in current:
+        was = moved.get(_mark_key(m))
+        out.append(was.pop(0) if was else {**m, "at": round(m["at"] + start, 2)})
+    return sorted(out, key=lambda m: m["at"])
+
+
+def _same_marks(a, b):
+    """Two lists of marks are the same marks, in any order."""
+    return sorted(map(_mark_key, a)) == sorted(map(_mark_key, b))
+
+
+def _put_back_error(e):
+    """What an Undo that could not put something back answers: a place
+    taken is said as it is, anything else as what went wrong."""
+    return str(e) if isinstance(e, FileExistsError) else f"Could not put it back: {e}"
+
+
+# What an Undo answers when it went part way and could not be taken back
+# either: what is where is recorded, and the next end finishes it
+# (_end_uncrop), the notice ending first (end_trash).
+FINISHING = "It is being put back; it will be finished when the notice goes."
+
+# What an Undo, delete or discard of an item answers while it is being
+# cropped (Api._start_crop).
+CROPPING = "Wait until the crop is done."
+
+# What an Undo answers, with "back", once what went is back where it was:
+# by its Undo, or by an end that put it back (Api._put_back). Not that it
+# has gone to the Trash, which an Undo too late answers (holding.gone_text).
+BACK = "It is back where it was."
 
 
 def _take_dir_name(take_number, name):
@@ -512,6 +704,12 @@ class Api:
         # Renaming a take's files and putting names right do not run over
         # each other's folders.
         self._files_lock = threading.RLock()
+        # The takes and drafts being cropped (_start_crop), by identity.
+        self._cropping = []
+        # The removals whose item is back where it was, by token: an Undo,
+        # or an end, put it back (_put_back). Its Undo asked again says so
+        # (_too_late), rather than that it has gone to the Trash.
+        self._back = set()
         # Takes whose folder or cloud copy no longer carries their name are
         # renamed in the background — see names_pass.py.
         self._names_pass = NamesPass(
@@ -548,6 +746,14 @@ class Api:
         self._server = AppServer(
             UI_DIR, self._recordings_dir, api=self, port=server_port
         )
+
+        # A removal still waiting for its Undo when the app last stopped (it
+        # died, or the Trash refused at quit) goes on to the Trash now, with
+        # the cloud copies its record names; one the app died in the middle
+        # of goes back, or its Undo is finished (see _end). Before the cleanup
+        # below, which leaves alone a rehearsal something of which is waiting.
+        # One that can do neither is kept, and said once.
+        self._end_all(at_start=True)
 
         # Clear out leftovers from previous runs (rehearsal started, nothing
         # recorded, app closed).
@@ -599,6 +805,12 @@ class Api:
         # A rename the pass had under way finishes before the library closes.
         held = self._files_lock.acquire(timeout=10)
         try:
+            # The notice offering Undo closes with the window, so whatever
+            # waits for one goes on to the Trash now. Not without the lock:
+            # whatever holds it is moving files, and the next start sends
+            # them on instead.
+            if held:
+                self._end_all()
             if self._library is not None:
                 self._library.close()
         finally:
@@ -616,17 +828,26 @@ class Api:
         starting: Settings still work, and another folder can be chosen.
         Returns the error message, or None.
         """
-        folder = Path(recordings_dir or self._recordings_dir)
+        library, error = self._new_library(recordings_dir or self._recordings_dir)
+        if error is None:
+            self._install_library(library)
+        return error
+
+    def _new_library(self, folder):
+        """(the folder's Library, None), or (None, why it cannot be used)."""
         try:
-            library = Library(folder, cloud_dir=lambda: self._cloud_dir)
+            return Library(Path(folder), cloud_dir=lambda: self._cloud_dir), None
         except LibraryUnavailable as e:
             logging.getLogger(__name__).error("recordings database: %s", e, exc_info=True)
-            return str(e)
+            return None, str(e)
+
+    def _install_library(self, library):
+        """`library` in use from now on, the one before it closed, and any old
+        session.json files of its folder moved into it."""
         if getattr(self, "_library", None) is not None:
             self._library.close()
         self._library, self._library_error = library, None
         import_all(library, self._cloud_dir, report=self._report_import_failure)
-        return None
 
     def _report_import_failure(self, folder, e):
         """An old session.json that could not be read: it stays where it is
@@ -645,6 +866,30 @@ class Api:
         forgotten."""
         problems, self._problems = self._problems, []
         return problems
+
+    def log_problem(self, where, name, message, stack=""):
+        """
+        A problem raised in the page itself, written to the crash log.
+
+        The red bar says every problem's whole error is in crash.log. One a
+        call into Python raised is: pywebview logs it. One the page raised (a
+        notice's callback that threw, an Undo that failed in the page after
+        Python answered) never passed through here, so the page sends it,
+        once for each problem it lists or counts. It goes as one ERROR record
+        through this module's logger, which the crash log's handler keeps
+        (app._arm_crash_log).
+
+        Never raises and answers nothing: each part is made text and cut to
+        PAGE_PROBLEM_CHARS, and a failure here is dropped. Writing a problem
+        down must not make another.
+        """
+        try:
+            parts = [_page_problem_text(v) for v in (where, name, message, stack)]
+            where, name, message, stack = parts
+            log.error("problem in the page, in %s: %s: %s%s",
+                      where, name, message, f"\n{stack}" if stack else "")
+        except Exception:  # noqa: BLE001 - never let logging make a problem
+            pass
 
     @property
     def _lib(self):
@@ -971,6 +1216,12 @@ class Api:
         folder = Path(path).expanduser()
         if not folder.is_absolute():
             return {"ok": False, "error": "A full path is required"}
+        # The folder in use, chosen again (the picker opens on it): no
+        # switch, so nothing ends. Its Undos stay, and its library too, and
+        # "same" tells the interface to keep their notices.
+        if _same_folder(folder, self._recordings_dir):
+            return {"ok": True, "recordings_dir": str(self._recordings_dir),
+                    "kept": [], "ended": [], "same": True}
         # The rehearsal in progress is kept in the current folder's database;
         # moving to another one under it would leave its next takes nowhere.
         if self._session is not None:
@@ -982,18 +1233,30 @@ class Api:
             return {"ok": False, "error": f"Could not open the folder: {e}"}
         # Opened before anything else changes: a folder whose database cannot
         # be used leaves the current one in use, exactly as it was.
-        error = self._open_library(folder)
+        library, error = self._new_library(folder)
         if error is not None:
             return {"ok": False, "error": error}
 
-        self._recordings_dir = folder
+        # What waits for its Undo is in the old folder's _deleting, which no
+        # Undo can reach from the new one: it goes on first, against the old
+        # folder's library (an entry whose rows were never dropped goes back
+        # into it), and only then is the new one put in its place, so no
+        # removal on another thread reaches the new library meanwhile. One
+        # that stays there is named in the answer ("kept", its folder): no
+        # start looks in the old folder again, so nothing else ever would.
+        ended = []
+        with self._files_lock:
+            kept = self._end_all(ended=ended)
+            self._install_library(library)
+            self._recordings_dir = folder
         self._config["recordings_dir"] = str(folder)
         self._write_config()
         # The server hands files to the player, so it has to look at the new
         # folder right away, without restarting the app.
         self._server.set_media_root(folder)
         self._names_pass.request()
-        return {"ok": True, "recordings_dir": str(folder)}
+        return {"ok": True, "recordings_dir": str(folder),
+                "kept": [k["folder"] for k in kept], "ended": ended}
 
     def choose_recordings_dir(self):
         if self._window is None:
@@ -1888,9 +2151,12 @@ class Api:
             print(f"[finish] letting go of the MIDI ports: {e}")
 
         # A rehearsal where nothing was saved should not leave a folder behind.
+        # One whose last take or draft waits for its Undo is not empty yet.
         removed = False
         if rehearsal is not None and self._is_empty(rehearsal):
-            removed = self._remove_empty(folder)
+            with self._files_lock:
+                if not self._waits(folder, self._waiting_rehearsals()):
+                    removed = self._remove_empty(folder)
 
         return {
             "ok": True,
@@ -1921,13 +2187,41 @@ class Api:
 
         live = Path(self._session["folder"]) if self._session is not None else None
         removed = 0
-        for rehearsal in self._lib.rehearsals():
-            folder = Path(rehearsal["folder"])
-            if rehearsal["missing"] or folder == live:
-                continue
-            if self._is_empty(rehearsal) and self._remove_empty(folder):
-                removed += 1
+        # Under the lock that removals hold, so a take deleted meanwhile is
+        # either still listed here or already waiting in its entry.
+        with self._files_lock:
+            waiting = None
+            for rehearsal in self._lib.rehearsals():
+                folder = Path(rehearsal["folder"])
+                if rehearsal["missing"] or folder == live or not self._is_empty(rehearsal):
+                    continue
+                # Its last take deleted a moment ago, waiting for its Undo:
+                # without the rehearsal, Undo would have nowhere to go back.
+                if waiting is None:
+                    waiting = self._waiting_rehearsals()
+                if self._waits(folder, waiting):
+                    continue
+                if self._remove_empty(folder):
+                    removed += 1
         return {"ok": True, "removed": removed}
+
+    def _waiting_rehearsals(self):
+        """The ids of the rehearsals something of which waits in the holding
+        folder for its Undo: a take or a draft (or a crop of one)."""
+        ids = set()
+        for token in holding.tokens(self._recordings_dir):
+            record = (holding.read(self._recordings_dir, token) or {}).get("record")
+            for ident in _identities(record):
+                if ident.get("kind") != "rehearsal" and ident.get("rehearsal_id") is not None:
+                    ids.add(ident["rehearsal_id"])
+        return ids
+
+    def _waits(self, folder, waiting):
+        """Whether the rehearsal in `folder` is one of `waiting`."""
+        if not waiting:
+            return False
+        ref = self._lib.rehearsal_ref(folder)
+        return ref is not None and ref["id"] in waiting
 
     def _remove_empty(self, folder):
         """
@@ -2227,6 +2521,17 @@ class Api:
         if self._session is None:
             return {"ok": False, "error": "No rehearsal in progress"}
 
+        # A crop of this draft still waiting for its Undo (its uncut files)
+        # is over once the draft is saved: Undo would put them back into a
+        # draft that is no longer there. It goes on to the Trash first. Only
+        # a crop: a discard of a draft of that name is another draft's.
+        with self._files_lock:
+            ident = self._draft_identity(Path(temp_dir))
+            if ident is not None and self._being_cropped([ident]):
+                return {"ok": False, "error": CROPPING}
+            ended = ([] if ident is None
+                     else self._end_before([ident], stale=False, reasons={"crop"}))
+
         s = self._session
         # Named as it will be kept: the song and go the name resolves to, not
         # what was typed — "polyn" for the third go is "Polyn 3".
@@ -2254,7 +2559,7 @@ class Api:
             take_info["cloud_send"] = True
         kept = self._add_moved_take(s["folder"], take_info, undo, take_dir)
         if kept is None:
-            return {"ok": False, "error": "Rehearsal not found"}
+            return {"ok": False, "error": "Rehearsal not found", "ended": ended}
         # The name picked for this take is used up; the next one follows on
         # from it. A draft rescued from an earlier take leaves it alone.
         if take_number == s["take_counter"]:
@@ -2264,7 +2569,7 @@ class Api:
         self._cleanup_drafts_dir(temp_dir)
         self._enqueue_publish(s["folder"], take_number, take=kept)
         self._retry_failed_publishes()
-        return {"ok": True, "take": kept}
+        return {"ok": True, "take": kept, "ended": ended}
 
     @classmethod
     def _move_take_files(cls, draft_dir, take_dir, tracks, notes):
@@ -2406,10 +2711,11 @@ class Api:
         """
         A take dropped on the review screen and a draft rescued after a crash
         are the same thing on disk — an unfinished take folder — so they leave
-        the same way, into the Trash. This used to be an rmtree of whatever
-        path it was handed: the one place in the app where a recording was
-        really destroyed, and the one that needed it least, because the take
-        was recorded seconds earlier and cannot be played again.
+        the same way, towards the Trash (discard_draft). This used to be an
+        rmtree of whatever path it was handed: the one place in the app where
+        a recording was really destroyed, and the one that needed it least,
+        because the take was recorded seconds earlier and cannot be played
+        again.
         """
         return self.discard_draft(temp_dir)
 
@@ -2470,10 +2776,20 @@ class Api:
         if not draft_dir.is_dir():
             return {"ok": False, "error": "Draft not found"}
 
+        # A crop of this draft still waiting for its Undo is over once the
+        # draft is a take, as it is at keep_take: its uncut files go on to
+        # the Trash first.
+        with self._files_lock:
+            ident = self._draft_identity(draft_dir)
+            if ident is not None and self._being_cropped([ident]):
+                return {"ok": False, "error": CROPPING}
+            ended = ([] if ident is None
+                     else self._end_before([ident], stale=False, reasons={"crop"}))
+
         folder = draft_dir.parent.parent
         r = self._lib.rehearsal(folder)
         if r is None:
-            return {"ok": False, "error": "Rehearsal not found"}
+            return {"ok": False, "error": "Rehearsal not found", "ended": ended}
 
         def work(progress):
             done = finalize(draft_dir, r["samplerate"], r["bit_depth"],
@@ -2485,7 +2801,7 @@ class Api:
         result = self._journaled(
             "recover", f"Recovering “{draft_dir.name}”", draft_dir, None, work)
         if result.get("ok") is False:
-            return result
+            return {**result, "ended": ended}
 
         take_number = max((t["take_number"] for t in r["takes"]), default=0) + 1
         # A draft rescued with no name is a take nobody named: "Take 5".
@@ -2508,7 +2824,7 @@ class Api:
         }
         kept = self._add_moved_take(folder, take_info, undo, take_dir)
         if kept is None:
-            return {"ok": False, "error": "Rehearsal not found"}
+            return {"ok": False, "error": "Rehearsal not found", "ended": ended}
 
         shutil.rmtree(draft_dir, ignore_errors=True)
         self._cleanup_drafts_dir(draft_dir)
@@ -2522,16 +2838,69 @@ class Api:
         # case there is no startup sweep for, so this is the only thing that
         # ever sends it.
         self._enqueue_publish(folder, take_number)
-        return {"ok": True, "take": kept, "folder": str(folder)}
+        return {"ok": True, "take": kept, "folder": str(folder), "ended": ended}
 
     def discard_draft(self, draft_dir):
+        """
+        Moves a draft into the holding folder, where it waits for its Undo
+        (undo_trash puts it back at _drafts/take N, in its rehearsal's folder
+        as it is by then) or for its notice to end (end_trash sends it to the
+        Trash). {"ok": True, "undo": token}, or {"ok": False, "error"} with
+        the draft where it was.
+        """
         draft_dir = Path(draft_dir)
         if not self._inside_recordings(draft_dir):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
-        self._release_player_in(draft_dir)
-        result = move_to_trash(draft_dir, self._recordings_dir)
-        self._cleanup_drafts_dir(draft_dir)
-        return result
+        with self._files_lock:
+            # Asked before anything ends: a second call for a draft already
+            # discarded (a double click) would otherwise end the first one's
+            # entry, a draft of the very same name, and take its Undo with it.
+            if not draft_dir.exists():
+                return {"ok": False, "error": "It is not there any more"}
+            ref = self._draft_rehearsal(draft_dir)
+            ident = self._draft_identity(draft_dir, ref)
+            if ident is not None and self._being_cropped([ident]):
+                return {"ok": False, "error": CROPPING}
+            ended = self._end_before([ident] if ident is not None else [])
+            # And again after: an end moves files.
+            if not draft_dir.exists():
+                return {"ok": False, "error": "It is not there any more", "ended": ended}
+            self._release_player_in(draft_dir)
+            record = {"kind": "draft", "reason": "discard", "rows": "none",
+                      "item": ident, "rehearsal": ref}
+            try:
+                token = holding.hold(self._recordings_dir, record, [draft_dir])
+            except (OSError, ValueError) as e:
+                return {"ok": False, "error": f"Could not remove it: {e}", "ended": ended}
+            self._cleanup_drafts_dir(draft_dir)
+            return {"ok": True, "undo": token, "ended": ended}
+
+    def _recordings_key(self, path):
+        """`path` relative to the recordings folder, with forward slashes, as
+        a removal's record names it; None outside it."""
+        try:
+            return Path(path).resolve().relative_to(self._recordings_dir.resolve()).as_posix()
+        except ValueError:
+            return None
+
+    def _draft_rehearsal(self, draft_dir):
+        """The rehearsal a draft at <rehearsal>/_drafts/<name> belongs to, as
+        a record names it (Library.rehearsal_ref), or None."""
+        draft_dir = Path(draft_dir)
+        if draft_dir.parent.name != DRAFTS_DIR or self._library is None:
+            return None
+        return self._lib.rehearsal_ref(draft_dir.parent.parent)
+
+    def _draft_identity(self, draft_dir, ref=None):
+        """A draft's identity (see _identities), or None for a folder outside
+        the recordings folder."""
+        key = self._recordings_key(draft_dir)
+        if key is None:
+            return None
+        if ref is None:
+            ref = self._draft_rehearsal(draft_dir)
+        return {"kind": "draft", "draft": key,
+                "rehearsal_id": None if ref is None else ref["id"]}
 
     # ---------- history ----------
 
@@ -2772,6 +3141,9 @@ class Api:
                 if not self._lib.has(folder):
                     return {"ok": False, "error": "Rehearsal not found"}
                 return {"ok": False, "error": "Take not found"}
+            # Its folder would move while the crop moves its files.
+            if self._take_being_cropped(folder, take_number):
+                return {"ok": False, "error": CROPPING}
 
             # The folder carries the name the take ends up with, which can
             # differ from what was typed: renamed to its own song, a take
@@ -2861,6 +3233,12 @@ class Api:
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
         with self._files_lock:
+            # Its folder would move while a crop moves files in it.
+            ref = self._lib.rehearsal_ref(folder)
+            if ref is not None and self._being_cropped(
+                    [{"kind": "rehearsal", "folder": self._recordings_key(folder),
+                      "rehearsal_id": ref["id"]}]):
+                return {"ok": False, "error": CROPPING}
             return self._rename_rehearsal_locked(folder, new_name)
 
     def _rename_rehearsal_locked(self, folder, new_name):
@@ -3082,25 +3460,31 @@ class Api:
     def _crop_tracks(self, tracks, start_sec, end_sec, progress=None, notes=()):
         """
         Rewrites every track shorter, and every notes file (a .mid) with them,
-        and puts the originals in the Trash as one folder named after the take
-        — what turns up there is then a recognisable thing rather than eight
-        loose files called Gtr.wav. An unconverted .midraw (R40), with the
-        clock and the record that a later try would make it from, is timed
-        from the uncropped take's start and belongs to the take as it was: it
-        goes aside with the originals and the cropped take keeps none. Anything
-        else in the take's folder is not the crop's to touch.
+        and puts the originals aside as one folder named after the take, "…
+        (before crop)", beside it: the caller holds that folder for the crop's
+        Undo (_hold_uncut), and what reaches the Trash in the end is then a
+        recognisable thing rather than eight loose files called Gtr.wav. An
+        unconverted .midraw (R40), with the clock and the record that a later
+        try would make it from, is timed from the uncropped take's start and
+        belongs to the take as it was: it goes aside with the originals and the
+        cropped take keeps none. Anything else in the take's folder is not the
+        crop's to touch.
 
         The order matters, because the app can be killed in the middle of it.
         Every new file is written under WRITING_PREFIX first, so nothing is
         replaced until all of them exist; then the originals move aside
         together, the .mid files with the .wav files; then the new files take
-        their names; then the folder of originals goes. Die between those last
-        two and the take folder holds obviously-unfinished files with the
-        originals in a folder beside it — repairable by hand, which is the most
-        a step that moves files can promise. A move that fails while the app is
-        alive is undone instead: the take goes back to exactly what it was,
-        because a half-cropped take behind the words "could not crop" is a take
-        nobody goes looking at.
+        their names. Die between those two and the take folder holds
+        obviously-unfinished files with the originals in a folder beside it —
+        repairable by hand, which is the most a step that moves files can
+        promise. A move that fails while the app is alive is undone instead:
+        the take goes back to exactly what it was, because a half-cropped take
+        behind the words "could not crop" is a take nobody goes looking at.
+
+        Answers {"ok", "duration_sec", "aside", "home", "moved"}: the folder of
+        originals, the take's folder (where the leftovers came from), and each
+        original as {"name", "source", "cropped"}, "cropped" false for a
+        leftover, which has no cropped file in its place.
         """
         files = [*tracks, *notes]
         take_dir = Path(files[0]["file"]).parent
@@ -3157,6 +3541,10 @@ class Api:
         try:
             aside.mkdir(parents=True)
             for source in [*(Path(f["file"]) for f in files), *left]:
+                # Two files of one name from two folders would meet in one
+                # folder, the second over the first.
+                if os.path.lexists(aside / source.name):
+                    raise FileExistsError(f"two of the take's files are called {source.name}")
                 shutil.move(str(source), str(aside / source.name))
                 moved.append((aside / source.name, source))
             for f, target in zip(files, written):
@@ -3184,46 +3572,151 @@ class Api:
                 pass
             return {"ok": False, "error": f"Could not replace the tracks: {e}"}
 
-        # The crop itself is already done — the new files are in place — so
-        # this can only report the sweep of the originals, never undo it.
-        # When even the _deleted fallback cannot move the aside folder, it is
-        # still sitting right where this function put it: that path is the
-        # one thing worth keeping, since it is how a person finds the
-        # originals back.
-        gone = move_to_trash(aside, self._recordings_dir)
-        result = {
+        cropped = {Path(f["file"]) for f in files}
+        return {
             "ok": True,
             "duration_sec": round(kept_sec, 2),
-            "trashed": bool(gone.get("trashed")),
-            "location": gone.get("location") if gone.get("ok") else str(aside),
+            "aside": aside,
+            "home": take_dir,
+            "moved": [{"name": stored.name, "source": source, "cropped": source in cropped}
+                      for stored, source in moved],
         }
-        if not gone.get("ok"):
-            result["error"] = gone.get("error")
-        return result
+
+    def _hold_uncut(self, record, done):
+        """
+        The originals a crop put aside (_crop_tracks) into the holding
+        folder, where they wait for the crop's Undo (undo_trash) or for its
+        notice to end (end_trash, which sends them to the Trash). The record
+        is the caller's, plus where each original came from. Once the crop
+        is done, so a hold that fails takes nothing back: the folder of
+        originals stays beside the take, and the answer says where.
+        Returns (token, None) or (None, why).
+        """
+        record = {
+            **record,
+            "kind": "crop",
+            "reason": "crop",
+            # Nothing of the library's goes with it: the take is still there.
+            "rows": "none",
+            "home": self._recordings_key(done["home"]),
+            "files": [{"name": m["name"], "from": self._recordings_key(m["source"]),
+                       "cropped": m["cropped"]} for m in done["moved"]],
+        }
+        try:
+            return holding.hold(self._recordings_dir, record, [done["aside"]]), None
+        except (OSError, ValueError) as e:
+            log.error("crop: the uncut take could not wait for its Undo, and is in %s: %s",
+                      done["aside"], e)
+            return None, f"{e}, and is still at {done['aside']}"
+
+    def _start_crop(self, idents, reasons=None, ended=None):
+        """
+        Before a crop moves anything, under _files_lock: an Undo of the item
+        (`idents`) that was broken off is finished first, as it moves the
+        item's files (_end_before with `broken`, only those made for one of
+        `reasons` when given); then the item is registered as being cropped,
+        until _end_crop. Meanwhile its crop's Undo (_uncrop), its delete,
+        discard, rename, save (keep_take) or rescue (recover_draft), and a
+        delete or rename of its rehearsal, wait ("Wait until the crop is
+        done."): the crop moves the take's files outside the lock, and its
+        places are empty for a moment.
+        An earlier crop's entry ends only once this crop's own is held, so
+        that a crop that fails leaves that Undo there. False, with nothing
+        registered, when a crop of the item is under way already. The tokens
+        of the Undos it finished go into `ended`.
+        """
+        with self._files_lock:
+            done = self._end_before(idents, stale=False, reasons=reasons, broken=True)
+            if ended is not None:
+                ended += done
+            if self._being_cropped(idents):
+                return False
+            self._cropping.extend(idents)
+            return True
+
+    def _end_crop(self, idents):
+        """The crop of the item is done (_start_crop), however it went."""
+        with self._files_lock:
+            for ident in idents:
+                self._cropping.remove(ident)
+
+    def _being_cropped(self, idents):
+        """Whether a crop of any of these items, or of something they hold
+        (a take of a rehearsal), is under way (_start_crop)."""
+        with self._files_lock:
+            return any(_ends(i, c) for i in idents if i for c in self._cropping)
 
     def crop_take(self, folder, take_number, start_sec, end_sec):
         """
         Keeps only [start, end) of a saved take. The take keeps its number,
         its name and its folder: from the outside it is the same take, shorter.
+
+        The take as it was waits in the holding folder (_hold_uncut), with a
+        record of what the crop changed (its marks before it, the dropped
+        ones among them, its length, and the shape of its cloud copy), for
+        the crop's Undo (undo_trash) or for its notice to end (end_trash,
+        which sends it to the Trash): {"ok": True, "take", "markers_dropped",
+        "undo": token}. "undo" is None, and "error" says why and where the
+        uncut take is, when it could not be held: the crop is done all the
+        same, so that is a warning, not a failure.
         """
         folder = Path(folder)
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        take = self._lib.take(folder, take_number)
-        if take is None:
-            if not self._lib.has(folder):
-                return {"ok": False, "error": "Rehearsal not found"}
+        def what_to_crop():
+            take = self._lib.take(folder, take_number)
+            if take is None:
+                if not self._lib.has(folder):
+                    return {"ok": False, "error": "Rehearsal not found"}
+                return {"ok": False, "error": "Take not found"}
+            tracks = [t for t in take["tracks"] if Path(t.get("file", "")).exists()]
+            notes = [n for n in take.get("notes") or [] if Path(n.get("file", "")).exists()]
+            if not tracks and not notes:
+                return {"ok": False, "error": "The take has no files left on disk"}
+            span = self._crop_span(take["duration_sec"], start_sec, end_sec)
+            if "error" in span:
+                return {"ok": False, "error": span["error"]}
+            return {"ok": True, "take": take, "tracks": tracks, "notes": notes, "span": span}
+
+        asked = what_to_crop()
+        if not asked["ok"]:
+            return asked
+        ref = self._lib.rehearsal_ref(folder)
+        if ref is None:
+            return {"ok": False, "error": "Rehearsal not found"}
+        ident = {"kind": "take", "rehearsal_id": ref["id"], "take_number": int(take_number)}
+        # The tokens of the entries this crop ends, however it goes ("ended").
+        ended = []
+        if not self._start_crop([ident], ended=ended):
+            return {"ok": False, "error": CROPPING, "ended": ended}
+        try:
+            return {**self._crop_take(folder, take_number, ident, ref, what_to_crop, ended),
+                    "ended": ended}
+        finally:
+            self._end_crop([ident])
+
+    def _crop_take(self, folder, take_number, ident, ref, what_to_crop, ended):
+        """crop_take, once the take is registered as being cropped
+        (_start_crop). The tokens of the entries it ends go into `ended`."""
+        # Read again: the end of a broken-off Undo can have moved its files.
+        asked = what_to_crop()
+        if not asked["ok"]:
+            return asked
+        take, tracks, notes, span = asked["take"], asked["tracks"], asked["notes"], asked["span"]
+        # What the crop needs of the library, read before any file moves: a
+        # library that fails here changes nothing on disk. The copies other
+        # takes name are asked for here only as that check: by the time the
+        # crop is done they may be others (below).
+        try:
+            rows = self._lib.take_record(folder, take_number)
+            if rows is not None:
+                self._lib.cloud_paths(but=rows["take"]["id"])
+        except Exception as e:  # noqa: BLE001 - nothing has moved: answered
+            log.error("crop: the library could not be read, so nothing was cropped: %s", e)
+            return {"ok": False, "error": f"Could not crop: {e}"}
+        if rows is None:
             return {"ok": False, "error": "Take not found"}
-
-        tracks = [t for t in take["tracks"] if Path(t.get("file", "")).exists()]
-        notes = [n for n in take.get("notes") or [] if Path(n.get("file", "")).exists()]
-        if not tracks and not notes:
-            return {"ok": False, "error": "The take has no files left on disk"}
-
-        span = self._crop_span(take["duration_sec"], start_sec, end_sec)
-        if "error" in span:
-            return {"ok": False, "error": span["error"]}
 
         # Tracks are played through a memmap, and Windows will not let a
         # mapped file be renamed or removed. macOS will, which is exactly
@@ -3250,14 +3743,17 @@ class Api:
         # The markers are read and rewritten in one transaction, now that the
         # crop is done: it takes seconds, and a marker placed on the take
         # meanwhile must move with the audio rather than be written over by
-        # a list read before it existed.
+        # a list read before it existed. The list read there is what Undo
+        # puts back, the dropped marks among it.
         dropped = 0
+        before = []
 
         def shift(markers):
             nonlocal dropped
+            before[:] = markers
             kept = []
             for m in markers:
-                if span["start"] <= m["at"] <= span["end"]:
+                if _kept_by_crop(m, span["start"], span["end"]):
                     kept.append({**m, "at": round(m["at"] - span["start"], 2)})
                 else:
                     dropped += 1
@@ -3268,15 +3764,63 @@ class Api:
         # the cloud.source_of fingerprint covers the other half of this: a
         # copy already under way can write its record after this line, and
         # a record that still matched the shorter take would suppress its
-        # own repair.
+        # own repair. Undo sends the uncut take back there in this shape.
         had = _shape_of(take.get("cloud"))
-        self._remove_shared(take)
-        if (self._lib.edit_markers(folder, take_number, shift) is None
-                or self._lib.update_take(
-                    folder, take_number, duration_sec=done["duration_sec"]) is None):
-            # Deleted while it was being cropped.
-            return {"ok": False, "error": "Take not found"}
-        self._lib.set_cloud_copy(folder, take_number, None, None)
+        with self._files_lock:
+            try:
+                found = (self._lib.edit_markers(folder, take_number, shift) is not None
+                         and self._lib.update_take(
+                             folder, take_number, duration_sec=done["duration_sec"]) is not None)
+            except Exception as e:  # noqa: BLE001 - the files are cut: answered
+                log.error("crop: the take's record could not follow its crop; "
+                          "the uncut take is in %s: %s", done["aside"], e)
+                # The tracks are cut and the record is not, so there is no
+                # Undo to offer: the uncut take stays beside the take, whole,
+                # and the answer names it, as nothing else on screen would.
+                # The player opens again, as for a crop that failed.
+                if playing:
+                    self.player_open(playing)
+                return {"ok": False,
+                        "error": "The crop is done but its marks could not follow; "
+                                 f"the uncut take is in “{done['aside']}”."}
+            if not found:
+                # Deleted while it was being cropped: there is no take for an
+                # Undo to put it back into, so its uncut files go the way a
+                # removal's go, on to the Trash now.
+                token, _ = self._hold_uncut({"item": ident, "rehearsal": ref}, done)
+                if token is not None:
+                    gone = self._end(token)
+                    if not gone.get("ok"):
+                        self._kept(token, gone.get("error"))
+                return {"ok": False, "error": "Take not found"}
+            # Not a copy another take names now (one that came after it under
+            # the same name): that one stays. Asked now, not before the crop:
+            # the copy worker runs outside _files_lock, and may have recorded
+            # such a copy meanwhile. Should the library not say, the copy
+            # stays too: one left behind is the safe way to fail.
+            try:
+                live = self._lib.cloud_paths(but=rows["take"]["id"])
+            except Exception as e:  # noqa: BLE001 - the crop is done all the same
+                log.error("crop: the take's old cloud copy is left in the cloud folder, as "
+                          "which copies other takes name could not be read: %s", e)
+                live = None
+            if live is not None:
+                self._remove_shared(self._unused(take.get("cloud"), live))
+            self._lib.set_cloud_copy(folder, take_number, None, None)
+            token, error = self._hold_uncut({
+                "item": ident,
+                "rehearsal": ref,
+                "take_id": rows["take"]["id"],
+                "start": span["start"],
+                "end": span["end"],
+                "markers": before,
+                "duration_sec": take["duration_sec"],
+                "had": had,
+            }, done)
+            # The take this crop started from is the one its own entry holds:
+            # an earlier crop's uncut take, whose Undo would put back a take
+            # this crop did not start from, goes on to the Trash (_ends).
+            ended += self._end_before([ident], reasons={"crop"}, exclude={token})
 
         # A take that was in the cloud goes back there cropped, in the shape
         # it had, whether sending on its own is on or not: the copy follows
@@ -3289,13 +3833,12 @@ class Api:
         return {
             "ok": True,
             "take": self._lib.take(folder, take_number),
-            "trashed": done["trashed"],
-            "location": done["location"],
             "markers_dropped": dropped,
-            # Present only when the sweep of the originals itself failed —
-            # the crop still succeeded, but this is why "trashed" is False
-            # and "location" is not the Trash.
-            **({"error": done["error"]} if "error" in done else {}),
+            "undo": token,
+            # Present only when the uncut take could not be held: the crop
+            # still succeeded, but there is no Undo, and this says where the
+            # uncut take is instead.
+            **({"error": error} if error else {}),
         }
 
     def crop_draft(self, temp_dir, tracks, start_sec, end_sec, notes=None):
@@ -3307,21 +3850,52 @@ class Api:
         `notes` are its .mid files, [{"name", "file"}] like the tracks, cut
         with them and answered the same way. Every other .mid in the draft is
         cut too, as Keep keeps it (_draft_notes), and is not in the answer.
+
+        The draft as it was waits for the crop's Undo as crop_take's take
+        does, and is answered the same way: "undo", or None with "error".
         """
         temp_dir = Path(temp_dir)
         if not self._inside_recordings(temp_dir):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        live = [t for t in (tracks or []) if Path(t.get("file", "")).exists()]
-        given = [n for n in (notes or []) if Path(n.get("file", "")).exists()]
-        band = self._session["tracks"] if self._session is not None else []
-        live_notes = self._draft_notes(temp_dir, band, given)
-        if not live and not live_notes:
-            return {"ok": False, "error": "The take has no files left on disk"}
+        def what_to_crop():
+            live = [t for t in (tracks or []) if Path(t.get("file", "")).exists()]
+            given = [n for n in (notes or []) if Path(n.get("file", "")).exists()]
+            band = self._session["tracks"] if self._session is not None else []
+            live_notes = self._draft_notes(temp_dir, band, given)
+            if not live and not live_notes:
+                return {"ok": False, "error": "The take has no files left on disk"}
+            span = self._crop_span(0, start_sec, end_sec)
+            if "error" in span:
+                return {"ok": False, "error": span["error"]}
+            return {"ok": True, "live": live, "given": given, "live_notes": live_notes,
+                    "span": span}
 
-        span = self._crop_span(0, start_sec, end_sec)
-        if "error" in span:
-            return {"ok": False, "error": span["error"]}
+        asked = what_to_crop()
+        if not asked["ok"]:
+            return asked
+        ref = self._draft_rehearsal(temp_dir)
+        ident = self._draft_identity(temp_dir, ref)
+        idents = [ident] if ident is not None else []
+        # As crop_take. Only a crop: a discard of a draft of that name is
+        # another draft's (keep_take).
+        ended = []
+        if not self._start_crop(idents, reasons={"crop"}, ended=ended):
+            return {"ok": False, "error": CROPPING, "ended": ended}
+        try:
+            return {**self._crop_draft(temp_dir, ident, idents, ref, what_to_crop, ended),
+                    "ended": ended}
+        finally:
+            self._end_crop(idents)
+
+    def _crop_draft(self, temp_dir, ident, idents, ref, what_to_crop, ended):
+        """crop_draft, once the draft is registered as being cropped
+        (_start_crop). The tokens of the entries it ends go into `ended`."""
+        asked = what_to_crop()
+        if not asked["ok"]:
+            return asked
+        live, given, live_notes, span = (
+            asked["live"], asked["given"], asked["live_notes"], asked["span"])
 
         playing = self._open_tracks
         self.player_close()
@@ -3336,14 +3910,16 @@ class Api:
             if playing:
                 self.player_open(playing)
             return done
+        with self._files_lock:
+            token, error = self._hold_uncut({"item": ident, "rehearsal": ref}, done)
+            ended += self._end_before(idents, reasons={"crop"}, exclude={token})
         return {
             "ok": True,
             "tracks": live,
             "notes": given,
             "duration_sec": done["duration_sec"],
-            "trashed": done["trashed"],
-            "location": done["location"],
-            **({"error": done["error"]} if "error" in done else {}),
+            "undo": token,
+            **({"error": error} if error else {}),
         }
 
     # ---------- playback ----------
@@ -3512,55 +4088,188 @@ class Api:
     # ---------- deleting ----------
 
     def _inside_recordings(self, path):
-        try:
-            Path(path).resolve().relative_to(self._recordings_dir.resolve())
-            return True
-        except ValueError:
-            return False
+        return self._recordings_key(path) is not None
 
     def delete_take(self, folder, take_number):
+        """
+        Moves the take into the holding folder and drops its rows, asking
+        nothing: {"ok": True, "undo": token, "takes_left"}. The token is what
+        the interface's Undo sends back (undo_trash); the take reaches the
+        Trash when that notice ends (end_trash), and its copy in the cloud
+        folder leaves with it then. {"ok": False, "error"} leaves the take,
+        rows and files, as it was.
+        """
         folder = Path(folder)
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
         with self._files_lock:
-            target = self._lib.take(folder, take_number)
-            if target is None:
+            if self._lib.take(folder, take_number) is None:
                 if not self._lib.has(folder):
                     return {"ok": False, "error": "Rehearsal not found"}
                 return {"ok": False, "error": "Take not found"}
-
-            # Find the take folder from its files rather than its name: the name
-            # could have been changed by hand. Its notes are files too: a take
-            # of nothing but notes has no audio to find it by.
-            take_dirs = {str(d) for d in _dirs_of(target)}
-            result = {"ok": True, "trashed": False, "location": None}
-            for d in take_dirs:
-                if Path(d).exists() and self._inside_recordings(d):
-                    self._release_player_in(d)
-                    result = move_to_trash(d, self._recordings_dir)
-
-            # Its copy in the cloud goes the same way: a take deleted here must
-            # not stay in the band's folder looking like one worth keeping. A copy
-            # still being made cleans up after itself when it finds the take gone.
-            self._remove_shared(target)
-            left = self._lib.delete_take(folder, take_number)
-            return {**result, "takes_left": left}
+            if self._take_being_cropped(folder, take_number):
+                return {"ok": False, "error": CROPPING}
+            held = self._hold_takes(folder, [take_number], "take")
+            if held["failed"]:
+                return {"ok": False, "error": held["failed"][0]["error"],
+                        "ended": held["ended"]}
+            return {"ok": True, "undo": held["undo"], "takes_left": held["takes_left"],
+                    "ended": held["ended"]}
 
     def delete_takes(self, folder, take_numbers):
-        """Several takes at once, each as delete_take deletes one: Clear
-        false starts. The ones that could not be deleted are said, and the
-        rest are deleted all the same."""
-        deleted, failed = [], []
-        for n in take_numbers:
-            res = self.delete_take(folder, n)
-            if res.get("ok"):
-                deleted.append(n)
+        """Several takes at once, as delete_take deletes one: Clear false
+        starts. All of them wait in one holding entry, with one Undo
+        ("undo", None when none went). The ones that could not be deleted are
+        said, and the rest are deleted all the same."""
+        folder = Path(folder)
+        numbers = list(dict.fromkeys(take_numbers))
+        refused = {}
+        found = []
+        with self._files_lock:
+            for n in numbers:
+                if not self._inside_recordings(folder):
+                    refused[n] = "Folder is outside the recordings directory"
+                elif self._take_being_cropped(folder, n):
+                    refused[n] = CROPPING
+                elif self._lib.take(folder, n) is not None:
+                    found.append(n)
+                else:
+                    refused[n] = ("Take not found" if self._lib.has(folder)
+                                  else "Rehearsal not found")
+            held = (self._hold_takes(folder, found, "takes") if found
+                    else {"undo": None, "deleted": [], "failed": [], "ended": []})
+        refused.update({f["take_number"]: f["error"] for f in held["failed"]})
+        return {"ok": True, "deleted": held["deleted"],
+                "failed": [{"take_number": n, "error": refused[n]}
+                           for n in numbers if n in refused],
+                "undo": held["undo"], "ended": held["ended"]}
+
+    def _take_being_cropped(self, folder, take_number):
+        """Whether a crop of this take is under way (_start_crop)."""
+        ref = self._lib.rehearsal_ref(folder)
+        return ref is not None and self._being_cropped(
+            [{"kind": "take", "rehearsal_id": ref["id"], "take_number": int(take_number)}])
+
+    def _hold_takes(self, folder, numbers, kind):
+        """
+        Takes of one rehearsal into one holding entry, then their rows out:
+        {"undo", "deleted", "failed", "takes_left", "ended"}. In this order: earlier
+        entries of these takes end (_end_before), before anything of them is
+        read, since an end can put files of them back; the player lets go of
+        their files; the files move; and only then do the rows go, so a take
+        whose files will not all move (Windows refuses a folder holding a
+        file another program has open) keeps its rows and its files where
+        they were, and is said in "failed". The others go all the same.
+        """
+        ref = self._lib.rehearsal_ref(folder)
+        ended = []
+        if ref is not None:
+            ended = self._end_before([{"kind": "take", "rehearsal_id": ref["id"],
+                                       "take_number": int(n)} for n in numbers])
+        rehearsal = self._lib.rehearsal(folder) or {"takes": []}
+        by_number = {t["take_number"]: t for t in rehearsal["takes"]}
+        todo = [n for n in dict.fromkeys(int(n) for n in numbers) if n in by_number]
+        failed = []
+        while todo:
+            others = [t for n, t in by_number.items() if n not in todo]
+            paths_of = {n: self._held_paths(folder, by_number[n], others) for n in todo}
+            paths = self._outermost([p for n in todo for p in paths_of[n]])
+            for path in paths:
+                self._release_player_in(path)
+            records = [self._lib.take_record(folder, n) for n in todo]
+            idents = [{"kind": "take", "rehearsal_id": r["rehearsal"]["id"],
+                       "take_number": n} for n, r in zip(todo, records)]
+            record = {
+                "kind": kind,
+                "reason": "delete",
+                # Until the rows are dropped (_rows_dropped), an end puts the
+                # files back rather than sending them to the Trash.
+                "rows": "kept",
+                "item": idents if kind == "takes" else idents[0],
+                "rehearsal": records[0]["rehearsal"],
+                "takes": records,
+                "shared": _shared_of(by_number[n] for n in todo),
+            }
+            try:
+                token = holding.hold(self._recordings_dir, record, paths)
+            except (OSError, ValueError) as e:
+                stuck = self._stuck_take(e, paths_of)
+                if stuck is None or len(todo) == 1:
+                    failed += [{"take_number": n, "error": f"Could not remove it: {e}"}
+                               for n in todo]
+                    break
+                failed.append({"take_number": stuck, "error": f"Could not remove it: {e}"})
+                todo.remove(stuck)
+                continue
+            try:
+                left = self._lib.delete_takes(folder, todo)
+            except Exception:
+                # The rows are all still there: their files go back to them.
+                kept = self._back_or_keep(token, paths)
+                if not kept["ok"]:
+                    self._kept(token, kept["error"])
+                raise
+            self._rows_dropped(token, record)
+            return {"undo": token, "deleted": todo, "failed": failed, "takes_left": left,
+                    "ended": ended}
+        return {"undo": None, "deleted": [], "failed": failed, "takes_left": len(by_number),
+                "ended": ended}
+
+    def _held_paths(self, folder, take, others):
+        """
+        What of a take moves into the holding folder: each folder its files
+        are in, found from its files rather than its name (the name could
+        have been changed by hand, and a take of nothing but notes has no
+        audio to find it by). A folder goes whole when it is inside the
+        rehearsal's folder and holds nothing of `others`, the rehearsal's
+        other takes; otherwise only the take's own files in it go, so a
+        folder shared with another take, or the rehearsal's own folder, is
+        never carried off with it. Only what is on disk.
+        """
+        files = [Path(f["file"]) for f in [*take["tracks"], *(take.get("notes") or [])]
+                 if f.get("file")]
+        theirs = [Path(f["file"]) for t in others
+                  for f in [*t["tracks"], *(t.get("notes") or [])] if f.get("file")]
+        paths = []
+        for d in sorted({f.parent for f in files}):
+            if not os.path.lexists(d):
+                continue
+            whole = (_is_inside(d, folder) and not _same_folder(d, folder)
+                     and not any(_is_inside(f, d) for f in theirs))
+            if whole:
+                paths.append(d)
             else:
-                failed.append({"take_number": n, "error": res.get("error")})
-        return {"ok": True, "deleted": deleted, "failed": failed}
+                paths += [f for f in files if f.parent == d and os.path.lexists(f)
+                          and self._inside_recordings(f)]
+        return paths
+
+    @staticmethod
+    def _outermost(paths):
+        """Each path once, less any inside another: moving the outer one moves
+        it already."""
+        paths = list(dict.fromkeys(paths))
+        return [p for p in paths if not any(q != p and _is_inside(p, q) for q in paths)]
+
+    @staticmethod
+    def _stuck_take(error, paths_of):
+        """Which take's file or folder would not move, from the error the
+        move raised; None when it does not say."""
+        where = getattr(error, "filename", None)
+        if not where:
+            return None
+        for n, paths in paths_of.items():
+            if any(str(p) == str(where) for p in paths):
+                return n
+        return None
 
     def delete_rehearsal(self, folder):
+        """
+        Moves the whole folder into the holding folder and drops the
+        rehearsal's rows, asking nothing: {"ok": True, "undo": token}. Undo
+        brings back the folder and every row; when the notice ends, the folder
+        goes to the Trash and its takes' copies leave the cloud folder.
+        """
         folder = Path(folder)
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
@@ -3569,15 +4278,866 @@ class Api:
         if self._session is not None and Path(self._session["folder"]) == folder:
             return {"ok": False, "error": "Cannot delete the rehearsal in progress"}
         with self._files_lock:
+            ref = self._lib.rehearsal_ref(folder)
+            item = {"kind": "rehearsal", "folder": self._recordings_key(folder),
+                    "rehearsal_id": None if ref is None else ref["id"]}
+            if self._being_cropped([item]):
+                return {"ok": False, "error": CROPPING}
             self._release_player_in(folder)
-            result = move_to_trash(folder, self._recordings_dir)
-            if result.get("ok"):
-                # And its copies in the cloud, take by take — only what the app
-                # put there, then the folder they were in once nothing is left.
-                for take in (self._lib.rehearsal(folder) or {}).get("takes", []):
-                    self._remove_shared(take)
-                self._lib.forget_rehearsal(folder)
+            # Before its rows are read: an end can put a take of it back.
+            ended = self._end_before([item])
+            rows = self._lib.rehearsal_record(folder)
+            takes = (self._lib.rehearsal(folder) or {}).get("takes", [])
+            record = {
+                "kind": "rehearsal",
+                "reason": "delete",
+                # A folder the library has no record of has no rows to drop.
+                "rows": "kept" if rows is not None else "none",
+                "item": item,
+                "rehearsal": rows,
+                "shared": _shared_of(takes),
+            }
+            try:
+                token = holding.hold(self._recordings_dir, record, [folder])
+            except (OSError, ValueError) as e:
+                return {"ok": False, "error": f"Could not remove it: {e}", "ended": ended}
+            if rows is not None:
+                try:
+                    self._lib.forget_rehearsal(folder)
+                except Exception:
+                    kept = self._back_or_keep(token, [folder])
+                    if not kept["ok"]:
+                        self._kept(token, kept["error"])
+                    raise
+                self._rows_dropped(token, record)
+            return {"ok": True, "undo": token, "ended": ended}
+
+    # ---------- removals waiting for their Undo ----------
+    #
+    # A take, a rehearsal or a draft removed waits in the holding folder
+    # (holding.py) with a record of its rows, and its rows are dropped: every
+    # screen stops showing it at once. The interface offers Undo (undo_trash)
+    # and says when that notice has ended (end_trash), which sends the item
+    # on to the Trash. Python ends entries of its own accord too: all of them
+    # at quit, at start (after a crash) and before the recordings folder
+    # changes; and before each new removal, any that has waited longer than
+    # holding.STALE_SEC (the window was reloaded, say) and any of the same
+    # item (_ends). Every end is the Trash, or back where it was.
+    #
+    # Which of the two is the record's "rows": "kept" from the moment the
+    # files start to move until the library has dropped the rows, "dropped"
+    # after, "none" for what has no rows (a draft), "restoring" while an Undo
+    # puts it back. Only "dropped" and "none" go to the Trash. An entry whose
+    # rows were never dropped (a crash between the move and the drop, a move
+    # that failed and could not be taken back, a library that refused) goes
+    # back where it came from, to the rows that are still there; one whose
+    # Undo a crash broke off is finished (_finish_undo). The library is asked
+    # too (_rows_there), for a crash between the drop and the record saying
+    # so: rows that are gone are gone, whatever the record says.
+
+    def _rows_dropped(self, token, record):
+        """The entry's record says its rows are out of the library now, so
+        its end is the Trash. Should that not be written, _rows_there finds
+        them gone all the same."""
+        try:
+            holding.update(self._recordings_dir, token, {**record, "rows": "dropped"})
+        except OSError as e:
+            log.error("removal %s: could not record that its rows were dropped: %s", token, e)
+
+    def _back_or_keep(self, token, places):
+        """An entry's items back to `places`, then the entry gone: {"ok":
+        True}. When they cannot all go back the entry stays, with whatever is
+        still in it and its record, for the next end: {"ok": False,
+        "error"}."""
+        try:
+            holding.put_back(self._recordings_dir, token, places)
+        except holding.Gone:
+            return {"ok": True}
+        except (OSError, ValueError) as e:
+            return {"ok": False, "error": f"Could not put it back: {e}"}
+        self._put_back(token)
+        holding.drop(self._recordings_dir, token)
+        return {"ok": True}
+
+    def _put_back(self, token):
+        """What a removal took is back where it was, by its Undo or by an
+        end: its Undo, asked again, says so (_too_late)."""
+        self._back.add(token)
+
+    def _too_late(self, token):
+        """What an Undo answers when its entry is not waiting any more:
+        {"ok": False, "back": True, "error": BACK} when an Undo or an end
+        put what went back where it was (_put_back), and otherwise {"ok":
+        False, "gone": True, "error"}, that it has gone on to the Trash, in
+        the system's words (holding.gone_text). The interface words each
+        itself, from "back" or "gone"."""
+        # A token comes from the interface, and may be anything at all.
+        if isinstance(token, str) and token in self._back:
+            return {"ok": False, "back": True, "error": BACK}
+        return {"ok": False, "gone": True, "error": holding.gone_text()}
+
+    def _kept(self, token, error):
+        """Says, in the log a windowed build keeps, that an entry stays in the
+        holding folder for the next end, and why; returns its folder. Only
+        an entry still there: one an end failed on after all may be gone (an
+        Undo finished whose rows would not come back, said in its own log
+        line), and that one returns None, unsaid."""
+        where = self._recordings_dir / holding.HOLDING_DIR / token
+        if not where.exists():
+            return None
+        log.error("removal %s stays in %s for the next end: %s", token, where, error)
+        return where
+
+    def _end_before(self, idents, stale=True, reasons=None, exclude=(), broken=False):
+        """Ends every waiting entry of the same item as any of `idents`
+        (_ends), only those made for one of `reasons` when given, only those
+        whose Undo was broken off with `broken` (_broken_off), and with
+        `stale` every entry older than STALE_SEC; never one in `exclude`.
+        One that cannot end stays for the next end; the removal goes on.
+        Returns the tokens it ended, for the caller's answer ("ended"): the
+        interface lets their notices go, whose Undo would only say so."""
+        now = time.time()
+        ended = []
+        for token in holding.tokens(self._recordings_dir):
+            if token in exclude:
+                continue
+            data = holding.read(self._recordings_dir, token)
+            record = (data or {}).get("record")
+            try:
+                age = now - float((data or {}).get("time"))
+            except (TypeError, ValueError):
+                # No record to undo it with: nothing is waiting for it.
+                age = holding.STALE_SEC + 1
+            same = any(_ends(new, was) for new in idents for was in _identities(record))
+            if reasons is not None:
+                same = same and isinstance(record, dict) and record.get("reason") in reasons
+            if broken:
+                same = same and _broken_off(record)
+            if (stale and age > holding.STALE_SEC) or same:
+                try:
+                    result = self._end(token)
+                except Exception as e:  # noqa: BLE001 - it waits for the next end
+                    result = {"ok": False, "error": str(e)}
+                if result.get("ok"):
+                    ended.append(token)
+                else:
+                    self._kept(token, result.get("error"))
+        return ended
+
+    def _end(self, token):
+        """
+        One entry's end: on to the Trash, and then the cloud copies its
+        record names out of the cloud folder; or back where it came from,
+        when its rows were never dropped (see above). {"ok": True}, also for
+        an entry that is not there; {"ok": False, "error"} leaves it, copies
+        and all, for the next end: so does a record that cannot be read,
+        since whether its rows were dropped cannot be told. Raises
+        LibraryUnavailable, the entry left, when what to do needs the library
+        and it is not open.
+        """
+        data = holding.read(self._recordings_dir, token)
+        if data is None:
+            # Not there, or nothing in it but a record that cannot be read:
+            # gone. Anything of the person's in it stays, record and all.
+            if holding.drop(self._recordings_dir, token):
+                return {"ok": True}
+            return {"ok": False, "error": holding.UNREADABLE}
+        record = data.get("record")
+        record = record if isinstance(record, dict) else {}
+        rows = record.get("rows")
+        if rows == "restoring":
+            if record.get("kind") == "crop":
+                return self._end_uncrop(token, data)
+            return self._finish_undo(token, data)
+        if rows not in ("dropped", "none") and self._rows_there(record) is not False:
+            return self._back_or_keep(token, self._places(record, data.get("items") or []))
+        if record.get("kind") == "crop" and record.get("undone"):
+            # A crop undone, whose end did not get as far as the Trash: the
+            # folder the uncut files waited in is empty, and is not sent on
+            # in their name; and the cloud step, if it was not done (_uncrop).
+            inside = holding.held(self._recordings_dir, token, 0)
+            if inside is not None:
+                holding.drop_empty(self._recordings_dir, token, inside)
+            if isinstance(record.get("cloud"), dict):
+                self._uncrop_cloud(token, record)
+        shared = [c for c in record.get("shared") or [] if isinstance(c, dict)]
+        if shared:
+            # Which copies stay is the library's to say: with none open, the
+            # entry waits, copies and all.
+            self._lib.cloud_paths()
+        result = holding.send_on(self._recordings_dir, token, move_to_trash)
+        if not result.get("ok"):
             return result
+        if shared:
+            # Asked again now, not before the files went: the copy worker
+            # runs outside _files_lock, and a copy it finished meanwhile may
+            # be in that very place.
+            live = self._lib.cloud_paths()
+            for copy in shared:
+                # A take that came after it under the same name
+                # (recover_draft gives the next number, and "Take 7" is "Take
+                # 7" again) has its own copy in that place now: that one stays.
+                self._remove_shared(self._unused(copy, live))
+        return {"ok": True}
+
+    def _unused(self, copy, live):
+        """Of a take's copies (`copy`: {"mix", "tracks"}, absolute), those no
+        take in the library names (`live`, Library.cloud_paths), as
+        _remove_shared takes them."""
+        copy = copy or {}
+        return {"cloud": {k: copy[k] for k in ("mix", "tracks")
+                          if copy.get(k) and not self._cloud_in_use(copy[k], live)}}
+
+    def _cloud_in_use(self, path, live):
+        """Whether a take in the library names `path` as its copy, or a path
+        inside it or around it: `live` is every copy they name, relative to
+        the cloud folder (Library.cloud_paths), compared as the library
+        compares them (paths_overlap, blind to case). A path outside the
+        cloud folder counts as in use: nothing outside it is touched."""
+        cloud = self._cloud_dir
+        if cloud is None:
+            return True
+        try:
+            rel = Path(path).resolve().relative_to(Path(cloud).resolve())
+        except ValueError:
+            return True
+        return any(paths_overlap(rel, p) for p in live)
+
+    def _rows_there(self, record):
+        """Whether the rows a removal's record names are in the library: True
+        when all of them are, False when none is, None when it cannot say (a
+        record with no rows, or only some of them there)."""
+        kind = record.get("kind")
+        if kind in ("take", "takes"):
+            found = [self._lib.take_there(t) for t in record.get("takes") or []]
+        elif kind == "rehearsal" and record.get("rehearsal") is not None:
+            found = [self._lib.rehearsal_there(record["rehearsal"])]
+        else:
+            return None
+        if not found:
+            return None
+        if all(found):
+            return True
+        return False if not any(found) else None
+
+    def _places(self, record, items):
+        """Where each item of an entry goes back to: into its rehearsal's
+        folder as it is now, renamed meanwhile or not, and otherwise (a
+        rehearsal's own folder, a draft of none) where it came from."""
+        ref = record.get("rehearsal") if record.get("kind") != "rehearsal" else None
+        folder = self._lib.rehearsal_folder(ref) if ref else None
+        if folder is None:
+            return [self._recordings_dir / Path(*PurePosixPath(i["from"]).parts) for i in items]
+        was = PurePosixPath(ref["folder"])
+        return [self._back_in(folder, was, i) for i in items]
+
+    def _end_all(self, at_start=False, ended=None):
+        """
+        Every entry waiting goes on to the Trash, or back: at quit, at start,
+        and before the recordings folder changes. One that fails stays for
+        the next end, and the others still go. Returns those that stay, each
+        {"folder", "error", "library"}: "library" true when it stayed only
+        because the library is not open.
+
+        At start they are said to the person too, as nothing else would ever
+        show them: all in one start problem, put first. (First because the
+        interface once showed only the last problem said, and the others,
+        the library not opening, a history that cannot be read, must not be
+        buried by it; it lists them all now, and the order is harmless.)
+        Not one that stayed only for want of the library: that is said
+        already, by LibraryUnavailable, and goes when the library is back.
+        The tokens of those that ended go into `ended`, when given.
+        """
+        kept = []
+        for token in holding.tokens(self._recordings_dir):
+            library = False
+            try:
+                result = self._end(token)
+            except LibraryUnavailable as e:
+                result, library = {"ok": False, "error": str(e)}, True
+            except Exception as e:  # noqa: BLE001 - starting and quitting go on
+                result = {"ok": False, "error": str(e)}
+            if result.get("ok"):
+                if ended is not None:
+                    ended.append(token)
+                continue
+            where = self._kept(token, result.get("error"))
+            if where is not None:
+                kept.append({"folder": str(where), "error": result.get("error"),
+                             "library": library})
+        said = [k for k in kept if not k["library"]]
+        if at_start and said:
+            self._problems.insert(0, {"name": "RemovalKept", "message": _removals_kept(said)})
+        return kept
+
+    def end_trash(self, token):
+        """
+        The Undo's notice has ended: the item goes on to the Trash, or the
+        _deleted folder where there is none, and its copies leave the cloud
+        folder. {"ok": True}, also when it is no longer waiting (another end
+        sent it on, or Undo brought it back); {"ok": False, "error"} when the
+        Trash refused, the entry then left for the next start.
+        """
+        with self._files_lock:
+            try:
+                result = self._end(token)
+            except Exception as e:  # noqa: BLE001 - every failure is answered
+                log.error("removal %s could not end now: %s", token, e)
+                result = {"ok": False, "error": str(e)}
+            if not result.get("ok"):
+                self._kept(token, result.get("error"))
+            return result
+
+    def undo_trash(self, token):
+        """
+        Undo: the item back where it came from, and its rows back in the
+        library. {"ok": True, "kind"} with what came back: "take" or "takes"
+        with "folder" and "take_numbers", "rehearsal" with "folder", "draft"
+        with "temp_dir" and "folder", "crop" (the take as it was before its
+        crop, _uncrop) with "folder" and "take_numbers" or, for a draft,
+        "temp_dir". {"ok": False, "error"} when it cannot come back:
+        something else is in its place, its number is taken, or its
+        rehearsal is gone; with "gone" when it has gone on to the Trash
+        already, or "back" when it is back where it was (_too_late), which
+        the interface words itself. Those are asked before
+        anything moves, and the entry is left as it was. Should the library
+        still refuse once the files are back, the files stay back, as they
+        are the person's, and the entry is gone. A crop's Undo that fails on
+        the way is taken back, the entry waiting as it was; one that cannot
+        be taken back either answers {"ok": False, "error": FINISHING,
+        "finishing": True}: the next end finishes it.
+        """
+        with self._files_lock:
+            data = holding.read(self._recordings_dir, token)
+            if data is None:
+                return self._too_late(token)
+            record = data.get("record") or {}
+            kind = record.get("kind")
+            if kind == "crop":
+                try:
+                    return self._uncrop(token, data)
+                except holding.Gone:
+                    return self._too_late(token)
+                except holding.Stuck as e:
+                    # Part of it moved and would not all go back: the record
+                    # says an Undo is under way, and the next end finishes it.
+                    self._kept(token, str(e))
+                    return {"ok": False, "error": FINISHING, "finishing": True}
+                except Exception as e:  # noqa: BLE001 - every failure is answered
+                    log.error("removal %s: its crop could not be undone: %s", token, e)
+                    return {"ok": False, "error": f"Could not put it back: {e}"}
+            if kind not in ("take", "takes", "rehearsal", "draft"):
+                return {"ok": False, "error": f"Cannot undo a removal of {kind!r}"}
+            items = data.get("items") or []
+            try:
+                refused = self._undo_refused(record, items)
+                if refused is not None:
+                    return {"ok": False, "error": refused}
+                places = self._places(record, items)
+                holding.check_places(self._recordings_dir, token, places)
+                return self._finish_undo(token, data, places)
+            except holding.Gone:
+                return self._too_late(token)
+            except FileExistsError as e:
+                return {"ok": False, "error": str(e)}
+            except (OSError, ValueError) as e:
+                return {"ok": False, "error": f"Could not put it back: {e}"}
+
+    def _undo_refused(self, record, items):
+        """Why an Undo cannot be done, asked before anything moves, or None.
+        Raises holding.Gone when nothing of it is waiting."""
+        kind = record.get("kind")
+        if kind in ("take", "takes"):
+            # Only files need the folder: a take whose files were not on disk
+            # (its drive unplugged) held none, and its rows come back all the same.
+            folder, why = self._rehearsal_now(record.get("rehearsal"), on_disk=bool(items))
+            if why is not None:
+                return why
+            for take in record.get("takes") or []:
+                n = int(take["take"]["take_number"])
+                if self._lib.take(folder, n) is not None:
+                    return f"Take {n} is taken by another take now."
+            return None
+        if not items:
+            raise holding.Gone()  # nothing of it is waiting: it has gone on
+        if kind == "rehearsal":
+            place = self._recordings_dir / Path(*PurePosixPath(items[0]["from"]).parts)
+            if record.get("rehearsal") is not None and self._lib.has(place):
+                return f"Something else is in its place now: {place}"
+            return None
+        return self._draft_home_now(record, items)[1]
+
+    def _rehearsal_now(self, ref, on_disk=True):
+        """(folder, None): the rehearsal a record names (`ref`), where it is
+        now; or (None, why) it cannot be gone back into: it is gone, or with
+        `on_disk`, its folder is not on disk."""
+        folder = self._lib.rehearsal_folder(ref or {})
+        if folder is None:
+            return None, REHEARSAL_GONE
+        if on_disk and not folder.is_dir():
+            return None, "The rehearsal's folder is not on disk"
+        return folder, None
+
+    def _draft_home_now(self, record, items):
+        """(folder, None): the rehearsal folder a draft goes back into, as it
+        is now (_draft_home); or (None, why) when it is gone."""
+        home = self._draft_home(record, items)
+        if home is None or not home.is_dir():
+            return None, REHEARSAL_GONE
+        return home, None
+
+    def _draft_home(self, record, items):
+        """The rehearsal folder a draft goes back into, as it is now; None
+        when the rehearsal it was a draft of is gone."""
+        ref = record.get("rehearsal")
+        if ref is not None:
+            return self._lib.rehearsal_folder(ref)
+        place = self._recordings_dir / Path(*PurePosixPath(items[0]["from"]).parts)
+        return place.parent.parent if place.parent.name == DRAFTS_DIR else place.parent
+
+    def _finish_undo(self, token, data, places=None):
+        """
+        An Undo, once nothing refuses it: the record says so ("restoring",
+        with where each item goes), the items go back, the rows go back, and
+        only then is the entry dropped, so a crash at any point leaves a
+        record of an Undo under way. Without `places` it is one a crash broke
+        off, finished by _end: what is still in the entry goes back where the
+        record says, and the rows go back unless they are back already.
+
+        Raises what put_back raises (the record as it was, unless part of it
+        is back already: then the next end finishes it). Answers as
+        undo_trash does.
+        """
+        rec = self._recordings_dir
+        record = dict(data.get("record") or {})
+        items = data.get("items") or []
+        resuming = places is None
+        if resuming:
+            # Where they go now: the rehearsal may have been renamed since.
+            places = self._places(record, items)
+        else:
+            holding.update(rec, token, {**record, "rows": "restoring"})
+        try:
+            holding.put_back(rec, token, places)
+        except holding.Stuck:
+            raise  # some of it is back: the next end finishes the Undo
+        except OSError:
+            if not resuming:
+                holding.update(rec, token, record)  # all of it still in the entry
+            raise
+        self._put_back(token)
+        kind = record.get("kind")
+        error = None
+        restore = not resuming or self._rows_there(record) is False
+        try:
+            if kind in ("take", "takes") and restore:
+                self._lib.restore_takes(record.get("takes") or [])
+            elif kind == "rehearsal" and record.get("rehearsal") is not None and restore:
+                self._lib.restore_rehearsal(record["rehearsal"])
+        except ValueError as e:
+            error = str(e)  # the files stay back: they are the person's
+        holding.drop(rec, token)
+        if error is not None:
+            if resuming:
+                log.error("removal %s: its files are back, its rows could not be: %s",
+                          token, error)
+            return {"ok": False, "error": error}
+        if kind in ("take", "takes"):
+            folder = self._lib.rehearsal_folder(record.get("rehearsal") or {})
+            numbers = [int(t["take"]["take_number"]) for t in record.get("takes") or []]
+            self._published_again(folder, numbers)
+            return {"ok": True, "kind": kind, "folder": str(folder), "take_numbers": numbers}
+        if kind == "rehearsal":
+            place = places[0] if places else rec / Path(*PurePosixPath(items[0]["from"]).parts)
+            numbers = [int(t["take"]["take_number"])
+                       for t in (record.get("rehearsal") or {}).get("takes") or []]
+            self._published_again(place, numbers)
+            return {"ok": True, "kind": "rehearsal", "folder": str(place)}
+        place = places[0]
+        home = self._draft_home(record, items)
+        return {"ok": True, "kind": "draft", "temp_dir": str(place),
+                "folder": str(home if home is not None else place.parent.parent)}
+
+    def _published_again(self, folder, numbers):
+        """Takes back from an Undo: a copy asked for while they were gone
+        discarded itself, so it is asked again; and a song renamed meanwhile
+        has its takes' folders follow its name."""
+        if folder is None:
+            return
+        for n in numbers:
+            self._enqueue_publish(folder, n)
+        self._names_pass.request()
+
+    def _back_in(self, folder, was, item):
+        """Where an item that came from a rehearsal then at `was` (relative to
+        the recordings folder) goes back to, the rehearsal being at `folder`
+        now."""
+        source = PurePosixPath(item["from"])
+        try:
+            return folder / Path(*source.relative_to(was).parts)
+        except ValueError:
+            return self._recordings_dir / Path(*source.parts)
+
+    # ---------- a crop undone ----------
+    #
+    # A crop's entry (crop_take, crop_draft) holds the take as it was before
+    # it, in one folder, and its Undo is an exchange, done so that the take
+    # has one whole version in its places at every step. First it is asked
+    # whether each uncut file's place will be free once the cropped file is
+    # out of it, nothing moving. Then the record says an Undo is under way
+    # ("restoring"), with what the cloud step will be; each cropped file
+    # moves into a second folder of the entry and the uncut one takes its
+    # place (holding.swap); the take's marks and length go back, and its
+    # cloud copy is forgotten, in one transaction; the record says it is done
+    # ("undone"), with the cloud step still to do; the cloud step is done
+    # (_uncrop_cloud); and only then do the cropped files go on to the Trash.
+    # While the take is being cropped again, its Undo waits (_start_crop).
+    #
+    # In the person's Undo (undo_trash), a failure on the way, of whatever
+    # kind, takes it all back to the cropped take, and the entry waits as it
+    # was; one that cannot be taken back either is answered FINISHING. A
+    # crash on the way leaves the record saying "restoring", and the next end
+    # finishes it (_end_uncrop): which file is where says how far it got, and
+    # the marks are put back only once (the record's "expect"); or "undone",
+    # and the next end does what is left (_end). An end never takes the
+    # person's Undo back: one that fails on the way (the library, a file
+    # Windows holds) leaves it "restoring", both versions of the take on
+    # disk, for the next end. Only a place something else has taken since
+    # makes an end put the cropped take back, and end the crop as its own.
+
+    def _uncrop(self, token, data, at_end=False):
+        """
+        Undo of a crop, or one a crash or a failure broke off, done again
+        (its record says "restoring"). {"ok": True, "kind": "crop", "folder",
+        "take_numbers"}, or "temp_dir" for a draft's crop. {"ok": False,
+        "error"}, whatever went wrong, with the cropped take in its places
+        and the entry waiting as it was; or, when a broken-off one cannot
+        even be placed (its rehearsal gone, its drive not there) or the take
+        is being cropped again (CROPPING), with everything as it is. Raises
+        holding.Stuck when a failure could not be taken back either: the
+        record then says "restoring", for the next end (undo_trash answers
+        FINISHING).
+
+        `at_end` (_end_uncrop): nothing is taken back on a failure in the
+        exchange or in the library; it is raised, whatever moved staying
+        where it is and the record saying "restoring", for the next end.
+        Only a place taken since is taken back, as for the person's Undo.
+        """
+        rec = self._recordings_dir
+        record = dict(data.get("record") or {})
+        if record.get("undone"):
+            # Done already: the take is back as it was, and only the
+            # cropped files wait in the entry.
+            self._put_back(token)
+            return self._too_late(token)
+        if self._being_cropped(_identities(record)):
+            # Its places are empty for a moment while the crop moves files.
+            return {"ok": False, "error": CROPPING}
+        resuming = record.get("rows") == "restoring"
+        inside = holding.held(rec, token, 0)
+        if inside is None or (not resuming and not inside.is_dir()):
+            return self._too_late(token)
+        where = self._uncut_places(record, data.get("items") or [])
+        if "error" in where:
+            return {"ok": False, "error": where["error"]}
+        if resuming:
+            swaps = record.get("swap") or []
+        else:
+            known = {f.get("name"): f for f in record.get("files") or []}
+            swaps = [{"name": p.name, "cropped": bool((known.get(p.name) or {}).get("cropped"))}
+                     for p in sorted(inside.iterdir())]
+        pairs = [(s["name"], where["place"](s["name"]), bool(s["cropped"])) for s in swaps]
+        # The record as it is while nothing is under way: the crop's own.
+        waiting = {k: v for k, v in record.items()
+                   if k not in ("swap", "expect", "copy", "aside", "send")}
+        waiting["rows"] = "none"
+        aside = (holding.held(rec, token, record["aside"])
+                 if resuming and isinstance(record.get("aside"), int) else None)
+
+        def taken_back():
+            """The cropped take whole in its places again, the second folder
+            gone and the record as it was before the Undo. Raises Stuck when
+            that cannot be done, the record still saying "restoring"."""
+            if aside is not None:
+                inside.mkdir(parents=True, exist_ok=True)
+                holding.unswap(rec, token, inside, aside, pairs)
+                holding.drop_empty(rec, token, aside)
+            try:
+                holding.update(rec, token, waiting)
+            except OSError as e:
+                raise holding.Stuck(
+                    f"the cropped take is back in its places, but its record could not say so: {e}"
+                ) from e
+
+        try:
+            holding.check_swap(rec, token, inside,
+                               aside or holding.would_add(rec, token, where["cropped"]), pairs)
+        except holding.Gone:
+            raise
+        except (OSError, ValueError) as e:
+            if resuming:
+                taken_back()
+            return {"ok": False, "error": _put_back_error(e)}
+
+        # Windows will not move a file the player has mapped: the cropped
+        # take may well be the one open.
+        playing = self._open_tracks
+        for d in sorted({Path(place).parent for _, place, _ in pairs}):
+            self._release_player_in(d)
+
+        def reopened():
+            if playing and self._open_tracks is None:
+                self.player_open(playing)
+
+        def failed(error):
+            """A failure once files may have moved: the cropped take back in
+            its places, the player as it was, and the answer."""
+            try:
+                taken_back()
+            finally:
+                reopened()
+            return {"ok": False, "error": error}
+
+        take = where.get("take")
+        if not resuming:
+            record = {**waiting, "rows": "restoring", "swap": swaps,
+                      "aside": int(holding.would_add(rec, token, where["cropped"]).parent.name)}
+            if take is not None:
+                # What the marks come back as, written before the library is
+                # asked: an Undo finished after a crash finds them there
+                # already, and does not shift them twice. And the cloud step,
+                # decided now, while what is on its way to the cloud folder
+                # can still be told.
+                record["expect"] = _uncut_marks(record, take["markers"])
+                record["copy"] = {k: take["cloud"][k] for k in ("mix", "tracks")
+                                  if (take.get("cloud") or {}).get(k)}
+                record["send"] = self._uncrop_send(record, where["folder"], take)
+            try:
+                holding.update(rec, token, record)
+            except Exception as e:  # noqa: BLE001 - nothing has moved: answered
+                reopened()
+                log.error("removal %s: its crop could not be undone: %s", token, e)
+                return {"ok": False, "error": _put_back_error(e)}
+        try:
+            if aside is None:
+                aside = holding.add(rec, token, where["cropped"])
+            else:
+                # Recorded, but the app may have died before it was made.
+                aside.mkdir(parents=True, exist_ok=True)
+            holding.swap(rec, token, inside, aside, pairs, take_back=not at_end)
+        except holding.Stuck:
+            reopened()
+            raise
+        except OSError as e:
+            if at_end:
+                # An end never takes the person's Undo back: whatever moved
+                # stays moved, the record says "restoring", and the next end
+                # goes on from there.
+                reopened()
+                log.error("removal %s: its crop's Undo could not be finished now, and stays "
+                          "under way for the next end: %s", token, e)
+                raise
+            # Nothing of it moved, or swap took back what had.
+            return failed(_put_back_error(e))
+
+        cleared = {}
+        if take is not None:
+            folder, n = where["folder"], int(record["item"]["take_number"])
+            expect = record.get("expect") or []
+
+            def marks(current):
+                if _same_marks(current, expect):
+                    return current  # back already: an Undo finished again
+                return _uncut_marks(record, current)
+
+            try:
+                cleared = self._lib.uncrop_take(
+                    record.get("rehearsal"), record.get("take_id"), n, marks,
+                    float(record.get("duration_sec") or 0.0))["cloud"] or {}
+            except Exception as e:
+                # Every failure: answered, or at an end left under way.
+                if at_end:
+                    # As above: the uncut files stay in their places, the
+                    # cropped ones in the entry, until the next end.
+                    reopened()
+                    log.error("removal %s: the take's marks and length would not come back "
+                              "now; its crop's Undo stays under way for the next end: %s",
+                              token, e)
+                    raise
+                log.error("removal %s: the take's marks and length would not come back, "
+                          "so the cropped take is put back: %s", token, e)
+                return failed(f"Could not put it back: {e}")
+
+        # Done: the record says so, with the cloud step still to do, so that
+        # an end finds it there should the app die before it is done.
+        self._put_back(token)
+        done = {**waiting, "undone": True}
+        if take is not None:
+            send = record.get("send") or {}
+            done["cloud"] = {"remove": [c for c in (record.get("copy"), cleared) if c],
+                             "send": send.get("what"), "publish": bool(send.get("publish"))}
+        try:
+            holding.update(rec, token, done)
+        except Exception as e:  # noqa: BLE001 - the Undo is done all the same
+            # Still "restoring": the next end finishes it again, and finds
+            # every file and every mark where this left them.
+            log.error("removal %s: could not record that its crop was undone: %s", token, e)
+        try:
+            holding.drop_empty(rec, token, inside)
+            if take is not None:
+                self._uncrop_cloud(token, done)
+            sent = holding.send_on(rec, token, move_to_trash)
+            if not sent.get("ok"):
+                # The take is back as it was; the cropped files wait for the
+                # next end.
+                self._kept(token, sent.get("error"))
+        except Exception as e:  # noqa: BLE001 - the Undo is done; the rest waits
+            self._kept(token, str(e))
+        if take is not None:
+            return {"ok": True, "kind": "crop", "folder": str(folder), "take_numbers": [n]}
+        return {"ok": True, "kind": "crop", "temp_dir": str(where["temp_dir"])}
+
+    def _uncrop_send(self, record, folder, take):
+        """
+        How the take as it was goes back to the cloud folder once its crop
+        is undone: {"what": the shape to send it in, or None; "publish":
+        whether sending on its own is asked instead}. As it was at the crop
+        ("had"), unless the person changed that since: a take sent there
+        since keeps the shape it has now, and one taken out of there since is
+        not sent again. A copy still on its way, or one that failed, is no
+        change.
+        """
+        had = record.get("had")
+        now = _shape_of(take.get("cloud"))
+        if now is not None:
+            return {"what": now, "publish": False}
+        coming = int(take["take_number"]) in self._cloud_queue.states(str(folder))
+        if coming or take.get("cloud_error") or had is None:
+            return {"what": had, "publish": had is None}
+        return {"what": None, "publish": False}
+
+    def _uncrop_cloud(self, token, record):
+        """
+        The cloud step of a crop's Undo, from what its "undone" record
+        carries ("cloud"): the cropped take's copies out of the cloud
+        folder, but one another take names; and the take as it was sent there
+        again (_uncrop_send). Then the record no longer carries it, so it is
+        done once. Raises what the library raises, the entry then waiting for
+        the next end, step and all.
+
+        Done again after a crash, or after the record could not be written,
+        the removal can meet the copy worker's known race (as _end's does):
+        a copy of the uncut take written but not yet recorded is not "in
+        use", and can go. The same step queues the take again, so that copy
+        is made once more.
+        """
+        step = record.get("cloud") or {}
+        live = self._lib.cloud_paths()
+        for copy in step.get("remove") or []:
+            if isinstance(copy, dict):
+                self._remove_shared(self._unused(copy, live))
+        folder = self._lib.rehearsal_folder(record.get("rehearsal") or {})
+        n = (record.get("item") or {}).get("take_number")
+        rows = self._lib.take_record(folder, int(n)) if folder is not None and n is not None else None
+        if rows is not None and rows["take"].get("id") == record.get("take_id"):
+            if step.get("send"):
+                self._queue_copy(folder, int(n), step["send"])
+            elif step.get("publish"):
+                self._enqueue_publish(folder, int(n))
+        try:
+            holding.update(self._recordings_dir, token,
+                           {k: v for k, v in record.items() if k != "cloud"})
+        except OSError as e:
+            log.error("removal %s: could not record that its cloud step is done: %s", token, e)
+
+    def _uncut_places(self, record, items):
+        """
+        Where each file of a crop's entry goes back to, as things are now:
+        {"place": name -> path, "cropped": where the cropped files' folder
+        is said to come from, beside the take's, and "take", "folder" for a
+        saved take or "temp_dir" for a draft}; or {"error"} when it cannot be
+        told. A saved take's files keep their names through a rename of the
+        take or of its rehearsal, and only their folder moves: each folder the
+        crop took files from is found by the take's files that were in it.
+        """
+        rec = self._recordings_dir
+        item = record.get("item") or {}
+        ref = record.get("rehearsal")
+        files = {f["name"]: f for f in record.get("files") or [] if f.get("name")}
+        home = PurePosixPath(record.get("home") or "")
+
+        def source(name):
+            return PurePosixPath((files.get(name) or {}).get("from") or (home / name))
+
+        if item.get("kind") == "take":
+            folder, why = self._rehearsal_now(ref)
+            if why is not None:
+                return {"error": why}
+            n = int(item["take_number"])
+            rows = self._lib.take_record(folder, n)
+            if rows is None or rows["take"].get("id") != record.get("take_id"):
+                return {"error": TAKE_GONE}
+            take = self._lib.take(folder, n)
+            now = {}
+            for f in [*take["tracks"], *(take.get("notes") or [])]:
+                now.setdefault(Path(f["file"]).name, []).append(Path(f["file"]))
+            moved_to = {}
+            for name, f in files.items():
+                if f.get("cropped") and len(now.get(name, [])) == 1:
+                    moved_to[source(name).parent] = now[name][0].parent
+            was = PurePosixPath(ref["folder"])
+
+            def place(name):
+                there = moved_to.get(source(name).parent)
+                return (there / name if there is not None
+                        else self._back_in(folder, was, {"from": source(name).as_posix()}))
+
+            take_dir = moved_to.get(home) or self._back_in(folder, was, {"from": home.as_posix()})
+            return {"place": place, "take": take, "folder": folder,
+                    "cropped": take_dir.with_name(f"{take_dir.name} (cropped)")}
+
+        rehearsal, why = self._draft_home_now(record, items)
+        if why is not None:
+            return {"error": why}
+
+        def back(path):
+            if ref is None:
+                return rec / Path(*path.parts)
+            return self._back_in(rehearsal, PurePosixPath(ref["folder"]), {"from": path.as_posix()})
+
+        temp_dir = back(home)
+        if not temp_dir.is_dir():
+            return {"error": "It is not there any more"}
+        return {"place": lambda name: back(source(name)), "take": None, "temp_dir": temp_dir,
+                "cropped": temp_dir.with_name(f"{temp_dir.name} (cropped)")}
+
+    def _end_uncrop(self, token, data):
+        """
+        The end of a crop's entry whose Undo was broken off, by a crash or by
+        a failure that could not be taken back: the Undo is finished, since
+        it was asked for (_uncrop with `at_end`). A failure on the way (the
+        library, a file that will not move) is not taken back: {"ok": False,
+        "error"}, the entry kept "restoring", both versions of the take on
+        disk, for the next end. Only when something else has taken one of its
+        places since is the cropped take put back whole, and the end is the
+        crop's own: the uncut take goes on to the Trash. {"ok": True}
+        otherwise. Raises LibraryUnavailable, the entry left as it is, when
+        the library is not open.
+        """
+        try:
+            done = self._uncrop(token, data, at_end=True)
+        except holding.Gone:
+            return {"ok": True}
+        except LibraryUnavailable:
+            raise
+        except Exception as e:  # noqa: BLE001 - it waits for the next end
+            return {"ok": False, "error": str(e)}
+        if done.get("ok"):
+            return {"ok": True}
+        after = holding.read(self._recordings_dir, token)
+        if after is not None and (after.get("record") or {}).get("rows") == "none":
+            return self._end(token)
+        return {"ok": False, "error": done.get("error")}
 
     # ---------- a rehearsal whose folder went missing ----------
 
@@ -3617,11 +5177,13 @@ class Api:
 
         # Where deleted things go is not a rehearsal's to have either: the
         # next thing sent there would land inside it, and the next cleanup
-        # would carry the rehearsal's own files away with it.
+        # would carry the rehearsal's own files away with it. Nor where they
+        # wait for their Undo: that goes to the Trash with its entry.
         target = new_folder.resolve()
-        trash = (self._recordings_dir / FALLBACK_TRASH).resolve()
-        if _same_folder(target, trash) or _folder_within(target, trash):
-            return {"ok": False, "error": "That folder is where deleted things go"}
+        for kept in (FALLBACK_TRASH, holding.HOLDING_DIR):
+            place = (self._recordings_dir / kept).resolve()
+            if _same_folder(target, place) or _folder_within(target, place):
+                return {"ok": False, "error": "That folder is where deleted things go"}
 
         rehearsals = self._lib.rehearsals()
         me = next((r for r in rehearsals if Path(r["folder"]) == folder), None)
@@ -4034,15 +5596,25 @@ class Api:
         if not tracks:
             return {"ok": False, "error": "The take has no files left on disk"}
 
-        self._remove_shared(take)
+        # Never onto a copy another take names: an old copy of this take
+        # that another take names now stays (_unused), and this copy takes
+        # the next free name (_free_copy_name). Copies only.
+        others = self._lib.others_cloud_paths(folder, take_number)
+        self._remove_shared(self._unused(take.get("cloud"), others))
 
         # From the folder settled on above, not from the setting again: it can
         # be cleared from the interface while this runs.
         target = _cloud_subfolder(cloud, folder)
-        base = f"{take_number:02d} - {_safe_name(take.get('name', '') or f'Take {take_number}')}"
+        fmt = normalize_format(self._config.get("cloud_format"))
+        # The tracks go in a folder of that name, the mix is it with the
+        # format's ending, or .wav when the encoder could not compress it.
+        base = _free_copy_name(
+            self._cloud_base(take_number, take),
+            lambda name: [PurePosixPath(target.name, name + end)
+                          for end in ("", extension(fmt), ".wav")],
+            others)
         shared = {}
 
-        fmt = normalize_format(self._config.get("cloud_format"))
         # Taken once, before anything is written. A mixdown is seconds long
         # and a fader can move during it; reading the balance again afterwards
         # would fingerprint the copy with a balance it was never rendered
@@ -4169,7 +5741,10 @@ class Api:
                     "This take is still being copied to the cloud — remove it "
                     "once the copy has finished."}
 
-        result = self._remove_shared(take)
+        # Not a copy another take names too (two rows naming one file, as an
+        # older version could leave): that file is the other take's as well.
+        others = self._lib.others_cloud_paths(folder, take_number)
+        result = self._remove_shared(self._unused(take.get("cloud"), others))
         self._lib.set_cloud_copy(folder, take_number, None, None)
         return {"ok": True, **result}
 
@@ -4274,15 +5849,34 @@ class Api:
         shape = _shape_of(shared)
         if shape is None:
             return False, None
-        base = self._cloud_base(take_number, take)
         parts = {k: Path(shared[k]) for k in ("mix", "tracks") if shared.get(k)}
-        goes_to = {k: p.with_name(base + (p.suffix if k == "mix" else ""))
-                   for k, p in parts.items()}
         if (self._copy_busy(folder, take_number)
                 or not all(p.exists() and _is_inside(p, cloud) for p in parts.values())):
             if requeue:
                 self._queue_copy(folder, take_number, shape, take)
             return False, None
+
+        # A copy another take names too is that take's as well, and stays
+        # where its row says: this take's copy is made anew instead, which
+        # leaves it (_copy_to_cloud). Putting names right queues nothing.
+        others = self._lib.others_cloud_paths(folder, take_number)
+        if any(self._cloud_in_use(p, others) for p in parts.values()):
+            if requeue:
+                self._queue_copy(folder, take_number, shape, take)
+            return False, None
+
+        def lands(name):
+            return {k: p.with_name(name + (p.suffix if k == "mix" else ""))
+                    for k, p in parts.items()}
+
+        # Not onto a copy another take names, as a copy made anew is not
+        # (_copy_to_cloud): the next free name instead.
+        home = Path(cloud).resolve()
+        base = _free_copy_name(
+            self._cloud_base(take_number, take),
+            lambda name: [p.resolve().relative_to(home) for p in lands(name).values()],
+            others)
+        goes_to = lands(base)
         moved = []
         try:
             for k, p in parts.items():
@@ -4315,7 +5909,8 @@ class Api:
         After a rehearsal is renamed: its folder in the cloud takes the new
         name, with every copy in it, and each take's record follows. When that
         cannot be done in one move — a copy being made, a copy not where its
-        record says, a folder already there under the new name — each take
+        record says, a folder already there under the new name, another
+        rehearsal's copies in the same folder — each take
         that was in the cloud is made again in the new folder instead, and the
         old one goes once it is empty.
         """
@@ -4337,10 +5932,15 @@ class Api:
         def paths(take):
             return [Path(v) for k, v in take["cloud"].items() if k in ("mix", "tracks") and v]
 
+        # Not whole when another rehearsal's copies are in it too (one found
+        # again by Locate in a folder named like this one's): they would go
+        # where their rows do not look. Made again in the new folder instead,
+        # which leaves those where they are (_copy_to_cloud).
         movable = (
             not self._copy_busy(new_folder) and not self._copy_busy(old_folder)
             and was.is_dir() and not goes_to.exists()
             and all(p.parent == was and p.exists() for t in takes for p in paths(t))
+            and not self._cloud_in_use(was, self._lib.cloud_paths_outside(new_folder))
         )
         if movable:
             try:
@@ -4360,6 +5960,37 @@ class Api:
                     shared[k] = str(goes_to / Path(shared[k]).name)
             shared["source"] = {**(shared.get("source") or {}), "dir": target}
             self._lib.set_cloud_copy(new_folder, t["take_number"], shared, cloud)
+        self._follow_held_copies(cloud, was, goes_to, target)
+
+    def _follow_held_copies(self, cloud, was, goes_to, target):
+        """
+        The copies of this rehearsal's takes that wait in the holding folder
+        for their Undo were in its cloud folder too, and moved with it: their
+        records follow them, so the end of the notice takes them out where
+        they are, and Undo puts back a record of a copy that is there.
+        """
+        for token in holding.tokens(self._recordings_dir):
+            record = (holding.read(self._recordings_dir, token) or {}).get("record")
+            if not isinstance(record, dict):
+                continue
+            changed = False
+            for shared in record.get("shared") or []:
+                for k in ("mix", "tracks"):
+                    if shared.get(k) and Path(shared[k]).parent == was:
+                        shared[k] = str(goes_to / Path(shared[k]).name)
+                        changed = True
+            for take in record.get("takes") or []:
+                copy = take.get("cloud_copy") or {}
+                moved = False
+                for k in ("mix", "tracks"):
+                    if copy.get(k) and (cloud / copy[k]).parent == was:
+                        copy[k] = (goes_to / Path(copy[k]).name).relative_to(cloud).as_posix()
+                        moved = True
+                if moved:
+                    copy["source"] = {**(copy.get("source") or {}), "dir": target}
+                    changed = True
+            if changed:
+                holding.update(self._recordings_dir, token, record)
 
     # ---------- putting names right ----------
 
@@ -4380,9 +6011,12 @@ class Api:
         # and looked at again next open) and one of them has another name.
         shared = take.get("cloud") or {}
         base = self._cloud_base(take["take_number"], take)
+        # " (2)" after it carries it too: the next free name, which a copy
+        # takes when another take's has that name (_free_copy_name).
         recorded = [(key, Path(shared[key])) for key in ("mix", "tracks") if shared.get(key)]
         if recorded and all(p.exists() for _, p in recorded) and any(
-                (p.stem if key == "mix" else p.name) != base for key, p in recorded):
+                not _carries(p.stem if key == "mix" else p.name, base)
+                for key, p in recorded):
             wrong.add("cloud")
         return wrong
 

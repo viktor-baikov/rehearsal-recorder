@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { Circle, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { FooterRow } from "@/components/FooterRow"
-import { Kbd, Shell } from "@/components/Shell"
+import { Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { EveningFacts } from "@/components/EveningFacts"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
@@ -26,11 +27,12 @@ import {
   type SessionState,
   type Take,
 } from "@/lib/api"
-import { croppedButNotSwept, takesLabel } from "@/lib/format"
+import { savedLine } from "@/lib/format"
 import { goFor } from "@/lib/goes"
 import { useRunning, watching } from "@/lib/activity"
-import { dismiss, notify } from "@/lib/notices"
-import { canBePutBack, goPlural, takeCloudToo } from "@/lib/deletion"
+import { dismiss } from "@/lib/notices"
+import { wentTo } from "@/lib/deletion"
+import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 
 /**
  * The rehearsal hub: what has been recorded, and a big button to record more.
@@ -45,7 +47,8 @@ export function Rehearsal({
   session: Extract<SessionState, { active: true }>
   onStartTake: (takeNumber: number, takeName: string, takeGo: number | null) => void
   onFinished: () => void
-  onChanged: () => void
+  /** Reads the session again, and answers it as it now is. */
+  onChanged: () => Promise<SessionState>
 }) {
   const {
     selected,
@@ -70,7 +73,6 @@ export function Rehearsal({
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [toDelete, setToDelete] = useState<Take | null>(null)
   const [toRename, setToRename] = useState<Take | null>(null)
   const renameChoices = useSongChoices(
     toRename !== null,
@@ -272,15 +274,25 @@ export function Rehearsal({
     return () => clearInterval(id)
   }, [inFlight, onChanged])
 
+  // Asks nothing: the notice's Undo brings the take back into its place.
   const deleteTake = async (take: Take) => {
     player.pause()
     const res = await api().delete_take(session.folder, take.take_number)
+    // What waited of this take, a crop of it, Python has sent on.
+    endedByPython(res.ended)
     if (!res.ok) {
       setError(res.error ?? "Could not delete the take")
       return
     }
     forget(take)
     onChanged()
+    if (res.undo) {
+      offerUndo({
+        text: wentTo(`“${take.name}”`),
+        token: res.undo,
+        onUndone: () => onChanged(),
+      })
+    }
   }
 
   const renameTake = async (take: Take, name: string) => {
@@ -309,21 +321,23 @@ export function Rehearsal({
     player.pause()
     const res = await watching(api().crop_take(session.folder, take.take_number, from, to))
     setBusy(false)
+    // The take's earlier crops, Python has sent on.
+    endedByPython(res.ended)
     if (!res.ok) {
       setError(res.error ?? "Could not crop the take")
       return
     }
     if (res.take) reselect(res.take)
     onChanged()
-    // The crop itself went through — only the sweep of the original is what
-    // failed — so this adds to the success path rather than standing in for it.
-    if (res.error) {
-      notify({
-        key: "rehearsal",
-        kind: "warning",
-        text: croppedButNotSwept(res.error, res.location),
-      })
-    }
+    offerCropUndo(take.name, res, () => uncropped(take), "rehearsal")
+  }
+
+  // A crop's Undo: the uncut take is under the same paths again, and only a
+  // fresh copy of it tells the player so.
+  const uncropped = async (take: Take) => {
+    const s = await onChanged()
+    const fresh = s.active ? s.takes.find((t) => t.take_number === take.take_number) : undefined
+    if (fresh) reselect(fresh)
   }
 
   const renameRehearsal = async (name: string) => {
@@ -379,7 +393,7 @@ export function Rehearsal({
           {session.name}
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon-row"
             aria-label="Rename rehearsal"
             onClick={() => setRenamingRehearsal(true)}
             className="text-muted-foreground hover:text-foreground"
@@ -458,15 +472,15 @@ export function Rehearsal({
                 the take away — see useEscape above. */}
             <Button
               variant="outline"
-              size="lg"
+              size="footer-aside"
               onClick={finish}
               aria-keyshortcuts={inHand ? undefined : "Escape"}
             >
               Finish
-              {!inHand && <Kbd>Esc</Kbd>}
+              {!inHand && <Kbd aria-hidden>Esc</Kbd>}
             </Button>
             <Button
-              size="xl"
+              size="footer"
               variant="destructive"
               onClick={startTake}
               disabled={busy}
@@ -475,7 +489,7 @@ export function Rehearsal({
               <Circle className="fill-current" />
               Record take {session.next_take_number}
               {/* With a take in hand Space plays it, and the key is on Play. */}
-              {!inHand && <Kbd>Space</Kbd>}
+              {!inHand && <Kbd aria-hidden>Space</Kbd>}
             </Button>
           </div>
         </FooterRow>
@@ -495,7 +509,7 @@ export function Rehearsal({
           onGo={move}
           onRename={setToRename}
           onShare={setToShare}
-          onDelete={setToDelete}
+          onDelete={(take) => void deleteTake(take)}
           onStar={starTake}
           cloudStates={session.cloud_queue}
           emptyHint="Hit Record or press Space — takes show up here and can be played straight away."
@@ -536,7 +550,7 @@ export function Rehearsal({
               onRename={setToRename}
               onStar={starTake}
               onShare={setToShare}
-              onDelete={setToDelete}
+              onDelete={(take) => void deleteTake(take)}
               cloudStates={session.cloud_queue}
               falseStartSec={evening?.falseStartSec}
               folder={session.folder}
@@ -563,26 +577,12 @@ export function Rehearsal({
         open={finishing}
         onOpenChange={setFinishing}
         title="Finish this rehearsal?"
-        description={`${takesLabel(
+        description={`${savedLine(
           session.takes.length
-        )} are saved and stay where they are. You cannot add to this rehearsal afterwards — a later one starts its own folder.`}
-        confirmLabel="Finish"
-        cancelLabel="Keep going"
+        )} You cannot add to this rehearsal afterwards — a later one starts its own folder.`}
+        actionLabel="Finish"
         destructive={false}
         onConfirm={() => void finish()}
-      />
-
-      <ConfirmDialog
-        open={toDelete !== null}
-        onOpenChange={(open) => !open && setToDelete(null)}
-        title={`Delete “${toDelete?.name ?? ""}”?`}
-        description={`The take and all its tracks ${goPlural()}.${takeCloudToo(
-          toDelete
-        )} ${canBePutBack()}`}
-        onConfirm={() => {
-          if (toDelete) void deleteTake(toDelete)
-          setToDelete(null)
-        }}
       />
 
       <RenameTakeDialog

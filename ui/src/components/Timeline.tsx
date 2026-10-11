@@ -8,6 +8,7 @@ import { NotesPlate } from "@/components/midi/NotesPlate"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
+import { laneHalf } from "@/lib/laneHalf"
 import { laneOrder } from "@/lib/midi"
 import { MIN_VIEW_SEC, tickTimes } from "@/lib/timeline"
 import type { Marker, MissingNotes, NotesFile, TakeNotes } from "@/lib/api"
@@ -16,12 +17,13 @@ import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 /** A press that never travelled this far is a click, and a click seeks. */
 const DRAG_THRESHOLD_PX = 5
 const GUTTER_PX = 200
-/** The name row, then the fader and its meter, with room between. No taller
- *  than that: at 160 a lane's plate was mostly empty card, and five tracks
- *  took a laptop's screen and more. A lane of notes has neither, and is as
- *  tall as its plate needs instead. */
-const LANE_MIN_PX = 92
-const LANE_MAX_PX = 96
+/** The name row of 1.25rem, the fader and its meter of 1rem under it, 0.25rem
+ *  apart, and 0.5rem above and below: 3.5rem, 56 px at the Appearance scale of
+ *  1. In rem because all of that is, and a row that stayed 56 px at 150 % left
+ *  the fader on top of M and S. No taller than that: at 160 a lane's plate was
+ *  mostly empty card, and at 96 five tracks took a laptop's screen and more. A
+ *  lane of notes has neither, and is as tall as its plate needs instead. */
+const LANE_REM = 3.5
 const RULER_PX = 44
 /** What a tick label needs to the right of its line: "10:00" at 11 px and
  *  its padding, with a little to spare. */
@@ -297,24 +299,20 @@ export function Timeline({
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div
-          className="grid min-h-0 flex-1"
+          className="grid min-h-0"
           style={{
             gridTemplateColumns: `${GUTTER_PX}px 1fr`,
             // A row per lane, and none before the first track's media
-            // arrives (never, once loadError is set). A lane of notes grows
-            // to fit its plate, which a long name or port makes taller, and
-            // shares what is left as the audio lanes do.
+            // arrives (never, once loadError is set). A lane of notes is as
+            // tall as its plate, which a long name or port makes taller. No
+            // row takes a share of what is left, so two tracks in a tall
+            // window are two lanes of 3.5rem and the room under them stays
+            // empty, which is honest about there being room for more tracks.
             gridTemplateRows: [
               `${RULER_PX}px`,
-              ...lanes.map((lane) =>
-                lane.kind === "audio" ? `minmax(${LANE_MIN_PX}px, 1fr)` : "minmax(min-content, 1fr)"
-              ),
+              ...lanes.map((lane) => (lane.kind === "audio" ? `${LANE_REM}rem` : "min-content")),
             ].join(" "),
             gap: `${ROW_GAP_PX}px ${COLUMN_GAP_PX}px`,
-            // Two tracks in a tall window would otherwise give lanes the height
-            // of a door. Past this the leftover space simply stays empty, which
-            // is honest about there being room for more tracks.
-            maxHeight: RULER_PX + rows * (LANE_MAX_PX + ROW_GAP_PX),
           }}
         >
           {/* Every child below is placed explicitly. The surface (after the
@@ -426,6 +424,7 @@ export function Timeline({
                     <span
                       data-marker-at={m.at}
                       data-colour={label.colour}
+                      // design-ok(radius): the marker's diamond on the waveform, a graphic that keeps its own corner
                       className="pointer-events-none absolute size-2.5 -translate-x-1 rotate-45 rounded-[2px]"
                       style={{ left: `${pct(m.at)}%`, top: RULER_PX - 13, background: colour }}
                     />
@@ -506,10 +505,7 @@ export function Timeline({
                       duration={duration}
                       view={{ from, to }}
                       playhead={position}
-                      className={cn(
-                        "h-full rounded-lg border",
-                        paired && "rounded-t-none [border-top-style:dashed]"
-                      )}
+                      className={cn("h-full", laneHalf(paired ? "bottom" : undefined))}
                     />
                   </div>
                 </Fragment>
@@ -553,11 +549,7 @@ export function Timeline({
                     viewTo={to}
                     position={position}
                     dimmed={dimmed}
-                    className={cn(
-                      "h-full rounded-lg border",
-                      paired && "rounded-b-none border-b-0",
-                      dimmed && "opacity-60"
-                    )}
+                    className={cn("h-full", laneHalf(paired ? "top" : undefined), dimmed && "opacity-60")}
                   />
                 </div>
               </Fragment>
@@ -574,13 +566,14 @@ export function Timeline({
           still where the hand goes for it.
 
           Held to the very edge of the page, not the edge of its padding
-          (Shell's py-6): stuck at that, it left a strip of the next track
-          showing beneath it. Its own padding and background cover the rest,
-          and the negative margin gives the gap it adds back in the flow. */}
+          (Shell's --screen-pad-y): stuck at that, it left a strip of the next
+          track showing beneath it. Its own padding and background cover the
+          rest, and the negative margin gives the gap it adds back in the
+          flow. */}
       {rows > 0 && (
         <div
-          className="sticky -bottom-6 z-10 -mt-1 -mb-2 bg-background pt-1 pb-2"
-          style={{ width: GUTTER_PX }}
+          className="sticky z-10 -mt-1 -mb-2 bg-background pt-1 pb-2"
+          style={{ width: GUTTER_PX, bottom: "calc(-1 * var(--screen-pad-y))" }}
         >
           <MasterControls
             volume={player.master}

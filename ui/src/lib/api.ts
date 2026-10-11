@@ -614,13 +614,39 @@ export type PlayerState = {
   reopened?: boolean
 }
 
+/**
+ * What a removal answers. It is done at once: what went waits in Python's
+ * holding folder, and `undo` is the token its Undo sends back (undo_trash),
+ * or that says its notice ended (end_trash) and it goes on to the Trash.
+ * `ended`: the tokens of earlier removals this one ended on its own (an
+ * earlier removal or crop of the same take, everything of a rehearsal), on a
+ * failure too; their notices go (trash.ts endedByPython). So in every
+ * answer below that has it.
+ */
 export type DeleteResult = {
   ok: boolean
   error?: string
-  /** true — the system Trash; false — the _deleted folder. Never destroyed. */
-  trashed?: boolean
-  location?: string | null
+  undo?: string | null
   takes_left?: number
+  ended?: string[]
+}
+
+/** What an Undo answers: what came back, and where. */
+export type UndoResult = {
+  ok: boolean
+  error?: string
+  kind?: "take" | "takes" | "rehearsal" | "draft" | "crop"
+  folder?: string
+  take_numbers?: number[]
+  temp_dir?: string
+  /** A crop's Undo that went part way and could not be taken back either:
+   *  ending it (end_trash) finishes it. */
+  finishing?: boolean
+  /** Too late: it has gone on to the Trash, or the _deleted folder. The
+   *  interface words it (deletion.ts goneText); `error` is Python's. */
+  gone?: boolean
+  /** It is back where it was already: its Undo, or an end, put it back. */
+  back?: boolean
 }
 
 export type DiskEstimate = {
@@ -863,13 +889,13 @@ type PyApi = {
     sendToCloud?: boolean | null,
     /** The .mid files stop_take made, to be kept beside the audio. */
     notes?: NotesFile[]
-  ): Promise<Ok<{ take?: Take }>>
-  discard_take(tempDir: string): Promise<Ok>
+  ): Promise<Ok<{ take?: Take; ended?: string[] }>>
+  discard_take(tempDir: string): Promise<DeleteResult>
   /**
-   * Keep only [startSec, endSec) of a saved take; the rest goes to the Trash.
-   * `error` can be set even when `ok` is true — the crop itself went
-   * through, but the originals could not be swept away, and `location` is
-   * where they are sitting instead.
+   * Keep only [startSec, endSec) of a saved take. The take as it was waits
+   * for the crop's Undo (`undo`, as a removal's). `error` can be set even
+   * when `ok` is true: the crop went through, but the uncut take could not
+   * be held for an Undo, and `error` says where it is instead.
    */
   crop_take(
     folder: string,
@@ -877,7 +903,7 @@ type PyApi = {
     startSec: number,
     endSec: number
   ): Promise<
-    Ok<{ take?: Take; markers_dropped?: number; location?: string | null }>
+    Ok<{ take?: Take; markers_dropped?: number; undo?: string | null; ended?: string[] }>
   >
   /** The same, for a take that is still on the review screen. */
   crop_draft(
@@ -893,7 +919,8 @@ type PyApi = {
       /** The notes again, cut to the same part. */
       notes?: NotesFile[]
       duration_sec?: number
-      location?: string | null
+      undo?: string | null
+      ended?: string[]
     }>
   >
 
@@ -989,14 +1016,25 @@ type PyApi = {
   set_false_start(seconds: number): Promise<Ok<{ false_start_sec?: number }>>
 
   delete_take(folder: string, takeNumber: number): Promise<DeleteResult>
-  /** Each as delete_take does it; what could not go is said take by take. */
+  /** Each as delete_take does it, all with one Undo (null when none went);
+   *  what could not go is said take by take. */
   delete_takes(
     folder: string,
     takeNumbers: number[]
   ): Promise<
-    Ok<{ deleted?: number[]; failed?: { take_number: number; error: string }[] }>
+    Ok<{
+      deleted?: number[]
+      failed?: { take_number: number; error: string }[]
+      undo?: string | null
+      ended?: string[]
+    }>
   >
   delete_rehearsal(folder: string): Promise<DeleteResult>
+  /** A removal's Undo: what went is back where it was. */
+  undo_trash(token: string): Promise<UndoResult>
+  /** A removal's notice has ended: what went goes on to the Trash, or to
+   *  the _deleted folder. ok also for one no longer waiting. */
+  end_trash(token: string): Promise<Ok>
 
   add_take_marker(
     folder: string,
@@ -1041,7 +1079,7 @@ type PyApi = {
   save_next_set(setId: number | null): Promise<Ok>
 
   list_drafts(): Promise<Draft[]>
-  recover_draft(draftDir: string, name?: string): Promise<Ok<{ take?: Take }>>
+  recover_draft(draftDir: string, name?: string): Promise<Ok<{ take?: Take; ended?: string[] }>>
   discard_draft(draftDir: string): Promise<DeleteResult>
 
   get_settings(): Promise<Settings>
@@ -1066,9 +1104,21 @@ type PyApi = {
   start_interface_check(): Promise<Ok>
   interface_check(): Promise<InterfaceCheck>
   stop_interface_check(): Promise<Ok>
-  set_recordings_dir(path: string): Promise<Ok<{ recordings_dir?: string }>>
+  /** `kept`: the folders of removals that could be neither put back nor
+   *  sent to the Trash before the switch; they stay in the old folder.
+   *  `same`: the folder in use, chosen again, which is no switch: nothing
+   *  ended, and the Undos waiting in it stay. */
+  set_recordings_dir(
+    path: string
+  ): Promise<Ok<{ recordings_dir?: string; kept?: string[]; ended?: string[]; same?: boolean }>>
   choose_recordings_dir(): Promise<
-    Ok<{ recordings_dir?: string; cancelled?: boolean }>
+    Ok<{
+      recordings_dir?: string
+      cancelled?: boolean
+      kept?: string[]
+      ended?: string[]
+      same?: boolean
+    }>
   >
   save_mix(volumes: Record<string, number>): Promise<Ok>
   /** The listening level, kept between takes. Not part of the cloud mix. */
@@ -1131,6 +1181,9 @@ type PyApi = {
   /** What went wrong while starting, each said once: returned, then
    *  forgotten on the Python side. */
   startup_problems(): Promise<{ name: string; message: string }[]>
+  /** A problem raised in the page itself, written to crash.log (see
+   *  `reportPageError`). Never raises; answers nothing. */
+  log_problem(where: string, name: string, message: string, stack?: string): Promise<null>
 }
 
 declare global {

@@ -6,6 +6,7 @@ import {
   expect,
   keyOn,
   nameTake,
+  notices,
   openApp,
   openHistory,
   recordTake,
@@ -94,7 +95,8 @@ test.describe("the review screen", () => {
     await expect(listed).not.toContainText("Play / pause")
     await page.keyboard.press("Escape")
     await expect(listed).toHaveCount(0)
-    await expect(page.getByText("Discard this take?")).toHaveCount(0)
+    await expect(page.locator("[data-take-summary]")).toBeVisible()
+    expect(await callCount(page, "discard_take")).toBe(0)
 
     // Radix closes the dialog on Escape without stopping the keydown, so the
     // app's own Escape runs too and decided by looking at what had focus —
@@ -105,7 +107,8 @@ test.describe("the review screen", () => {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
     await page.keyboard.press("Escape")
     await expect(listed).toHaveCount(0)
-    await expect(page.getByText("Discard this take?")).toHaveCount(0)
+    await expect(page.locator("[data-take-summary]")).toBeVisible()
+    expect(await callCount(page, "discard_take")).toBe(0)
   })
 
   test("on a Mac the list says Cmd for the zoom", async ({ page }) => {
@@ -136,14 +139,16 @@ test.describe("the review screen", () => {
     await expect(page.getByRole("button", { name: "Crop to the region" })).toHaveCount(0)
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
-    await expect(page.getByText("Keep only")).toBeVisible()
-    await page.getByRole("button", { name: "Crop", exact: true }).click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
     await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
     const [, , from, to] = (await calls(page, "crop_draft"))[0].args as number[]
     expect(Math.abs(from - TAKE_SECONDS * 0.25)).toBeLessThan(0.4)
     expect(Math.abs(to - TAKE_SECONDS * 0.75)).toBeLessThan(0.4)
     // And the take on screen is that region now.
     await expect(page.locator("span", { hasText: "/ 0:03" }).first()).toBeVisible()
+    await expect(
+      notices(page).filter({ hasText: "“Take 1” is cropped. The uncut take went to the Trash." })
+    ).toHaveCount(1)
   })
 
   test("named in Rename take, Space then saves it, and it waits for the cloud", async ({
@@ -153,7 +158,7 @@ test.describe("the review screen", () => {
     // saving the take. Rename take gives the keyboard back when it closes.
     await review(page)
     await nameTake(page, "Pałyn")
-    await expect(page.getByText("Discard this take?")).toHaveCount(0)
+    expect(await callCount(page, "discard_take")).toBe(0)
     await expect(page.locator("[data-take-summary] h2")).toHaveText("Pałyn 1")
     await page.keyboard.press("Space")
     await expect.poll(() => callCount(page, "keep_take")).toBe(1)
@@ -169,18 +174,18 @@ test.describe("the review screen", () => {
     await expect(page.locator("[data-take-summary] [data-go]")).toHaveText("2")
   })
 
-  test("Escape asks before dropping a take, and a second Escape answers nothing", async ({
-    page,
-  }) => {
-    // The take was played seconds ago and cannot be played again, and a
-    // stray key is exactly the accident a confirmation is for.
+  test("Escape throws a take away at once, and Undo brings it back", async ({ page }) => {
+    // The take was played seconds ago and cannot be played again, so a
+    // stray key is taken back by Undo rather than asked about first.
     await secondTake(page)
     await page.keyboard.press("Escape")
-    await expect(page.getByText("Discard this take?")).toBeVisible()
-    expect(await callCount(page, "discard_take")).toBe(0)
-    await page.keyboard.press("Escape")
-    await expect(page.getByText("Discard this take?")).toHaveCount(0)
-    expect(await callCount(page, "discard_take")).toBe(0)
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page.locator("[data-take-summary]")).toHaveCount(0)
+    expect(await callCount(page, "discard_take")).toBe(1)
+    await notices(page)
+      .filter({ hasText: "“Pałyn 2” went to the Trash." })
+      .getByRole("button", { name: "Undo" })
+      .click()
     await expect(page.locator("[data-take-summary] h2")).toHaveText("Pałyn 2")
   })
 
@@ -298,12 +303,10 @@ test.describe("a saved take", () => {
 
   test("Escape closes a dialog first, and the take second", async ({ page }) => {
     await savedTake(page)
-    await page.getByRole("button", { name: "Delete take Pałyn 2" }).click()
-    // Radix's own focus lands on Cancel; a click on the words moves it to the
-    // dialog itself, a DIV, which a guard by tag could not see.
-    await page.getByText("go to the Trash").click()
-    // A take that is not in the cloud says nothing about the cloud.
-    await expect(page.getByRole("dialog")).not.toContainText("cloud")
+    await page.getByRole("button", { name: "Rename take Pałyn 2" }).click()
+    // Its own focus lands in the name field; a click on the words moves it
+    // to the dialog itself, a DIV, which a guard by tag could not see.
+    await page.getByText("The folder on disk is renamed too.").click()
     // The keydown itself, as the window sees it: a real press would also work
     // whatever button had focus and confound this.
     const toggles = await callCount(page, "player_toggle")
@@ -313,7 +316,7 @@ test.describe("a saved take", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByRole("dialog")).toHaveCount(0)
     expect(await callCount(page, "player_toggle")).toBe(toggles)
-    expect(await callCount(page, "delete_take")).toBe(0)
+    expect(await callCount(page, "rename_take")).toBe(0)
     await expect(timeline(page)).toHaveCount(1)
 
     // With no dialog left to claim it, the same key gives the take up, and
@@ -573,7 +576,9 @@ test.describe("the mix", () => {
 })
 
 test.describe("a track's plate", () => {
-  test("says what the track is: its icon, and one channel or two", async ({ page }) => {
+  test("says what the track is by its icon, and a stereo file by a meter in two", async ({
+    page,
+  }) => {
     await openApp(page, {
       before: `window.__BAND_ICONS__ = {Guitar: 'guitar-electric'};
         window.__STEREO_TRACKS__ = ['Vocals'];`,
@@ -584,11 +589,13 @@ test.describe("a track's plate", () => {
     const vocals = page.locator("[data-plate='Vocals']")
     await expect(guitar.locator("[data-icon]")).toHaveAttribute("data-icon", "guitar-electric")
     await expect(vocals.locator("[data-icon]")).toHaveAttribute("data-icon", "other")
-    // Read from the file: how many channels it has, not how it was set up.
-    await expect(guitar).toContainText("Mono")
-    await expect(vocals).toContainText("Stereo")
+    // There is no line for it: Mono or Stereo took a row a lane at 56 px
+    // has no room for.
+    await expect(guitar).not.toContainText("Mono")
+    await expect(vocals).not.toContainText("Stereo")
 
-    // A stereo track's meter is in two, left above right, so a dead side
+    // Read from the file, how many channels it has and not how it was set
+    // up: a stereo track's meter is in two, left above right, so a dead side
     // shows while it plays.
     const fills = (name: string) =>
       page.getByRole("meter", { name: `${name} level` }).locator("[data-fill]")
@@ -605,12 +612,12 @@ test.describe("a track's plate", () => {
       .toBe(true)
   })
 
-  test("is no taller than it needs, however tall the window", async ({ page }) => {
+  test("is 56 px tall, however tall the window", async ({ page }) => {
     await page.setViewportSize({ width: 1180, height: 1400 })
     await review(page)
     for (const name of ["Guitar", "Vocals"]) {
       const box = (await page.locator(`[data-plate='${name}']`).boundingBox())!
-      expect(box.height).toBeLessThanOrEqual(96)
+      expect(box.height).toBeCloseTo(56, 0)
     }
   })
 })
@@ -912,15 +919,11 @@ test.describe("cropping a saved take", () => {
     await expect(page.getByText("at least a second to crop")).toHaveCount(1)
   })
 
-  test("trims the take to the region, and asks first", async ({ page }) => {
+  test("trims the take to the region at once, and says the uncut take went", async ({ page }) => {
     await savedTake(page)
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
-    const asked = page.getByRole("dialog")
-    // It names the part being kept, and where what it removes is going.
-    await expect(asked).toContainText("Keep only 0:01")
-    await expect(asked).toContainText(/Trash|_deleted/)
-    await page.getByRole("button", { name: "Crop", exact: true }).click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
     await expect.poll(() => callCount(page, "crop_take")).toBe(1)
     const [, , from, to] = (await calls(page, "crop_take"))[0].args as number[]
     expect(Math.abs(from - TAKE_SECONDS * 0.25)).toBeLessThan(0.4)
@@ -928,6 +931,9 @@ test.describe("cropping a saved take", () => {
     // Three seconds, not six, and the region gone: the take is that region.
     await expect(page.locator("span", { hasText: "/ 0:03" }).first()).toBeVisible()
     await expect(page.getByRole("button", { name: "Clear the loop region" })).toHaveCount(0)
+    await expect(
+      notices(page).filter({ hasText: "“Pałyn 2” is cropped. The uncut take went to the Trash." })
+    ).toHaveCount(1)
   })
 
   test("says where the original is when it could not be moved out of the way", async ({
@@ -950,16 +956,18 @@ test.describe("cropping a saved take", () => {
           w.__RELEASE_CROP__ = go
         })
         const res = await real(...args)
+        // Cropped, but the uncut take stayed where Python left it, so there
+        // is nothing to undo.
         return {
           ...res,
-          error: "Could not remove it: no space left on device",
-          location: "/rec/Tuesday jam/_deleted/take 2 (original)",
+          undo: null,
+          error:
+            "No space left on device, and is still at /rec/Tuesday jam/take 2 (before crop)",
         }
       }
     })
     await dragRegion(page, 0.2, 0.8)
     await page.getByRole("button", { name: "Crop to the region" }).click()
-    await page.getByRole("button", { name: "Crop", exact: true }).click()
     // A crop already running does not offer to run again: a second one would
     // cut the take the first one made.
     await expect(page.getByRole("button", { name: "Crop to the region" })).toBeDisabled()
@@ -968,7 +976,8 @@ test.describe("cropping a saved take", () => {
       .locator("section[aria-label='Notifications'] [data-notice='warning']")
       .filter({ hasText: "could not be moved out of the way" })
     await expect(swept).toHaveCount(1)
-    await expect(swept).toContainText("/rec/Tuesday jam/_deleted/take 2 (original)")
+    await expect(swept).toContainText("is still at /rec/Tuesday jam/take 2 (before crop)")
+    await expect(swept.getByRole("button", { name: "Undo" })).toHaveCount(0)
     // A warning, since the crop itself went through.
     await expect(page.getByRole("button", { name: "Crop to the region" })).toHaveCount(0)
     await expect(page.locator(".text-destructive", { hasText: "could not be moved out of the way" })).toHaveCount(0)

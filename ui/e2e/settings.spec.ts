@@ -4,6 +4,7 @@ import {
   expect,
   keyOn,
   nameTake,
+  notices,
   openApp,
   recordTake,
   setFake,
@@ -125,6 +126,61 @@ test("the theme and the scale apply at once, and are kept", async ({ page }) => 
   expect(await callCount(page, "save_appearance")).toBeGreaterThanOrEqual(2)
 })
 
+// A pill that swaps between default and outline when it is chosen must not
+// change width with it: a heavier word or a frame that one look has and the
+// other has not moves every pill beside it on a click.
+test("choosing a theme or a scale leaves every pill the width it was", async ({ page }) => {
+  await openSettings(page)
+  await group(page, "Appearance").click()
+  const themes = ["Dark", "Light", "Match system"].map((name) =>
+    page.getByRole("button", { name, exact: true })
+  )
+  const scales = [100, 115, 130, 150].map((n) =>
+    page.getByRole("button", { name: `Scale ${n} percent` })
+  )
+  const widths = (pills: Locator[]) =>
+    Promise.all(pills.map(async (p) => (await p.boundingBox())!.width))
+
+  // The theme: whichever is chosen, the three keep their widths.
+  const before = await widths(themes)
+  for (const pill of [themes[1]!, themes[2]!, themes[0]!]) {
+    await pill.click()
+    await expect(pill).toHaveAttribute("aria-pressed", "true")
+    expect(await widths(themes)).toEqual(before)
+  }
+
+  // The scale rescales the whole page, so the widths cannot be compared
+  // across a click, and the four say different figures: whether those are as
+  // wide as one another depends on the machine's font (on CI's Linux runner
+  // they came out at three widths). So the chosen one and the others must
+  // share what sets a width besides the words: the weight, the frame, the
+  // padding, and figures of even width wherever the font has them.
+  const looks = (pills: Locator[]) =>
+    Promise.all(
+      pills.map((p) =>
+        p.evaluate((el) => {
+          const s = getComputedStyle(el)
+          return [
+            s.fontWeight,
+            s.borderLeftWidth,
+            s.borderRightWidth,
+            s.paddingLeft,
+            s.paddingRight,
+            s.letterSpacing,
+            s.fontVariantNumeric,
+          ].join(" ")
+        })
+      )
+    )
+  for (const pill of [scales[2]!, scales[1]!]) {
+    await pill.click()
+    await expect(pill).toHaveAttribute("aria-pressed", "true")
+    // Polled: a scale change eases the padding in with the rest of the page.
+    await expect.poll(async () => new Set(await looks(scales)).size).toBe(1)
+    expect((await looks(scales))[0]).toContain("tabular-nums")
+  }
+})
+
 test.describe("Under the hood", () => {
   // The page someone opens when something has gone wrong: what this copy is
   // and runs on, where it keeps things, a report to paste into a message,
@@ -209,6 +265,35 @@ test.describe("Under the hood", () => {
     // The releases page opens in the browser, not in the window.
     await page.getByRole("button", { name: "Releases on GitHub" }).click()
     await expect.poll(() => callCount(page, "open_releases")).toBe(1)
+  })
+
+  test("the releases link sits under the copy button, flush with its right edge", async ({
+    page,
+  }) => {
+    await underTheHood(page)
+    const about = page.locator("[aria-label='About this copy']")
+    const copy = about.getByRole("button", { name: "Copy details for a bug report" })
+    const link = about.getByRole("button", { name: "All releases on GitHub" })
+    // Where the link's words end, and the line they are set on: a bare link
+    // is its words, with no frame or padding of its own round them.
+    const words = await link.evaluate((e) => {
+      const range = document.createRange()
+      range.selectNodeContents(e)
+      return {
+        left: range.getBoundingClientRect().left,
+        right: range.getBoundingClientRect().right,
+        line: parseFloat(getComputedStyle(e).lineHeight),
+      }
+    })
+    const box = (await link.boundingBox())!
+    const above = (await copy.boundingBox())!
+    // The words end where the copy button does.
+    expect(words.right).toBeCloseTo(above.x + above.width, 1)
+    // The box is the words: as wide, and one line high, 6 px under the button.
+    expect(box.x).toBeCloseTo(words.left, 1)
+    expect(box.x + box.width).toBeCloseTo(words.right, 1)
+    expect(box.height).toBeCloseTo(words.line, 1)
+    expect(box.y - (above.y + above.height)).toBeCloseTo(6, 1)
   })
 
   test("checks the interface, and says what came of it", async ({ page }) => {
@@ -307,9 +392,11 @@ test.describe("on a machine shaped like Windows", () => {
     await openApp(page, { before: WINDOWS })
     await page.getByRole("button", { name: "History", exact: true }).click()
     await page.getByRole("button", { name: "Delete rehearsal Tuesday jam" }).click()
-    await expect(page.getByText("_deleted folder")).toBeVisible()
-    await expect(page.getByText("goes to the Trash")).toHaveCount(0)
-    await expect(page.getByText("Nothing is destroyed")).toHaveCount(1)
+    await expect(
+      notices(page, "done").filter({ hasText: "“Tuesday jam” moved to the _deleted folder." })
+    ).toHaveCount(1)
+    await expect(page.getByText("went to the Trash")).toHaveCount(0)
+    await expect(page.getByText("went to the Recycle Bin")).toHaveCount(0)
   })
 
   test("the recording card is chosen by driver first", async ({ page }) => {

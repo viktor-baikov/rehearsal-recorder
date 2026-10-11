@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { FooterRow } from "@/components/FooterRow"
 import { HealthLine } from "@/components/HealthLine"
 import { Shell } from "@/components/Shell"
@@ -120,6 +120,15 @@ export function Recording({
   // stands, and "Recording stopped" over a take that is recording is wrong.
   useEffect(() => dismiss(SAID), [])
 
+  // Nothing moves while a take is recording (spec F11): <html> says so for
+  // the stylesheet and for motionOff(), and stops saying so when this screen
+  // is gone. Before the first paint and after the last, so that no frame
+  // starts an animation the attribute would have stopped.
+  useLayoutEffect(() => {
+    document.documentElement.setAttribute("data-recording", "")
+    return () => document.documentElement.removeAttribute("data-recording")
+  }, [])
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       setElapsed((Date.now() - startedAt.current) / 1000)
@@ -237,10 +246,9 @@ export function Recording({
       <div className="flex h-full min-h-0 flex-col items-center gap-[2.5vh]">
         <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-1">
           <div data-recording-line className="flex items-center gap-2.5 text-sm">
-            <span className="relative flex size-2.5">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-75" />
-              <span className="relative inline-flex size-2.5 rounded-full bg-destructive" />
-            </span>
+            {/* Still, as nothing else here moves either (F11): a pulse in
+                the corner draws the eye from across the room. */}
+            <span className="flex size-2.5 shrink-0 rounded-full bg-destructive" />
             <span className="font-semibold tracking-wide text-destructive uppercase">
               Recording
             </span>
@@ -258,6 +266,7 @@ export function Recording({
         <div className="flex max-w-full flex-col items-center gap-1">
           <h1
             className="flex max-w-full pb-[0.08em] leading-none font-semibold tracking-tight"
+            // design-ok(px-text): half the clock's size, so it follows the window's height too
             style={{ fontSize: `calc(${CLOCK_SIZE} / 2)` }}
           >
             <GoTitle title={takeName} go={takeGo} cut />
@@ -270,6 +279,7 @@ export function Recording({
             role="timer"
             aria-label="Take time"
             className="leading-none font-semibold tracking-tight tabular-nums [text-box:trim-end_cap_alphabetic]"
+            // design-ok(px-text): the recording clock is sized from the window's height (CLOCK_SIZE)
             style={{ fontSize: CLOCK_SIZE }}
           >
             {formatClock(elapsed)}

@@ -1,12 +1,11 @@
 import { useState } from "react"
 import { CloudUpload, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { api, type Take } from "@/lib/api"
 import { falseStarts, starredToSend } from "@/lib/evening"
-import { formatMMSS } from "@/lib/format"
-import { canBePutBack, goPlural, rehearsalCloudToo, trashName } from "@/lib/deletion"
+import { wentTo } from "@/lib/deletion"
 import { notify } from "@/lib/notices"
+import { endedByPython, offerUndo } from "@/lib/trash"
 import { pollSoon } from "@/lib/activity"
 
 /** Off, but still saying why under the mouse: a disabled button takes no
@@ -19,8 +18,8 @@ const OFF =
  * The evening's two buttons, over its takes: Send starred copies every ★
  * take not yet in the cloud folder, as Settings' What gets published says;
  * Clear false starts moves the takes too short to be anything to the Trash,
- * after asking. Each says how many it would act on, and when that is none,
- * why, under the mouse.
+ * at once, with Undo. Each says how many it would act on, and when that is
+ * none, why, under the mouse.
  *
  * The rehearsal screen and History both put it in the overview's row of
  * figures, so an evening sorted later looks and works as it did on the night.
@@ -46,9 +45,6 @@ export function EveningActions({
 }) {
   const [sending, setSending] = useState(false)
   const [clearing, setClearing] = useState(false)
-  // The false starts as they were when asked about: what is confirmed is
-  // what goes.
-  const [asking, setAsking] = useState<Take[] | null>(null)
 
   const toSend = starredToSend(takes, waiting)
   const onTheWay = takes.some((t) => t.starred && t.take_number in (waiting ?? {}))
@@ -100,12 +96,13 @@ export function EveningActions({
   }
 
   const clear = async (going: Take[]) => {
+    if (clearOff) return
     setClearing(true)
     try {
-      const res = await api().delete_takes(
-        folder,
-        going.map((t) => t.take_number)
-      )
+      const numbers = going.map((t) => t.take_number)
+      const res = await api().delete_takes(folder, numbers)
+      // What waited of these takes, a crop of one, Python has sent on.
+      endedByPython(res.ended)
       if (!res.ok) {
         notify({
           key: "evening",
@@ -115,6 +112,14 @@ export function EveningActions({
       } else {
         const gone = new Set(res.deleted ?? [])
         onDeleted(going.filter((t) => gone.has(t.take_number)))
+        if (res.undo) {
+          const n = gone.size
+          offerUndo({
+            text: wentTo(n === 1 ? "1 false start" : `${n} false starts`),
+            token: res.undo,
+            onUndone: () => onChanged(),
+          })
+        }
         const failed = res.failed ?? []
         if (failed.length > 0) {
           const first = going.find((t) => t.take_number === failed[0].take_number)
@@ -135,14 +140,11 @@ export function EveningActions({
     onChanged()
   }
 
-  const n = asking?.length ?? 0
-  const inCloud = (asking ?? []).filter((t) => t.cloud?.mix || t.cloud?.tracks).length
-
   return (
     <>
       <Button
         variant="outline"
-        size="sm"
+        size="row"
         aria-disabled={sendOff || undefined}
         title={sendWhy}
         onClick={() => void send()}
@@ -154,43 +156,16 @@ export function EveningActions({
       </Button>
       <Button
         variant="outline"
-        size="sm"
+        size="row"
         aria-disabled={clearOff || undefined}
         title={clearWhy}
-        onClick={() => !clearOff && setAsking(starts)}
+        onClick={() => void clear(starts)}
         className={OFF}
       >
         <Trash2 />
         Clear false starts
         {starts.length > 0 && <span className="tnum text-muted-foreground">{starts.length}</span>}
       </Button>
-
-      <ConfirmDialog
-        open={asking !== null}
-        onOpenChange={(open) => !open && setAsking(null)}
-        title={`Move ${n === 1 ? "1 false start" : `${n} false starts`} to ${trashName()}?`}
-        description={
-          <div className="flex flex-col gap-3">
-            <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
-              {(asking ?? []).map((t) => (
-                <li key={t.take_number} className="flex items-baseline justify-between gap-4">
-                  <span className="truncate text-foreground">{t.name}</span>
-                  <span className="tnum shrink-0">{formatMMSS(t.duration_sec)}</span>
-                </li>
-              ))}
-            </ul>
-            <p>
-              {`${n === 1 ? "The take and all its tracks" : "The takes and all their tracks"} ` +
-                `${goPlural()}.${rehearsalCloudToo(inCloud, n)} ${canBePutBack(n > 1)}`}
-            </p>
-          </div>
-        }
-        confirmLabel={`Move to ${trashName()}`}
-        onConfirm={() => {
-          if (asking) void clear(asking)
-          setAsking(null)
-        }}
-      />
     </>
   )
 }

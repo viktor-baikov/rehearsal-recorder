@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Loader2, RotateCcw, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Setup } from "@/screens/Setup"
 import { Rehearsal } from "@/screens/Rehearsal"
 import { Recording } from "@/screens/Recording"
-import { Review } from "@/screens/Review"
+import { Review, type Discarded, type ReviewKept } from "@/screens/Review"
 import { HistoryScreen } from "@/screens/HistoryScreen"
 import { DraftsScreen } from "@/screens/DraftsScreen"
 import { Settings } from "@/screens/Settings"
@@ -16,9 +16,11 @@ import {
   type SessionState,
 } from "@/lib/api"
 import { useDialogFocusKeys } from "@/hooks/useSpacebar"
+import { useUndoKey } from "@/hooks/useUndoKey"
 import { reportBridgeError } from "@/lib/bridgeErrors"
-import { loadDeletionKind } from "@/lib/deletion"
+import { loadDeletionKind, wentTo } from "@/lib/deletion"
 import { loadLabels } from "@/lib/labels"
+import { draftMovedTo, offerUndo } from "@/lib/trash"
 import {
   applyAppearance,
   readCachedAppearance,
@@ -31,7 +33,7 @@ type Screen =
   | { name: "setup" }
   | { name: "rehearsal" }
   | { name: "recording"; takeNumber: number; takeName: string; takeGo: number | null }
-  | { name: "review"; take: PendingTake }
+  | { name: "review"; take: PendingTake; kept?: ReviewKept; visit?: number }
   | { name: "history"; folder?: string; song?: string | null }
   | { name: "settings" }
 
@@ -40,6 +42,8 @@ export function App() {
   // the keyboard is this app's job, not the browser's — the window it runs
   // in on a Mac will not do it. See useDialogFocusKeys.
   useDialogFocusKeys()
+  // ⌘Z / Ctrl+Z, once: it runs the newest notice's action from any screen.
+  useUndoKey()
 
   const [screen, setScreen] = useState<Screen>({ name: "loading" })
   const [session, setSession] = useState<SessionState>({ active: false })
@@ -66,6 +70,72 @@ export function App() {
     const s = await api().session_state()
     setSession(s)
     return s
+  }, [])
+
+  // A take discarded on the review screen, while its Undo is on offer: Undo
+  // brings the screen back as it was left — the take, its name, its marks,
+  // its cloud answer — which only that screen held. Recording the next take
+  // or finishing the rehearsal ends the offer, and the take goes on to the
+  // Trash: the evening has moved past the screen Undo would bring back.
+  const discardOffer = useRef<() => void>(() => {})
+  const endDiscardOffer = () => {
+    discardOffer.current()
+    discardOffer.current = () => {}
+  }
+  // Each entry to the review screen by an Undo is a screen of its own: one
+  // still up over the discarded take, busy with it, starts afresh.
+  const reviewVisit = useRef(0)
+  const discarded = async (gone: Discarded) => {
+    // Offered before anything else is asked of Python: however the read of
+    // the session goes, the take that went can be had back.
+    let back = false
+    if (gone.undo) {
+      endDiscardOffer()
+      discardOffer.current = offerUndo({
+        text: wentTo(`“${gone.title}”`),
+        token: gone.undo,
+        onUndone: (r) => {
+          back = true
+          discardOffer.current = () => {}
+          const visit = ++reviewVisit.current
+          // From the rehearsal screen, where the take was left for, or from
+          // the review screen still on its way there; the offer ends before
+          // any other could be up. Where Python put it back: a rename of the
+          // rehearsal meanwhile moved it, its files with it.
+          setScreen((s) =>
+            s.name === "rehearsal" || s.name === "review"
+              ? {
+                  name: "review",
+                  take: draftMovedTo(gone.take, r.temp_dir),
+                  kept: gone.kept,
+                  visit,
+                }
+              : s
+          )
+        },
+      })
+    }
+    try {
+      await refreshSession()
+    } catch {
+      // Said on the error bar already (api); the screen moves on all the same.
+    }
+    if (!back) setScreen({ name: "rehearsal" })
+  }
+
+  // Unsaved takes again, after an Undo brought back one discarded there
+  // once the list had closed. Not over a take in hand.
+  const reopenDrafts = useCallback(async () => {
+    let drafts: Draft[] = []
+    try {
+      drafts = await api().list_drafts()
+    } catch (e) {
+      console.error("Could not read drafts:", e)
+    }
+    if (drafts.length === 0) return
+    setScreen((s) =>
+      s.name === "recording" || s.name === "review" ? s : { name: "drafts", drafts }
+    )
   }, [])
 
   const connect = useCallback(async () => {
@@ -167,12 +237,16 @@ export function App() {
 
   if (screen.name === "drafts") {
     return (
+      // Keyed by the takes it lists: the list opened again by an Undo starts
+      // from what is on disk now.
       <DraftsScreen
+        key={screen.drafts.map((d) => d.dir).join("\n")}
         drafts={screen.drafts}
         onDone={async () => {
           const s = await refreshSession()
           setScreen(s.active ? { name: "rehearsal" } : { name: "setup" })
         }}
+        onReopen={() => void reopenDrafts()}
       />
     )
   }
@@ -220,13 +294,17 @@ export function App() {
     return (
       <Rehearsal
         session={session}
-        onStartTake={(takeNumber, takeName, takeGo) =>
+        onStartTake={(takeNumber, takeName, takeGo) => {
+          endDiscardOffer()
           setScreen({ name: "recording", takeNumber, takeName, takeGo })
-        }
+        }}
         // Straight to the start screen: its Last time is the evening just
         // finished, and bands mostly close the app instead anyway.
-        onFinished={() => setScreen({ name: "setup" })}
-        onChanged={() => void refreshSession()}
+        onFinished={() => {
+          endDiscardOffer()
+          setScreen({ name: "setup" })
+        }}
+        onChanged={refreshSession}
       />
     )
   }
@@ -246,18 +324,19 @@ export function App() {
 
   return (
     <Review
+      key={screen.visit ?? 0}
       take={screen.take}
+      kept={screen.kept}
       rehearsalName={session.name}
       takes={session.takes}
       onKept={async () => {
         await refreshSession()
         setScreen({ name: "rehearsal" })
       }}
-      onDiscarded={async () => {
-        await refreshSession()
-        setScreen({ name: "rehearsal" })
-      }}
-      onCropped={(take) => setScreen({ name: "review", take })}
+      onDiscarded={(gone) => void discarded(gone)}
+      onCropped={(take) =>
+        setScreen((s) => (s.name === "review" ? { ...s, take } : s))
+      }
     />
   )
 }

@@ -104,6 +104,8 @@ again.
   cutting a release.
 - **[docs/design-notes.md](docs/design-notes.md)** — the decisions that look
   odd until you know why, including the ones that were wrong the first time.
+- **[docs/design-system.md](docs/design-system.md)** — how the screens look
+  and work: each rule, why, and the component that carries it.
 - **[tests/README.md](tests/README.md)** — the three suites and what each is
   for. `python tests/run_all.py` runs all of them.
 - **[CHANGELOG.md](CHANGELOG.md)** — what changed, newest first.

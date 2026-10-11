@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { goFor, songFor, songNamed } from "./goes"
+import { goFor, nameWithGo, songFor, songNamed } from "./goes"
 
 const choices = {
   here: [{ song: "Polyn", go: 4, last_take: 3 }],
@@ -25,6 +25,18 @@ describe("goFor", () => {
   it("is nothing for a take nobody named", () => {
     expect(goFor("Take 4", choices)).toBeNull()
     expect(goFor("  ", choices)).toBeNull()
+  })
+})
+
+describe("nameWithGo", () => {
+  it("is the song as it is spelt, with the go it will be", () => {
+    expect(nameWithGo("polyn", choices)).toBe("Polyn 4")
+    expect(nameWithGo("Polyn 7", choices)).toBe("Polyn 4")
+    expect(nameWithGo("Vesna", choices)).toBe("Vesna 1")
+  })
+  it("is the name alone for a take nobody named, or before the choices", () => {
+    expect(nameWithGo("Take 4", choices)).toBe("Take 4")
+    expect(nameWithGo("Polyn", null)).toBe("Polyn")
   })
 })
 

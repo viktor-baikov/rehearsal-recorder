@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   aboutDuration,
   against,
-  croppedButNotSwept,
   daysAgo,
   describeRescan,
   formatBytes,
@@ -19,6 +18,7 @@ import {
   longAgo,
   notConnected,
   peakToDb,
+  savedLine,
   takesLabel,
 } from "@/lib/format"
 
@@ -73,6 +73,10 @@ describe("amounts", () => {
     expect(takesLabel(1)).toBe("1 take")
     expect(takesLabel(3)).toBe("3 takes")
   })
+  it("says how many takes are saved, with a verb that agrees", () => {
+    expect(savedLine(1)).toBe("1 take is saved and stays where it is.")
+    expect(savedLine(3)).toBe("3 takes are saved and stay where they are.")
+  })
   it("counts bytes in thousands, as the file manager does", () => {
     expect(formatBytes(0)).toBe("0 B")
     expect(formatBytes(412)).toBe("412 B")
@@ -95,7 +99,7 @@ describe("amounts", () => {
   })
 })
 
-describe("what the interface says about cards and takes", () => {
+describe("what the interface says about cards", () => {
   it("names the audio system of a missing card only where there are several", () => {
     const desk = { name: "X18/XR18", host_api: "ASIO" }
     expect(notConnected(desk, false)).toBe("“X18/XR18” is not connected")
@@ -106,14 +110,6 @@ describe("what the interface says about cards and takes", () => {
     expect(describeRescan([], ["A", "B"])).toBe("“A”, “B” are gone")
     expect(describeRescan(["XR18"], ["A"])).toBe("Found “XR18”; “A” is gone")
     expect(describeRescan()).toBe("No new interfaces")
-  })
-  it("says where the original of a crop was left, when it was", () => {
-    expect(croppedButNotSwept("disk full", "C:\\take")).toBe(
-      "The take was cropped, but the original could not be moved out of the way (disk full), and is still at C:\\take."
-    )
-    expect(croppedButNotSwept("disk full")).toBe(
-      "The take was cropped, but the original could not be moved out of the way (disk full)."
-    )
   })
 })
 

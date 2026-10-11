@@ -128,7 +128,7 @@ export function TakeSummary({
                 <span
                   data-bar
                   className={cn(
-                    "w-2 rounded-[2px]",
+                    "w-2 rounded-sm",
                     g.here
                       ? "bg-foreground"
                       : g.starred
@@ -163,7 +163,7 @@ export function TakeSummary({
           </h2>
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon-row"
             aria-label="Rename take"
             title="Rename"
             onClick={() => setRenaming(true)}

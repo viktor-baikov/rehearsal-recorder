@@ -1,4 +1,4 @@
-import { expect, openApp, startButton, test } from "./app.ts"
+import { expect, openApp, openHistory, setFake, startButton, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Notices: what happened goes in the corner. A message that appeared in the
@@ -59,6 +59,46 @@ test("a done notice under the pointer waits to be read", async ({ page }) => {
   await page.mouse.move(20, 20)
   await page.clock.fastForward(6000)
   await expect(saved).toHaveCount(0)
+})
+
+test("a notice under the pointer keeps the time it had left, and goes on from there", async ({
+  page,
+}) => {
+  await openSettings(page)
+  await page.getByRole("button", { name: "Look again" }).click()
+  const said = page.locator("[data-notice='done']", { hasText: "No new interfaces" })
+  await expect(said).toBeVisible()
+  // The page's time stands still from half a second on, and moves only when
+  // told, so a check that waits cannot let the notice's time run out by
+  // itself. Less than 3.5 of its 4 s are left by then.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 500)
+  await said.hover()
+  await page.clock.fastForward(6000)
+  await expect(said).toHaveCount(1)
+  // Left: what it had, under 3.5 s, and not 4 s all over again.
+  await page.mouse.move(20, 20)
+  await page.clock.fastForward(3600)
+  await expect(said).toHaveCount(0)
+})
+
+test("a notice closed under the pointer does not hold the next ones up", async ({ page }) => {
+  // Taking a notice away from under the pointer fires no mouseleave: the
+  // pause for "somebody is reading" must end with the notice that earned it.
+  await openSettings(page)
+  const look = page.getByRole("button", { name: "Look again" })
+  await look.click()
+  const first = page.locator("[data-notice='done']", { hasText: "No new interfaces" })
+  await expect(first).toBeVisible()
+  await first.hover()
+  await first.getByRole("button", { name: "Close notice" }).click()
+  await expect(notices(page)).toHaveCount(0)
+  await page.mouse.move(20, 20)
+
+  await look.click()
+  await expect(first).toBeVisible()
+  await page.mouse.move(20, 20)
+  await page.clock.fastForward(6000)
+  await expect(notices(page)).toHaveCount(0)
 })
 
 test("a failure stays until it is closed, and is one notice however often it happens", async ({
@@ -182,4 +222,66 @@ test("a take that will not recover says so, and is still offered", async ({ page
   await page.getByRole("button", { name: "Recover" }).click()
   await expect(notices(page, "error")).toContainText("read-only")
   await expect(page.getByText("Unsaved takes found")).toHaveCount(1)
+})
+
+test("a notice stands above an open dialog, and closing it leaves the dialog open", async ({
+  page,
+}) => {
+  // Work that is still running keeps the app asking about it often, so the
+  // failure below arrives within a moment.
+  const copy = {
+    id: 1,
+    kind: "cloud",
+    title: "“Pałyn” → cloud",
+    folder: "/rec/X",
+    take_number: 1,
+    state: "running",
+    fraction: 0.4,
+    step: "Encoding the mix",
+    error: null,
+    detail: null,
+    retry: null,
+    seen: false,
+  }
+  await openApp(page, { before: "window.__ACTIVITY__ = [];" })
+  await setFake(page, "__ACTIVITY__", [copy])
+  await expect(page.locator("button[aria-label^='Background work']")).toBeVisible()
+  await openHistory(page)
+  await page.getByRole("button", { name: "Rename rehearsal Tuesday jam" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog).toBeVisible()
+
+  // The copy fails while the dialog is open: its notice is raised behind the
+  // veil unless it stands above it.
+  await setFake(page, "__ACTIVITY__", [
+    { ...copy, state: "failed", step: null, error: "The cloud folder is gone" },
+  ])
+  const failed = notices(page, "error")
+  await expect(failed).toContainText("The cloud folder is gone")
+  await expect
+    .poll(() =>
+      failed.evaluate((n) => {
+        const r = n.getBoundingClientRect()
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+        return top !== null && n.contains(top)
+      })
+    )
+    .toBe(true)
+  // A modal dialog hides the rest of the page from a screen reader, but never
+  // a live region: the notice is still announced.
+  expect(
+    await page.evaluate(
+      () =>
+        document.querySelector("section[aria-label='Notifications']")!.closest("[aria-hidden='true']") ===
+        null
+    )
+  ).toBe(true)
+
+  // A click on it is not a click outside the dialog: the dialog stays and
+  // the notice goes.
+  await failed.getByRole("button", { name: "Close notice" }).click()
+  await expect(failed).toHaveCount(0)
+  // Open, not merely still on screen: a closing dialog is drawn for 220 ms.
+  await expect(dialog).toHaveAttribute("data-state", "open")
+  await expect(dialog).toBeVisible()
 })

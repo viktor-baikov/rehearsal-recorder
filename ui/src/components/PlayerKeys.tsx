@@ -1,18 +1,17 @@
 import { useState } from "react"
-import { Dialog as DialogPrimitive } from "radix-ui"
 import { Keyboard } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Kbd } from "@/components/ui/kbd"
 import { useKey } from "@/hooks/useSpacebar"
-import { ZOOM_KEY } from "@/lib/platform"
-
-const overlayClass =
-  "fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
-
-const contentClass =
-  "fixed top-1/2 left-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-6 shadow-lg data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
-
-const kbdClass =
-  "inline-flex h-6 min-w-6 items-center justify-center rounded border bg-background px-1.5 font-mono text-xs"
+import { useSystem, words } from "@/lib/platform"
 
 /**
  * The player's keys, listed behind "?" rather than drawn on its buttons.
@@ -24,6 +23,7 @@ const kbdClass =
  */
 export function PlayerKeys({ spaceKey, goKeys }: { spaceKey: boolean; goKeys?: boolean }) {
   const [open, setOpen] = useState(false)
+  const { mod } = words(useSystem())
   useKey("?", () => setOpen(true), !open)
 
   const rows: [string[], string][] = [
@@ -38,48 +38,41 @@ export function PlayerKeys({ spaceKey, goKeys }: { spaceKey: boolean; goKeys?: b
     [["R"], "Repeat on / off"],
     // Not keys, but the other thing nobody finds without being told: the
     // wheel on its own scrolls the page.
-    [[`${ZOOM_KEY} + wheel`], "Zoom in / out"],
+    [[`${mod} + wheel`], "Zoom in / out"],
     [["Shift + wheel"], "Along the take"],
   ]
 
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
-      <DialogPrimitive.Trigger asChild>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon-row"
           aria-label="Player keys"
           aria-keyshortcuts="?"
           title="Keys (?)"
         >
           <Keyboard />
         </Button>
-      </DialogPrimitive.Trigger>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className={overlayClass} />
-        <DialogPrimitive.Content className={contentClass}>
-          <DialogPrimitive.Title className="text-base font-semibold">
-            Keys in the player
-          </DialogPrimitive.Title>
-          <DialogPrimitive.Description className="mt-1 text-xs text-muted-foreground">
-            Not while typing a name.
-          </DialogPrimitive.Description>
-          <dl className="mt-4 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2.5 text-sm">
-            {rows.map(([keys, what]) => (
-              <div key={what} className="contents">
-                <dt className="flex gap-1">
-                  {keys.map((k) => (
-                    <kbd key={k} className={kbdClass}>
-                      {k}
-                    </kbd>
-                  ))}
-                </dt>
-                <dd>{what}</dd>
-              </div>
-            ))}
-          </dl>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+      </DialogTrigger>
+      <DialogContent size="narrow">
+        <DialogHeader>
+          <DialogTitle>Keys in the player</DialogTitle>
+          <DialogDescription>Not while typing a name.</DialogDescription>
+        </DialogHeader>
+        <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
+          {rows.map(([keys, what]) => (
+            <div key={what} className="contents">
+              <dt className="flex gap-1">
+                {keys.map((k) => (
+                  <Kbd key={k}>{k}</Kbd>
+                ))}
+              </dt>
+              <dd>{what}</dd>
+            </div>
+          ))}
+        </dl>
+      </DialogContent>
+    </Dialog>
   )
 }

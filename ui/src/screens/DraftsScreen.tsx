@@ -1,15 +1,15 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { LifeBuoy, Save, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FooterRow } from "@/components/FooterRow"
 import { Shell } from "@/components/Shell"
-import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { RunningLine } from "@/components/RunningLine"
 import { api, type Draft } from "@/lib/api"
 import { formatDateHuman, formatMMSS } from "@/lib/format"
-import { canBePutBack, goesTo } from "@/lib/deletion"
+import { wentTo } from "@/lib/deletion"
 import { useActivity, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
+import { endedByPython, offerUndo } from "@/lib/trash"
 
 /**
  * Takes that were recorded but never saved — the app was closed or died
@@ -25,15 +25,27 @@ const SAID = "drafts"
 export function DraftsScreen({
   drafts,
   onDone,
+  onReopen,
 }: {
   drafts: Draft[]
   onDone: () => void
+  /** The list again, after it closed: an Undo brought back a take that
+   *  was discarded from it. */
+  onReopen: () => void
 }) {
   const [remaining, setRemaining] = useState(drafts)
   const [busy, setBusy] = useState<string | null>(null)
+  // Whether this list is still the one on screen: an Undo can come after it
+  // closed, its last take discarded since.
+  const shown = useRef(true)
+  useEffect(() => {
+    shown.current = true
+    return () => {
+      shown.current = false
+    }
+  }, [])
   // Turning a long take's raw tracks into .wav takes real seconds.
   const { entries: work } = useActivity()
-  const [toDiscard, setToDiscard] = useState<Draft | null>(null)
 
   const finish = (rest: Draft[]) => {
     setRemaining(rest)
@@ -45,6 +57,9 @@ export function DraftsScreen({
     dismiss(SAID)
     const res = await watching(api().recover_draft(draft.dir))
     setBusy(null)
+    // A crop's Undo of it that was waiting, Python has ended, however the
+    // recovery went.
+    endedByPython(res.ended)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not recover the take" })
       return
@@ -52,16 +67,35 @@ export function DraftsScreen({
     finish(remaining.filter((d) => d.dir !== draft.dir))
   }
 
+  // Asks nothing: Undo brings the take back, into this list while it is on
+  // screen, or with the list again once it has closed. Which, is decided
+  // when the Undo comes, not when the take went. Named as the list names
+  // it, by its rehearsal.
   const discard = async (draft: Draft) => {
     setBusy(draft.dir)
     dismiss(SAID)
     const res = await api().discard_draft(draft.dir)
     setBusy(null)
+    endedByPython(res.ended)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not discard the take" })
       return
     }
     finish(remaining.filter((d) => d.dir !== draft.dir))
+    if (!res.undo) return
+    offerUndo({
+      text: wentTo(`“${draft.rehearsal_name}”`),
+      token: res.undo,
+      onUndone: async () => {
+        if (!shown.current) {
+          onReopen()
+          return
+        }
+        const now = await api().list_drafts()
+        if (shown.current) setRemaining(now)
+        else onReopen()
+      },
+    })
   }
 
   return (
@@ -75,7 +109,7 @@ export function DraftsScreen({
             </p>
           }
         >
-          <Button variant="outline" size="lg" onClick={onDone}>
+          <Button variant="outline" size="footer-aside" onClick={onDone}>
             Decide later
           </Button>
         </FooterRow>
@@ -120,8 +154,8 @@ export function DraftsScreen({
 
               <Button
                 variant="ghost"
-                size="sm"
-                onClick={() => setToDiscard(draft)}
+                size="row"
+                onClick={() => void discard(draft)}
                 disabled={busy !== null}
                 className="text-muted-foreground hover:text-destructive"
               >
@@ -129,7 +163,7 @@ export function DraftsScreen({
                 Discard
               </Button>
               <Button
-                size="sm"
+                size="row"
                 onClick={() => recover(draft)}
                 disabled={busy !== null}
               >
@@ -140,18 +174,6 @@ export function DraftsScreen({
           ))}
         </div>
       </div>
-
-      <ConfirmDialog
-        open={toDiscard !== null}
-        onOpenChange={(open) => !open && setToDiscard(null)}
-        title="Discard this unsaved take?"
-        description={`The recording ${goesTo()}. ${canBePutBack()}`}
-        confirmLabel="Discard"
-        onConfirm={() => {
-          if (toDiscard) void discard(toDiscard)
-          setToDiscard(null)
-        }}
-      />
     </Shell>
   )
 }

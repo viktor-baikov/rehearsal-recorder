@@ -1,6 +1,7 @@
 import {
   calls,
   expect,
+  notices,
   openApp,
   openHistory,
   recordTake,
@@ -310,9 +311,15 @@ test.describe("Songs in History", () => {
     const row = rungGroup(page, "/rec/older").locator("[data-take='3']")
     await row.hover()
     await row.getByRole("button", { name: "Delete take Opus 1" }).click()
-    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
     await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(0)
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+    // Undo puts the go back, and the song with it.
+    await notices(page)
+      .filter({ hasText: "“Opus 1” went to the Trash." })
+      .getByRole("button", { name: "Undo" })
+      .click()
+    await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(1)
   })
 
   test("an answer about the songs that comes back after a later one is dropped", async ({
@@ -338,7 +345,6 @@ test.describe("Songs in History", () => {
     // Opus's only go deleted: the list read after it has no Opus.
     await row.hover()
     await row.getByRole("button", { name: "Delete take Opus 1" }).click()
-    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click()
     await expect(opus).toHaveCount(0)
     // The held answer arrives last, and is older news than what is shown:
     // still no Opus a moment later. Waiting for the row to go cannot see it
@@ -661,7 +667,6 @@ test.describe("Songs in History", () => {
       .getByRole("button", { name: /^First rehearsal/ })
       .click()
     await page.getByRole("button", { name: "Delete rehearsal First rehearsal" }).click()
-    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click()
     await expect(page.getByRole("dialog")).toHaveCount(0)
     await page.getByRole("button", { name: "Songs", exact: true }).click()
     await expect(rows(page).and(page.locator("[data-song='Pałyn']"))).toHaveCount(1)
@@ -669,6 +674,12 @@ test.describe("Songs in History", () => {
     await expect(rows(page).and(page.locator("[data-song='Daroha']"))).toContainText(
       "2 goes · 1 rehearsal"
     )
+    // Undo brings the rehearsal back, and its songs with it.
+    await notices(page)
+      .filter({ hasText: "“First rehearsal” went to the Trash." })
+      .getByRole("button", { name: "Undo" })
+      .click()
+    await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(1)
   })
 
   test("a mark dropped in a go's player is on the song's page after Escape", async ({ page }) => {

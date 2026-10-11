@@ -5,6 +5,54 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **The start of a new look: cobalt, calmer type, rounder corners and lower
+  track lanes.** The blue of the main button, and of what plays, is a
+  stronger cobalt, the same in both themes, and it is the only blue left:
+  **Stop** is now the colour of the text, and a mark's blue label is orange.
+  The player's time, the levels on the recording screen and most other
+  figures are in the app's own font instead of a typewriter face, every
+  digit still as wide as the next. Buttons are in a regular weight, and a
+  row of pills no longer shifts when another one is picked. Corners are
+  rounder, at 4, 8 or 12 px. In the light theme the page is a shade darker
+  than the white panels on it. In the player each track's lane is 56 px high
+  where it was over 90, so more tracks fit on a laptop's screen: **M** and
+  **S** are smaller, the *Mono* or *Stereo* under a track's name is gone,
+  and a track that records notes too is one card with a plain line between
+  its halves instead of a dashed one. Dialogs, menus and notices come and go
+  more smoothly, and with the system's Reduce motion on, or while a take
+  records, they simply appear and a spinner stands still. While a take
+  records nothing moves but the meters and the clock: the red dot beside
+  *Recording* no longer pulses. A red button is full red in the dark theme
+  too.
+- **Deleting, discarding and cropping happen at once, with Undo for 10 s.**
+  Deleting a take or a rehearsal, clearing false starts, discarding a take
+  and cropping one no longer ask first: a notice says what went, and its
+  **Undo**, or ⌘Z / Ctrl+Z, puts it back for 10 seconds.
+- **Dialogs follow the system: its order of buttons, and its words.** On
+  Windows the action now comes first and **Cancel** after it, as in Windows'
+  own dialogs; on a Mac the action stays on the right. Every dialog that does
+  something has **Cancel** for its way out (*Keep going* is gone from *Finish
+  this rehearsal?*) and names its action with a verb: **Finish**, **Remove**,
+  **Delete**, **Merge**. Enter presses the action, except in a question
+  whose answer cannot be taken back (finishing a rehearsal by Esc, removing
+  one from history, deleting a set or a label that has marks, merging two
+  songs), where Enter is **Cancel**, so a stray key changes nothing. On
+  Windows the app says *the Recycle Bin*, where its messages about deleting
+  said *the Trash*. Names in titles are in quotes, *Delete “Fix”?*; finishing
+  says "1 take is saved", not "1 take are saved"; a dialog keeps its words
+  while it fades out instead of going blank first; and a notice shows above
+  an open dialog, not under its shade.
+- **The red bar that says something failed lists every problem, not only the
+  last.** When more than one thing went wrong as the app started, a second
+  problem used to hide the first; now each is there, oldest first, the same
+  one never twice, and its ✕ puts them all away. A long list scrolls inside
+  the bar instead of covering the window, and past 20 the rest are counted
+  under it ("and 5 more"), so the first problem always stays in it. A
+  problem in the window itself, not in Python, is now written to crash.log
+  too, so the bar is right that all of them are there.
+
 ## 0.11.1
 
 - Nothing changed in the app. Its website, reha.stream, now measures how

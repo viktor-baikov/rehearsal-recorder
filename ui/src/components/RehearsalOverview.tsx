@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { labelCounts, labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import { isFalseStart } from "@/lib/evening"
+import { scrollBehavior } from "@/lib/motion"
 import { TakeTitle } from "@/components/TakeTitle"
 import { SongName } from "@/components/SongName"
 import { SetPlayedCard } from "@/components/SetPlayed"
@@ -182,7 +183,9 @@ export function RehearsalOverview({
           set={set}
           goes={new Map(rows.map((r) => [r.name, r.takes.length]))}
           onGoTo={(title) =>
-            groups.current.get(title)?.scrollIntoView({ behavior: "smooth", block: "start" })
+            groups.current
+              .get(title)
+              ?.scrollIntoView({ behavior: scrollBehavior(), block: "start" })
           }
         />
       )}
@@ -524,7 +527,7 @@ export function TakeRow({
               {onShare && (
                 <Button
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon-row"
                   aria-label={
                     shared ? `Cloud copies of ${take.name}` : `Copy ${take.name} to the cloud`
                   }
@@ -538,7 +541,7 @@ export function TakeRow({
               {onRename && (
                 <Button
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon-row"
                   aria-label={`Rename take ${take.name}`}
                   onClick={() => onRename(take)}
                   className="text-muted-foreground hover:text-foreground"
@@ -549,7 +552,7 @@ export function TakeRow({
               {onDelete && (
                 <Button
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon-row"
                   aria-label={`Delete take ${take.name}`}
                   onClick={() => onDelete(take)}
                   className="text-muted-foreground hover:text-destructive"

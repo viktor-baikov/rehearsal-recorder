@@ -100,7 +100,7 @@ export function LastTime({
           </div>
           <Button
             variant="outline"
-            size="sm"
+            size="row"
             onClick={() => onOpen(last.folder)}
             aria-label={`Open ${last.name} in history`}
           >
@@ -358,7 +358,7 @@ function SongRow({
             data-starred={t.starred || undefined}
             data-lit={isTarget(t) || undefined}
             className={cn(
-              "w-1.5 rounded-[2px]",
+              "w-1.5 rounded-sm",
               isTarget(t)
                 ? t.starred
                   ? "bg-signal"

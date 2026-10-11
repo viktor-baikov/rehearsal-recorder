@@ -148,6 +148,7 @@ export function TrackTile({
                 "tnum",
                 peak > CLIP_THRESHOLD ? "text-destructive" : "text-muted-foreground"
               )}
+              // design-ok(px-text): sized from the tile's width (8cqi), so the readout fits at any window size
               style={{ fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }}
             >
               {peakToDb(peak)}
@@ -196,6 +197,7 @@ export function TrackTile({
             style={{
               writingMode: "vertical-rl",
               transform: "rotate(180deg)",
+              // design-ok(px-text): sized from the tile's width (18cqi), so the name fits at any window size
               fontSize: "clamp(0.875rem, 18cqi, 2.25rem)",
             }}
           >

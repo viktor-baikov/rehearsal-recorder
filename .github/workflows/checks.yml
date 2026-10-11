@@ -165,6 +165,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: ui
@@ -180,6 +181,13 @@ jobs:
       - name: Install
         run: npm ci
 
+      # The design rules, read off the source: a text size off the scale, a
+      # colour round the theme, a hand-made button or dialog, Radix outside
+      # components/ui. Screens not yet redone are on ui/design-check.allow.json,
+      # which each screen's PR shortens. Node only, so it comes first.
+      - name: Design check
+        run: npm run design-check
+
       # tsc -b first, so a type error fails here rather than as a test.
       - name: Build
         run: npm run build
@@ -187,8 +195,17 @@ jobs:
       - name: Vitest
         run: npm test
 
+      # The showcase: every component's stories, built. A story that imports
+      # something that is gone, or has a syntax error, fails here. Node only,
+      # so it runs before the browser install and does not depend on apt.
+      - name: Showcase
+        run: npm run build-storybook
+
       # --with-deps: on Linux the browser needs system libraries and fonts.
+      # The apt step it runs sometimes hangs on a stuck mirror, so it gets
+      # a limit of its own.
       - name: Install the browser
+        timeout-minutes: 10
         run: npx playwright install --with-deps chromium
 
       - name: Playwright

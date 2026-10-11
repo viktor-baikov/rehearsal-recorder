@@ -44,7 +44,12 @@ export async function playTheBridge(): Promise<void> {
 
 export function Hero({ initial }: { initial: SessionState }) {
   const [session, setSession] = useState(initial)
-  const refresh = useCallback(() => void api().session_state().then(setSession), [])
+  // The screen awaits the fresh state: a crop's Undo finds the uncut take in it.
+  const refresh = useCallback(async () => {
+    const s = await api().session_state()
+    setSession(s)
+    return s
+  }, [])
   if (!session.active) return null
   return (
     <Rehearsal session={session} onStartTake={() => {}} onFinished={() => {}} onChanged={refresh} />

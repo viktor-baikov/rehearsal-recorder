@@ -60,6 +60,8 @@ def main():
     try:
         ok("with no recycle bin it reports the fallback",
            ps.trash_kind() == "folder")
+        ok("and calls it by the folder's name, on Windows too",
+           ps.trash_name() == "the _deleted folder")
         res = ps.move_to_trash(recordings / "Jam", recordings)
         ok("the folder is gone from where it was",
            res["ok"] and not (recordings / "Jam").exists())
@@ -85,6 +87,14 @@ def main():
     ps._system_trash_dir = lambda: fake_trash
     try:
         ok("it reports the system bin", ps.trash_kind() == "system")
+        was_windows = ps.WINDOWS
+        try:
+            ps.WINDOWS = False
+            ok("which a Mac or Linux calls the Trash", ps.trash_name() == "the Trash")
+            ps.WINDOWS = True
+            ok("and Windows the Recycle Bin", ps.trash_name() == "the Recycle Bin")
+        finally:
+            ps.WINDOWS = was_windows
         doomed = recordings / "Later"
         doomed.mkdir()
         res = ps.move_to_trash(doomed, recordings)
@@ -220,6 +230,65 @@ def main():
         system, why = midi_ports.open_system()
         ok("the MIDI system, or why there is none, is written to crash.log",
            system is None and why in appmod.CRASH_LOG.read_text(encoding="utf-8"))
+
+        # A problem raised in the page itself never passed through Python, so
+        # the page sends it (log_problem): the bar says every problem's whole
+        # error is in crash.log, and this makes that true for those too.
+        seen = []
+        catch = logging.Handler(logging.DEBUG)
+        catch.emit = seen.append
+        logging.getLogger("rehearsal_recorder").addHandler(catch)
+        try:
+            said = a.log_problem(
+                "Undo", "TypeError", "Cannot read properties of undefined (reading 'folder')",
+                "TypeError: Cannot read properties of undefined\n    at undo (trash.ts:89:40)")
+            line = seen[0].getMessage() if len(seen) == 1 else ""
+            ok("a problem the page raised is one ERROR record: where, its name, its words, "
+               "its stack",
+               said is None and len(seen) == 1 and seen[0].levelno == logging.ERROR
+               and "Undo" in line and "TypeError" in line
+               and "Cannot read properties of undefined (reading 'folder')" in line
+               and "at undo (trash.ts:89:40)" in line)
+            ok("and it lands in crash.log",
+               "(reading 'folder')" in appmod.CRASH_LOG.read_text(encoding="utf-8"))
+
+            class Unprintable:
+                def __str__(self):
+                    raise RuntimeError("no words")
+
+            del seen[:]
+            try:
+                said = a.log_problem(None, 42, "x" * 1_000_000, {"deep": [1, 2]})
+                a.log_problem(Unprintable(), ["a"], b"bytes", Unprintable())
+                raised = None
+            except Exception as e:  # noqa: BLE001
+                raised = e
+            line = seen[0].getMessage() if seen else ""
+            ok("what is not text, or a field of a megabyte, is cut down and written, not raised",
+               raised is None and said is None and len(seen) == 2
+               and "42" in line and "deep" in line and len(line) < 20_000)
+
+            # A failure inside it is dropped: logging a problem must not make
+            # another one.
+            import rehearsal_recorder.api as apimod_log
+
+            real_log = apimod_log.log
+
+            class Broken:
+                def error(self, *args, **kwargs):
+                    raise OSError("the disk is full")
+
+            apimod_log.log = Broken()
+            try:
+                a.log_problem("Undo", "TypeError", "words")
+                raised = None
+            except Exception as e:  # noqa: BLE001
+                raised = e
+            finally:
+                apimod_log.log = real_log
+            ok("and a failure while writing it is swallowed", raised is None)
+        finally:
+            logging.getLogger("rehearsal_recorder").removeHandler(catch)
     finally:
         faulthandler.disable()
         for name in armed_on:

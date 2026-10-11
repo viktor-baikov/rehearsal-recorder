@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react"
 const NOT_TYPED = new Set(["range", "checkbox", "radio", "button", "submit", "reset"])
 
 /** Somebody is writing, so the keyboard is theirs letter by letter. */
-function isTyping(el: Element | null): boolean {
+export function isTyping(el: Element | null): boolean {
   if (!el) return false
   const tag = el.tagName
   if (tag === "INPUT") return !NOT_TYPED.has((el as HTMLInputElement).type)
@@ -27,7 +27,7 @@ const PRESSED_BY_SPACE =
 
 /** What is on top of the screen and has the keyboard while it is open: a
  *  dialog, or the list of a dropdown. */
-const LAYERS = '[role="dialog"], [role="listbox"], [role="menu"]'
+export const LAYERS = '[role="dialog"], [role="listbox"], [role="menu"]'
 
 // The element the mouse last put focus on, or null when the keyboard did.
 let pointerFocused: Element | null = null
@@ -81,11 +81,11 @@ let steppedOut: KeyboardEvent | null = null
  * Space and Escape are the screen's again. Letters, Space and the arrows in
  * a field stay the field's: that is typing.
  *
- * Leaving rather than acting at once, because of the screen where a field
- * matters most: a take is named on the review screen, whose Escape asks to
- * throw the take away. Name, Escape, Space saves it. Blurring is also what
- * a click elsewhere does, so a field that keeps what was typed when it
- * loses focus keeps it here too.
+ * Leaving rather than acting at once, because a take is named in a field
+ * on screens whose Escape does something: the rehearsal screen's finishes
+ * the rehearsal, and the screen after a take's throws the take away. Name,
+ * Escape, Space records. Blurring is also what a click elsewhere does, so a
+ * field that keeps what was typed when it loses focus keeps it here too.
  *
  * Called from the window listener above and from useEscape, whichever the
  * keydown reaches first; the second finds it already done.
@@ -127,11 +127,14 @@ export function focusIsLeftover(el: Element | null): boolean {
  * purpose, so none of the shortcuts below should fire. Typing is the obvious
  * case; a dialog is the one that is easy to miss, because Radix closes it on
  * Escape without stopping the keydown from reaching these window listeners,
- * and `ConfirmDialog`/`ShareDialog` have no input to focus — Radix focuses
- * the dialog *content* instead, a plain `DIV` that a tag-only check waves
- * through. An open dropdown is the same: its arrows and Space pick from it.
- * One rule here, shared by every hook below, instead of three copies that
- * drift apart.
+ * and focus in a dialog is not always on something that types: it opens on
+ * the button Enter presses (the action, or Cancel where nothing can be
+ * undone — see DialogButtons), and a dialog with no control, the player's
+ * keys, has the dialog *content* itself focused, a plain `DIV` that a
+ * tag-only check waves through. Enter is never a shortcut here: it presses
+ * what has focus, and the dialog decides what that is. An open dropdown is
+ * the same: its arrows and Space pick from it. One rule here, shared by
+ * every hook below, instead of three copies that drift apart.
  */
 function keyIsClaimed(el: Element | null): boolean {
   if (!el) return false
@@ -173,9 +176,11 @@ export function useSpacebar(handler: () => void, enabled = true) {
 /**
  * Escape means one level up, and each screen decides what its level is: the
  * open take first, then the rehearsal it was in, then the screen itself. It
- * never climbs past a decision — it will not end a rehearsal, stop a
- * recording, or throw a take away without asking — because a key pressed by
- * accident should cost nothing that cannot be got back.
+ * never climbs past a decision — it will not end a rehearsal or stop a
+ * recording without asking — because a key pressed by accident should cost
+ * nothing that cannot be got back. On the screen after a take it throws the
+ * take away at once, as that screen's Discard does: the notice's Undo gets
+ * it back, screen and all.
  */
 export function useEscape(handler: () => void, enabled = true) {
   const handlerRef = useRef(handler)
@@ -194,7 +199,7 @@ export function useEscape(handler: () => void, enabled = true) {
     // the event has finished travelling, the dialog may be unmounted with
     // focus back on the button that opened it — so a check made then sees no
     // dialog and lets Escape climb a rung it should not have: closing the
-    // player's key list also asked to throw the take away.
+    // player's key list also threw the take away.
     //
     // The acting has to be last, in the bubble phase on window, because a
     // dialog this handler opens goes on screen while the same keydown is

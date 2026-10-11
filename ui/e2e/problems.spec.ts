@@ -55,6 +55,77 @@ test("a problem while starting is shown in the same bar, and asked for once", as
   expectedError(pageErrors, /startup failed/)
 })
 
+test("two problems while starting are both shown, and one Dismiss puts both away", async ({
+  page,
+  pageErrors,
+}) => {
+  // The bar used to keep only the last thing said, so a second problem at
+  // start hid the first.
+  await openApp(page, {
+    before: `window.__STARTUP_PROBLEM__ = [
+      {name: 'RemovalKept', message: 'A take you removed is still in its folder.'},
+      {name: 'OperationalError', message: 'Could not read the history of Tuesday jam.'}];`,
+  })
+  const bar = problemBar(page)
+  const said = bar.getByRole("listitem")
+  await expect(said).toHaveCount(2)
+  // In the order said, each with its own title line and its words.
+  await expect(said.nth(0)).toContainText("Something went wrong in startup")
+  await expect(said.nth(0)).toContainText("RemovalKept: A take you removed is still in its folder.")
+  await expect(said.nth(1)).toContainText("Something went wrong in startup")
+  await expect(said.nth(1)).toContainText(
+    "OperationalError: Could not read the history of Tuesday jam."
+  )
+  // A screen reader says only the problem just added, not the whole list
+  // again: an alert is read whole unless told otherwise.
+  await expect(bar).toHaveAttribute("aria-atomic", "false")
+  // Where the whole of them is written, once for all. Not spoken each time
+  // its count goes up: it is read with the bar.
+  await expect(bar.getByText(/crash\.log/)).toHaveCount(1)
+  await expect(bar.getByText(/crash\.log/)).toHaveAttribute("aria-live", "off")
+  await expect(bar.getByRole("button", { name: "Dismiss" })).toHaveCount(1)
+
+  await bar.getByRole("button", { name: "Dismiss" }).click()
+  await expect(bar).toHaveCount(0)
+  expectedError(pageErrors, /startup failed/)
+})
+
+test("a long list of problems lists the first 20, counts the rest, and scrolls inside the bar", async ({
+  page,
+  pageErrors,
+}) => {
+  const many = Array.from(
+    { length: 30 },
+    (_, i) => `{name: 'OperationalError', message: 'Could not read rehearsal ${i + 1}.'}`
+  )
+  await openApp(page, { before: `window.__STARTUP_PROBLEM__ = [${many.join(",")}];` })
+  const bar = problemBar(page)
+  const said = bar.getByRole("listitem")
+  // The first 20, since in a cascade the first is the cause; the other 10
+  // are counted under them.
+  await expect(said).toHaveCount(20)
+  await expect(said.first()).toContainText("Could not read rehearsal 1.")
+  await expect(said.last()).toContainText("Could not read rehearsal 20.")
+  await expect(bar).toContainText(
+    "and 10 more; all of them are in ~/.rehearsal-recorder/crash.log."
+  )
+  const view = page.viewportSize()!
+  const box = (await bar.boundingBox())!
+  // About 40% of the window at most, the crash.log line and Dismiss in it.
+  expect(box.height).toBeLessThan(view.height / 2)
+  await expect(bar.getByText(/crash\.log/)).toBeInViewport()
+  await expect(bar.getByRole("button", { name: "Dismiss" })).toBeInViewport()
+  // The last one is reached by scrolling the list, not the page.
+  const last = said.last()
+  await expect(last).not.toBeInViewport()
+  await last.scrollIntoViewIfNeeded()
+  await expect(last).toBeInViewport()
+  // One Dismiss puts the list and the count away.
+  await bar.getByRole("button", { name: "Dismiss" }).click()
+  await expect(bar).toHaveCount(0)
+  expectedError(pageErrors, /startup failed/)
+})
+
 test("a card that goes away mid-take stops it, and says why", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)

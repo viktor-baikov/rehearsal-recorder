@@ -116,7 +116,7 @@ export function SetsSettings() {
             ))}
           </ul>
         )}
-        <Button variant="ghost" size="sm" className="self-start" onClick={() => void add()}>
+        <Button variant="ghost" size="row" className="self-start" onClick={() => void add()}>
           <Plus />
           New set
         </Button>
@@ -139,15 +139,14 @@ export function SetsSettings() {
         />
       )}
 
-      {deleting && (
-        <ConfirmDialog
-          open
-          onOpenChange={(o) => !o && setDeleting(null)}
-          title={`Delete ${deleting.name}?`}
-          description="Rehearsals played by it keep their takes and their names."
-          onConfirm={() => void remove(deleting)}
-        />
-      )}
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={deleting && `Delete “${deleting.name}”?`}
+        description="Rehearsals played by it keep their takes and their names."
+        actionLabel="Delete"
+        onConfirm={() => deleting && void remove(deleting)}
+      />
     </section>
   )
 }
@@ -239,7 +238,7 @@ function SetDetail({
       </div>
       <Button
         variant="ghost"
-        size="sm"
+        size="row"
         onClick={onDelete}
         className="self-start text-muted-foreground hover:text-destructive"
       >

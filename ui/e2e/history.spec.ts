@@ -4,6 +4,7 @@ import {
   expect,
   keyOn,
   nameTake,
+  notices,
   openApp,
   openHistory,
   recordTake,
@@ -45,11 +46,11 @@ test("finishing a rehearsal with takes in it asks, and is answered from the keyb
   // browser's: the window the app runs in on a Mac moves focus on Tab only
   // with macOS keyboard navigation on, so the arrows carry the weight.
   const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.innerText.trim() ?? "")
-  expect(await focused()).toBe("Keep going")
+  expect(await focused()).toBe("Cancel")
   await page.keyboard.press("ArrowRight")
   await expect.poll(focused).toBe("Finish")
   await page.keyboard.press("ArrowLeft")
-  await expect.poll(focused).toBe("Keep going")
+  await expect.poll(focused).toBe("Cancel")
   // Tab is taken over too, watched from the capture phase on window, where
   // the app takes the key and stops it.
   await page.evaluate(() => {
@@ -150,21 +151,19 @@ test.describe("History", () => {
     await expect(overview).toContainText("2 goes")
   })
 
-  test("deleting a rehearsal says what it frees and that its cloud copies go", async ({ page }) => {
+  test("deleting a rehearsal asks nothing, says it went, and Undo brings it back", async ({
+    page,
+  }) => {
     await openApp(page)
-    await openHistory(page)
+    const list = await openHistory(page)
     await page.getByRole("button", { name: "Delete rehearsal Tuesday jam" }).click()
-    const dialog = page.getByRole("dialog")
-    await expect(dialog).toContainText("goes to the Trash")
-    // The space is the reason people delete a rehearsal at all.
-    await expect(page.getByText("9 takes, 1.2 GB")).toHaveCount(1)
-    await expect(dialog).toContainText("So do the copies of 3 of them in the cloud folder.")
-    await page.getByRole("button", { name: "Cancel" }).click()
-    await expect(dialog).toHaveCount(0)
-    expect(await callCount(page, "delete_rehearsal")).toBe(0)
-    await page.getByRole("button", { name: "Delete rehearsal Tuesday jam" }).click()
-    await page.getByRole("dialog").locator("button", { hasText: "Delete" }).last().click()
-    await expect.poll(() => callCount(page, "delete_rehearsal")).toBe(1)
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    expect((await calls(page, "delete_rehearsal")).map((c) => c.args)).toEqual([["/rec/old"]])
+    await expect(list.getByRole("button", { name: /^Tuesday jam/ })).toHaveCount(0)
+    const notice = notices(page).filter({ hasText: "“Tuesday jam” went to the Trash." })
+    await notice.getByRole("button", { name: "Undo" }).click()
+    await expect(list.getByRole("button", { name: /^Tuesday jam/ })).toHaveCount(1)
+    expect((await calls(page, "undo_trash")).length).toBe(1)
   })
 
   test("a take playing in one rehearsal is not taken for the same take number in another", async ({
@@ -260,7 +259,7 @@ test("a note opens its take at the spot it was left", async ({ page }) => {
   await expect(page.getByRole("group", { name: "Take strip" })).toHaveCount(1)
 })
 
-test("a take opened from the overview can be deleted, and says its cloud copy goes too", async ({
+test("a take opened from the overview is deleted at once, and Undo puts it back", async ({
   page,
 }) => {
   const overview = await openEvening(page)
@@ -268,12 +267,13 @@ test("a take opened from the overview can be deleted, and says its cloud copy go
   await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
   await expect(current(page)).toContainText("Pałyn 2")
   await page.getByRole("button", { name: "Delete take Pałyn 2" }).click()
-  const dialog = page.getByRole("dialog")
-  await expect(dialog).toContainText("go to the Trash")
-  await expect(dialog).toContainText("Its copy in the cloud folder goes too.")
-  await page.keyboard.press("Escape")
-  await expect(dialog).toHaveCount(0)
-  expect(await callCount(page, "delete_take")).toBe(0)
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  expect((await calls(page, "delete_take")).map((c) => c.args)).toEqual([["/rec/old", 2]])
+  const strip = page.getByRole("group", { name: "Take strip" })
+  await expect(strip.getByRole("button", { name: /Pałyn 2/ })).toHaveCount(0)
+  const notice = notices(page).filter({ hasText: "“Pałyn 2” went to the Trash." })
+  await notice.getByRole("button", { name: "Undo" }).click()
+  await expect(overview.getByRole("button", { name: "Take 2 Pałyn 2" })).toBeVisible()
 })
 
 test("the whole of a take's row opens it, not only its bar", async ({ page }) => {

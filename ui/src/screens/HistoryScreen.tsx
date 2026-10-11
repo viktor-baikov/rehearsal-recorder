@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { FolderOpen, Library, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { Shell, EmptyState } from "@/components/Shell"
 import { RehearsalList } from "@/components/RehearsalList"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
@@ -38,21 +39,14 @@ import {
   type Take,
 } from "@/lib/api"
 import {
-  croppedButNotSwept,
   formatBytes,
   formatDateHuman,
   formatDay,
   formatDuration,
   formatWhen,
-  takesLabel,
 } from "@/lib/format"
-import {
-  canBePutBack,
-  goPlural,
-  goesTo,
-  rehearsalCloudToo,
-  takeCloudToo,
-} from "@/lib/deletion"
+import { wentTo } from "@/lib/deletion"
+import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 import {
   useActivity,
   useCloudSettled,
@@ -79,12 +73,6 @@ import {
 
 /** A song as renaming and merging name it: which one, and its title. */
 type SongName = { id: number; title: string }
-
-/** "9 takes, 1.2 GB" — what deleting a rehearsal takes away and gives back. */
-function takesAndSize(r: RehearsalSummary | null): string {
-  if (!r) return takesLabel(0)
-  return `${takesLabel(r.take_count)}, ${formatBytes(r.disk_bytes)}`
-}
 
 /** "5 rehearsals · 2 h 24 min played · 5.0 GB", over the whole list. */
 function allOf(rehearsals: RehearsalSummary[]): string {
@@ -135,7 +123,6 @@ export function HistoryScreen({
   const [busy, setBusy] = useState(false)
   // Every take here is held with its rehearsal's folder: what an action on
   // it acts on is the take's rehearsal, not whichever is chosen in the list.
-  const [takeToDelete, setTakeToDelete] = useState<PlacedTake | null>(null)
   const [takeToRename, setTakeToRename] = useState<PlacedTake | null>(null)
   const renameChoices = useSongChoices(
     takeToRename !== null,
@@ -147,8 +134,6 @@ export function HistoryScreen({
     take: PlacedTake
     marker: Marker
   } | null>(null)
-  const [rehearsalToDelete, setRehearsalToDelete] =
-    useState<RehearsalSummary | null>(null)
   const [rehearsalToRename, setRehearsalToRename] =
     useState<RehearsalSummary | null>(null)
   const [rehearsalToForget, setRehearsalToForget] =
@@ -439,9 +424,10 @@ export function HistoryScreen({
   }, [current])
   const reopen = async (folder: string) => {
     const fresh = await api().get_rehearsal(folder)
-    if (!fresh.ok) return
+    if (!fresh.ok) return null
     if (folder === currentRef.current) setOpened(fresh)
     setGoRehearsal((g) => (g && g.folder === folder ? fresh : g))
+    return fresh
   }
 
   /** After a take of `folder` changed: its rehearsal read again, and the
@@ -659,15 +645,28 @@ export function HistoryScreen({
           : back()
   )
 
+  // Asks nothing: the notice's Undo brings the take back into its place,
+  // in whichever view it was deleted from.
   const deleteTake = async (take: PlacedTake) => {
     dismiss(SAID)
     player.pause()
     const res = await api().delete_take(take.folder, take.take_number)
+    // What waited of this take, a crop of it, Python has sent on.
+    endedByPython(res.ended)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not delete the take" })
       return
     }
     forget(take)
+    if (res.undo) {
+      offerUndo({
+        text: wentTo(`“${take.name}”`),
+        token: res.undo,
+        // Read again where Python put it back: a rename since moved the
+        // rehearsal's folder.
+        onUndone: (r) => changed(r.folder ?? take.folder),
+      })
+    }
     await changed(take.folder)
   }
 
@@ -770,21 +769,24 @@ export function HistoryScreen({
     player.pause()
     const res = await watching(api().crop_take(take.folder, take.take_number, from, to))
     setBusy(false)
+    // The take's earlier crops, Python has sent on.
+    endedByPython(res.ended)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not crop the take" })
       return
     }
     if (res.take) reselect(placed(take.folder, res.take))
+    offerCropUndo(take.name, res, (r) => uncropped(take, r.folder ?? take.folder), SAID)
     await changed(take.folder)
-    // The crop itself went through — only the sweep of the original is what
-    // failed — so this adds to the success path rather than standing in for it.
-    if (res.error) {
-      notify({
-        key: SAID,
-        kind: "warning",
-        text: croppedButNotSwept(res.error, res.location),
-      })
-    }
+  }
+
+  // A crop's Undo: the uncut take is under the same paths again, and only a
+  // fresh copy of it tells the player so. Read from `folder`, where Python
+  // says the rehearsal is now: a rename since moved it.
+  const uncropped = async (take: PlacedTake, folder: string) => {
+    const fresh = (await reopen(folder))?.takes.find((t) => t.take_number === take.take_number)
+    if (fresh) reselect(placed(folder, fresh))
+    void refresh()
   }
 
   // Renaming moves the folder, so the chosen one follows it to its new path,
@@ -814,16 +816,27 @@ export function HistoryScreen({
     return rest[Math.min(Math.max(at, 0), rest.length - 1)]?.folder ?? null
   }
 
+  // Asks nothing: the notice's Undo lists it again, chosen.
   const deleteRehearsal = async (r: RehearsalSummary) => {
     dismiss(SAID)
     player.pause()
     const next = neighbourOf(r.folder)
     const res = await api().delete_rehearsal(r.folder)
+    // Everything of it still waiting, its takes', their crops' and its
+    // drafts', Python has sent on with it, under whatever name.
+    endedByPython(res.ended)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not delete the rehearsal" })
       return
     }
     if (r.folder === current) close()
+    if (res.undo) {
+      offerUndo({
+        text: wentTo(`“${r.name}”`),
+        token: res.undo,
+        onUndone: () => refresh(r.folder),
+      })
+    }
     await refresh(r.folder === current ? next : undefined)
   }
 
@@ -887,19 +900,6 @@ export function HistoryScreen({
 
   const takeDialogs = (
     <>
-      <ConfirmDialog
-        open={takeToDelete !== null}
-        onOpenChange={(open) => !open && setTakeToDelete(null)}
-        title={`Delete “${takeToDelete?.name ?? ""}”?`}
-        description={`The take and all its tracks ${goPlural()}.${takeCloudToo(
-          takeToDelete
-        )} ${canBePutBack()}`}
-        onConfirm={() => {
-          if (takeToDelete) void deleteTake(takeToDelete)
-          setTakeToDelete(null)
-        }}
-      />
-
       <RenameTakeDialog
         take={takeToRename}
         choices={renameChoices}
@@ -984,7 +984,7 @@ export function HistoryScreen({
             }
             onRename={(take) => setTakeToRename(here(take))}
             onShare={(take) => setTakeToShare(here(take))}
-            onDelete={(take) => setTakeToDelete(here(take))}
+            onDelete={(take) => void deleteTake(here(take))}
             onStar={(take, starred) => void starTake(here(take), starred)}
             emptyHint="Nothing was kept from this rehearsal, or every take since got deleted."
           />
@@ -1056,8 +1056,8 @@ export function HistoryScreen({
               <RehearsalList rehearsals={rehearsals} current={current} onChoose={choose} />
             )}
             <p className="mt-auto flex items-center gap-1.5 px-3 pt-2 text-xs text-muted-foreground">
-              <kbd className="rounded border border-current/30 px-1 font-mono text-[10px]">↑</kbd>
-              <kbd className="rounded border border-current/30 px-1 font-mono text-[10px]">↓</kbd>
+              <Kbd>↑</Kbd>
+              <Kbd>↓</Kbd>
               to go through them
             </p>
           </nav>
@@ -1096,7 +1096,7 @@ export function HistoryScreen({
                   onRename={setTakeToRename}
                   onStar={(take, starred) => void starTake(take, starred)}
                   onShare={setTakeToShare}
-                  onDelete={setTakeToDelete}
+                  onDelete={(take) => void deleteTake(take)}
                   onOpenRehearsal={openRehearsal}
                   onRenameSong={() =>
                     setSongToRename(
@@ -1159,7 +1159,7 @@ export function HistoryScreen({
                       {!summary.missing && (
                         <Button
                           variant="ghost"
-                          size="icon-sm"
+                          size="icon-row"
                           aria-label={`Rename rehearsal ${summary.name}`}
                           onClick={() => setRehearsalToRename(summary)}
                           className="text-muted-foreground hover:text-foreground"
@@ -1192,7 +1192,7 @@ export function HistoryScreen({
                       variant="ghost"
                       size="icon"
                       aria-label={`Delete rehearsal ${summary.name}`}
-                      onClick={() => setRehearsalToDelete(summary)}
+                      onClick={() => void deleteRehearsal(summary)}
                       className="text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 />
@@ -1211,12 +1211,12 @@ export function HistoryScreen({
                     </span>
                   </p>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => void locateRehearsal(summary)}>
+                    <Button variant="outline" size="row" onClick={() => void locateRehearsal(summary)}>
                       Locate folder…
                     </Button>
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="row"
                       onClick={() => setRehearsalToForget(summary)}
                       className="text-muted-foreground hover:text-destructive"
                     >
@@ -1252,7 +1252,7 @@ export function HistoryScreen({
                     onRename={(take) => setTakeToRename(placed(opened.folder, take))}
                     onStar={(take, starred) => void starTake(placed(opened.folder, take), starred)}
                     onShare={(take) => setTakeToShare(placed(opened.folder, take))}
-                    onDelete={(take) => setTakeToDelete(placed(opened.folder, take))}
+                    onDelete={(take) => void deleteTake(placed(opened.folder, take))}
                     onOpenSong={(title) => void openSong(title)}
                     falseStartSec={evening?.falseStartSec}
                     folder={opened.folder}
@@ -1302,9 +1302,9 @@ export function HistoryScreen({
       <ConfirmDialog
         open={mergeAsked !== null}
         onOpenChange={(open) => !open && setMergeAsked(null)}
-        title={mergeSays?.title ?? ""}
+        title={mergeSays?.title}
         description={mergeSays?.says}
-        confirmLabel="Merge"
+        actionLabel="Merge"
         destructive={false}
         onConfirm={() => {
           if (mergeAsked) void mergeSongs(mergeAsked.from, mergeAsked.into)
@@ -1313,27 +1313,11 @@ export function HistoryScreen({
       />
 
       <ConfirmDialog
-        open={rehearsalToDelete !== null}
-        onOpenChange={(open) => !open && setRehearsalToDelete(null)}
-        title={`Delete “${rehearsalToDelete?.name ?? ""}”?`}
-        description={`The whole folder, with all its takes (${takesAndSize(
-          rehearsalToDelete
-        )}), ${goesTo()}.${rehearsalCloudToo(
-          rehearsalToDelete?.in_cloud,
-          rehearsalToDelete?.take_count
-        )} ${canBePutBack()}`}
-        onConfirm={() => {
-          if (rehearsalToDelete) void deleteRehearsal(rehearsalToDelete)
-          setRehearsalToDelete(null)
-        }}
-      />
-
-      <ConfirmDialog
         open={rehearsalToForget !== null}
         onOpenChange={(open) => !open && setRehearsalToForget(null)}
-        title={`Remove “${rehearsalToForget?.name ?? ""}” from history?`}
+        title={rehearsalToForget && `Remove “${rehearsalToForget.name}” from history?`}
         description="Only the entry goes — there is nothing on disk to delete. If the folder turns up again, it will not come back by itself."
-        confirmLabel="Remove"
+        actionLabel="Remove"
         onConfirm={() => {
           if (rehearsalToForget) void forgetRehearsal(rehearsalToForget)
           setRehearsalToForget(null)
