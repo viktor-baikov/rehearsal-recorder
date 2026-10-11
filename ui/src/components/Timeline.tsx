@@ -424,6 +424,7 @@ export function Timeline({
                     <span
                       data-marker-at={m.at}
                       data-colour={label.colour}
+                      // design-ok(radius): the marker's diamond on the waveform, a graphic that keeps its own corner
                       className="pointer-events-none absolute size-2.5 -translate-x-1 rotate-45 rounded-[2px]"
                       style={{ left: `${pct(m.at)}%`, top: RULER_PX - 13, background: colour }}
                     />

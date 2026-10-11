@@ -120,6 +120,13 @@ jobs:
       - name: Install
         run: npm ci
 
+      # The design rules, read off the source: a text size off the scale, a
+      # colour round the theme, a hand-made button or dialog, Radix outside
+      # components/ui. Screens not yet redone are on ui/design-check.allow.json,
+      # which each screen's PR shortens. Node only, so it comes first.
+      - name: Design check
+        run: npm run design-check
+
       # tsc -b first, so a type error fails here rather than as a test.
       - name: Build
         run: npm run build

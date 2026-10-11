@@ -266,6 +266,7 @@ export function Recording({
         <div className="flex max-w-full flex-col items-center gap-1">
           <h1
             className="flex max-w-full pb-[0.08em] leading-none font-semibold tracking-tight"
+            // design-ok(px-text): half the clock's size, so it follows the window's height too
             style={{ fontSize: `calc(${CLOCK_SIZE} / 2)` }}
           >
             <GoTitle title={takeName} go={takeGo} cut />
@@ -278,6 +279,7 @@ export function Recording({
             role="timer"
             aria-label="Take time"
             className="leading-none font-semibold tracking-tight tabular-nums [text-box:trim-end_cap_alphabetic]"
+            // design-ok(px-text): the recording clock is sized from the window's height (CLOCK_SIZE)
             style={{ fontSize: CLOCK_SIZE }}
           >
             {formatClock(elapsed)}

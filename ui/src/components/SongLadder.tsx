@@ -133,6 +133,7 @@ export function SongLadder({
                           aria-hidden
                           data-mark-colour={labelOf(labels, m.label_id).colour}
                           className={cn(
+                            // design-ok(radius): a 2 px mark tick on a take's bar, a graphic that keeps its own corner
                             "absolute inset-y-1 w-0.5 rounded-[1px]",
                             labelLook(labelOf(labels, m.label_id).colour).dot
                           )}

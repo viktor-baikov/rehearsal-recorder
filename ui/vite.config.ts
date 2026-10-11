@@ -18,10 +18,11 @@ export default defineConfig({
     emptyOutDir: true,
   },
 
-  // `npm test`: the files beside the code that need no browser. The ones
-  // that do are e2e/, under Playwright.
+  // `npm test`: the files beside the code that need no browser, and the
+  // design check's own (scripts/). The ones that need a browser are e2e/,
+  // under Playwright.
   test: {
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
   },
 
   // Development only (`npm run dev`, with `python3 -m rehearsal_recorder --dev`

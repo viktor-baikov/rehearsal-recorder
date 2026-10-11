@@ -130,6 +130,7 @@ export function MidiTile({
                 "flex items-center gap-1 whitespace-nowrap text-muted-foreground",
                 !fits && "invisible"
               )}
+              // design-ok(px-text): sized from the tile's width (8cqi), so the readout fits at any window size
               style={{ fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }}
             >
               <MidiGlyph className="size-[0.9em] shrink-0 text-primary @max-[7rem]:hidden" />
@@ -162,6 +163,7 @@ export function MidiTile({
             style={{
               writingMode: "vertical-rl",
               transform: "rotate(180deg)",
+              // design-ok(px-text): sized from the tile's width (18cqi), so the name fits at any window size
               fontSize: "clamp(0.875rem, 18cqi, 2.25rem)",
             }}
           >
