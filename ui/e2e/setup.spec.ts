@@ -6,6 +6,7 @@ import {
   lastTimeButton,
   notices,
   openApp,
+  openBandApp,
   setFake,
   startButton,
   startRehearsal,
@@ -864,5 +865,258 @@ test.describe("the left part behind a button in a narrow window", () => {
     await expect(lastTimeButton(page)).toHaveCount(0)
     await expect(panel(page)).toHaveCount(0)
     await expect(past(page)).toHaveCount(0)
+  })
+})
+
+// Last time on the shared pieces, with the stress data's long names (Q3,
+// Review Focus 4): a name keeps its width and wraps past its row, the
+// figures beside it drop whole, and whatever is cut or dropped shows whole
+// on hover and on keyboard focus — beside the setup at 1180 px, and in the
+// panel at 960 px. The interface's name in Recording with does the same.
+test.describe("Last time and long names on the shared pieces", () => {
+  const KALYCHANKA = "Kalychanka (slow version for the wedding, with the long intro the bride asked for)"
+  const DANCING = "Dancing barefoot on the roof of the old brewery"
+
+  /** Last time, beside the setup. */
+  const beside = (page: Page) =>
+    page.locator("[data-part='past']").getByRole("complementary", { name: "Last time" })
+  /** The panel the header's Last time button opens, and Last time in it. */
+  const panel = (page: Page) => page.getByRole("dialog", { name: "Last time" })
+  const inPanel = (page: Page) => panel(page).getByRole("complementary", { name: "Last time" })
+
+  /** The smallest window, with Last time open in its panel. */
+  async function openPanel(page: Page) {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await lastTimeButton(page).click()
+    await expect(inPanel(page)).toBeVisible()
+    return inPanel(page)
+  }
+
+  /** The tip a name or a figure line shows. */
+  const tip = (page: Page) => page.locator("[data-whole]")
+  /** The pointer off to the window's corner, moving as a hand does: Radix
+   *  keeps a tip while the pointer may be on its way into it, until it has
+   *  moved somewhere else. */
+  const away = (page: Page) => page.mouse.move(0, 0, { steps: 8 })
+
+  /** A song's name in a row of Last time: the button that opens its page. */
+  const songName = (past: Locator, title: string) =>
+    past.getByRole("button", { name: `Open the song ${title}`, exact: true })
+
+  test("Not played keeps the song name whole and drops figures", async ({ page }) => {
+    await openBandApp(page, { stress: true })
+    // Dym's ▶ plays a ★ go from another evening: its figure line is the
+    // longest there is, and it used to squeeze "Dym" to "D…".
+    const star = "★ Dym 2 (Tue 15 Sep)"
+    const check = async (past: Locator, where: string) => {
+      const row = past.getByRole("region", { name: "Not played last time" }).locator("[data-song='Dym']")
+      const name = row.locator("[data-name]")
+      await expect(name, where).toHaveText("Dym")
+      await expect(name, where).not.toHaveAttribute("data-cut")
+      expect(
+        await name.evaluate((el) => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight),
+        where
+      ).toBe(true)
+      // In the one link look: the text's colour, underlined at rest.
+      await expect(songName(past, "Dym"), where).toHaveCSS("text-decoration-line", "underline")
+
+      const figures = row.locator("[data-figures]")
+      await expect(figures, where).toHaveAttribute("data-dropped")
+      const read = figures.locator(".sr-only")
+      await expect(read, where).toHaveText(new RegExp(`^${star.replace(/[()]/g, "\\$&")} · Sat 19 Sep, .+ ago · 4 goes$`))
+      // Dropped in order, the least needed first: how long ago, then the
+      // day, then the goes, the ★ go last. The ★ is drawn, not written.
+      const ago = (await read.innerText()).split(", ")[1].split(" · ")[0]
+      const kept = [
+        `${star} · Sat 19 Sep, ${ago} · 4 goes`,
+        `${star} · Sat 19 Sep · 4 goes`,
+        `${star} · 4 goes`,
+        star,
+        "",
+      ].map((line) => line.replace("★ ", ""))
+      const shown = (await figures.locator("[data-shown]").innerText()).trim()
+      expect(kept.slice(1), `${where}: "${shown}"`).toContain(shown)
+    }
+
+    await check(beside(page), "beside the setup")
+    await check(await openPanel(page), "in the panel")
+  })
+
+  test("a cut name shows whole on hover", async ({ page }) => {
+    await openBandApp(page, { stress: true })
+    // Longer than two lines of its row: cut, and whole under the pointer.
+    const hover = async (past: Locator, where: string) => {
+      const name = songName(past, KALYCHANKA)
+      await expect(name.locator("[data-name]"), where).toHaveAttribute("data-cut")
+      await name.hover()
+      await expect(tip(page), where).toBeVisible()
+      await expect(tip(page), where).toContainText(KALYCHANKA)
+      await away(page)
+      await expect(tip(page), where).toHaveCount(0)
+    }
+    await hover(beside(page), "beside the setup")
+    await hover(await openPanel(page), "in the panel")
+  })
+
+  test("a cut name shows whole on keyboard focus, when the focus scrolls the panel", async ({
+    page,
+  }) => {
+    // At 130 % in the smallest window, the name is below the panel's fold.
+    await page.setViewportSize({ width: 960, height: 680 })
+    await page.addInitScript(
+      "window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:1.3}));"
+    )
+    await openBandApp(page, { stress: true })
+    const past = await openPanel(page)
+    const scroller = panel(page).locator(".overflow-y-auto")
+    const name = songName(past, KALYCHANKA)
+    await expect(name).not.toBeInViewport()
+    expect(await scroller.evaluate((el) => el.scrollTop)).toBe(0)
+    // Tab down the panel to the name, as a keyboard does: getting there
+    // scrolls the panel.
+    for (let i = 0; i < 80 && !(await name.evaluate((el) => el === document.activeElement)); i++)
+      await page.keyboard.press("Tab")
+    await expect(name).toBeFocused()
+    expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+    await expect(name).toBeInViewport()
+
+    // The tip shows by the focused name, at once, and stays.
+    await expect(tip(page)).toBeVisible()
+    await expect(tip(page)).toContainText(KALYCHANKA)
+    const by = async () => {
+      const t = (await tip(page).boundingBox())!
+      const n = (await name.boundingBox())!
+      return {
+        across: t.x < n.x + n.width && n.x < t.x + t.width,
+        // Above it or under it, its arrow's length off.
+        near: Math.min(Math.abs(t.y + t.height - n.y), Math.abs(n.y + n.height - t.y)) < 24,
+      }
+    }
+    await expect.poll(by).toEqual({ across: true, near: true })
+    // Still open once a closing tip would have faded (220 ms).
+    const stays = async () => {
+      await page.waitForTimeout(500)
+      await expect(tip(page)).toBeVisible()
+      await expect(tip(page)).not.toHaveAttribute("data-state", "closed")
+      expect(await by()).toEqual({ across: true, near: true })
+    }
+    await stays()
+
+    // The panel scrolled on round the focused name, which closes a Radix
+    // tip: this one stays, by the name where it is now.
+    const at = (await name.boundingBox())!.y
+    await scroller.evaluate((el) => el.scrollBy(0, 40))
+    await expect.poll(async () => (await name.boundingBox())!.y).toBeLessThan(at - 30)
+    await expect(name).toBeFocused()
+    await stays()
+  })
+
+  test("a name that takes its whole row carries its figures in its tip", async ({ page }) => {
+    // Q3: dropped figures show whole on hover. A name wider than its row
+    // wraps and leaves the figures no room at all, so there is nothing of
+    // them to hover: the name's own tip says them, though it is not cut.
+    await openBandApp(page, { stress: true })
+    const check = async (past: Locator, where: string) => {
+      const row = past.locator(`[data-song='${DANCING}']`)
+      await expect(row.locator("[data-name]"), where).not.toHaveAttribute("data-cut")
+      await expect(row.locator("[data-figures] [data-shown]"), where).toHaveText("")
+      await songName(past, DANCING).hover()
+      await expect(tip(page), where).toBeVisible()
+      await expect(tip(page), where).toContainText(DANCING)
+      await expect(tip(page), where).toContainText("2 goes · 10:10")
+      await away(page)
+      await expect(tip(page), where).toHaveCount(0)
+
+      // A name with room beside it shows no tip of its own.
+      await songName(past, "Zorka").hover()
+      await page.waitForTimeout(700)
+      await expect(tip(page), where).toHaveCount(0)
+      await away(page)
+    }
+    await check(beside(page), "beside the setup")
+    await check(await openPanel(page), "in the panel")
+  })
+
+  test("the interface's figures are said in its name's tip once none has room", async ({ page }) => {
+    // At 150 % in the smallest window, the stress data's interface leaves
+    // its figures no room: the name's tip says them.
+    await page.setViewportSize({ width: 960, height: 680 })
+    await page.addInitScript(
+      "window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:1.5}));"
+    )
+    await openBandApp(page, { stress: true })
+    const row = page.locator("[data-recording-with]")
+    const name = row.getByText("Universal Audio Apollo Twin X DUO Heritage Edition", { exact: true })
+    await expect(name).not.toHaveAttribute("data-cut")
+    await expect(row.locator("[data-figures]")).toHaveAttribute("data-dropped")
+    await expect(row.locator("[data-figures] [data-shown]")).toHaveText("")
+    await name.hover()
+    await expect(tip(page)).toBeVisible()
+    await expect(tip(page)).toContainText("Universal Audio Apollo Twin X DUO Heritage Edition")
+    await expect(tip(page)).toContainText("18 inputs · 48 kHz · 24 bit")
+  })
+
+  test("the small play button shows a spinner after one second", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    const past = page.getByRole("complementary", { name: "Last time" })
+    const play = past.getByRole("button", { name: "Play Pałyn 2, the last go at Pałyn" })
+    await expect(play).toBeVisible()
+    // The take is slow to open: the fake holds it until it is let go.
+    await page.evaluate(() => {
+      const w = window as unknown as { __HOLD__?: Record<string, Promise<void>>; __LET_GO__?: () => void }
+      w.__HOLD__ = { player_open: new Promise<void>((r) => (w.__LET_GO__ = r)) }
+    })
+    const button = past.locator("[data-song='Pałyn'] button[data-look]")
+    const spinner = button.locator(".animate-spin")
+    const since = Date.now()
+    const at = (ms: number) => page.waitForTimeout(Math.max(0, ms - (Date.now() - since)))
+    await play.click()
+    await expect(button).toHaveAttribute("data-look", "loading")
+    await at(500)
+    expect(await spinner.count(), "a spinner at 0.5 s").toBe(0)
+    await at(1500)
+    expect(await spinner.count(), "a spinner at 1.5 s").toBe(1)
+
+    await page.evaluate(() => (window as unknown as { __LET_GO__: () => void }).__LET_GO__())
+    await expect(past.getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })).toBeVisible()
+    await expect(spinner).toHaveCount(0)
+  })
+
+  test("Earlier rows open their rehearsal by keyboard", async ({ page }) => {
+    await openApp(page)
+    const earlier = page
+      .getByRole("complementary", { name: "Last time" })
+      .getByRole("region", { name: "Earlier" })
+    // Each rehearsal is the one list row (Item).
+    const rows = earlier.locator("[data-earlier]")
+    await expect(rows).toHaveCount(3)
+    for (const row of await rows.all()) await expect(row).toHaveClass(/(^| )group\/item( |$)/)
+    // Read down to the heading, then Tab: the rows, in turn.
+    await earlier.getByRole("heading", { name: "Earlier" }).click()
+    await page.keyboard.press("Tab")
+    await expect(rows.nth(0)).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(rows.nth(1)).toBeFocused()
+    await expect(rows.nth(1)).toContainText("First rehearsal")
+    // With the shared focus ring.
+    await expect(rows.nth(1)).not.toHaveCSS("box-shadow", "none")
+    // A rehearsal whose folder is gone says so, quietly.
+    await expect(rows.nth(2)).toContainText("Missing jam")
+    await expect(rows.nth(2).getByText("Not on disk", { exact: true })).toHaveClass(/text-muted-foreground/)
+
+    await page.keyboard.press("Enter")
+    await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
+    const list = page.getByRole("navigation", { name: "Rehearsals" })
+    await expect(list.locator("[aria-current='true']")).toContainText("First rehearsal")
+  })
+
+  test("the Last time heading has no capitals", async ({ page }) => {
+    await openApp(page)
+    const past = page.getByRole("complementary", { name: "Last time" })
+    const heading = past.getByRole("heading", { name: /^Last time · /i })
+    await expect(heading).toHaveText(/^Last time · \w{3} \d{1,2} \w{3}, .+$/)
+    await expect(heading).toHaveCSS("text-transform", "none")
+    for (const name of ["Not played last time", "Earlier"])
+      await expect(past.getByRole("heading", { name, exact: true }), name).toHaveCSS("text-transform", "none")
   })
 })

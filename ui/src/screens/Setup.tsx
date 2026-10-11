@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
-import { Figures, Whole } from "@/components/ui/whole"
+import { FigureLine, Figures, Whole } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
 import { IconPicker } from "@/components/IconPicker"
 import { LastTime } from "@/components/LastTime"
@@ -189,6 +189,9 @@ export function Setup({
   // The interface that was chosen and is not plugged in. Not the same as
   // none chosen: the desk is often switched on after the laptop.
   const [missing, setMissing] = useState<SettingsData["missing_device"]>(null)
+  // Every figure beside the interface's name has given way to it: its tip
+  // says them (Q3).
+  const [deviceBare, setDeviceBare] = useState(false)
   // The set Start plays by (S1–S2), kept across restarts, and New set…
   // over this screen (S3), with the band's songs to add.
   const sets = useSets()
@@ -704,8 +707,16 @@ export function Setup({
         className="h-auto min-w-0 items-baseline justify-start gap-2 px-3 py-2 text-left whitespace-normal has-[>svg]:px-3"
       >
         <Mic className="size-3.5 self-center text-muted-foreground" />
-        <Whole text={deviceText} className="min-w-0 flex-[0_1_auto] line-clamp-2 break-words" />
-        <Figures parts={deviceFigures} className="tnum text-right text-xs text-muted-foreground" />
+        <Whole
+          text={deviceText}
+          figures={deviceBare ? <FigureLine parts={deviceFigures} /> : null}
+          className="min-w-0 flex-[0_1_auto] line-clamp-2 break-words"
+        />
+        <Figures
+          parts={deviceFigures}
+          onBare={setDeviceBare}
+          className="tnum text-right text-xs text-muted-foreground"
+        />
       </Button>
       {!device && missing ? (
         <div className="col-span-2 flex flex-col gap-2">

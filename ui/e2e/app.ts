@@ -9,6 +9,7 @@ export const TAKE_SECONDS = 6
 
 const FAKE = fileURLToPath(new URL("./fake-bridge.js", import.meta.url))
 const BAND = fileURLToPath(new URL("./band.js", import.meta.url))
+const STRESS = fileURLToPath(new URL("./stress.js", import.meta.url))
 
 /**
  * Every test fails on an error in the page: an exception, or anything the
@@ -79,12 +80,15 @@ export async function openApp(
 /**
  * Opens the app with the band laid over the fake: four musicians, their
  * song and their past rehearsals, as the docs' pictures and the site show
- * them. See band.js.
+ * them. See band.js. With `stress`, stress.js is laid over the band: long
+ * names, thirteen songs last time, seven not played, five tracks.
  */
-export async function openBandApp(page: Page) {
+export async function openBandApp(page: Page, { stress = false }: { stress?: boolean } = {}) {
   // One script, not two: the band sets the fake's top-level `let`s, which a
   // second init script would not see.
-  const source = [FAKE, BAND].map((f) => readFileSync(f, "utf-8")).join("\n")
+  const source = [FAKE, BAND, ...(stress ? [STRESS] : [])]
+    .map((f) => readFileSync(f, "utf-8"))
+    .join("\n")
   await page.addInitScript(source)
   await page.goto("/")
 }

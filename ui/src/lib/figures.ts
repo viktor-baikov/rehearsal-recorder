@@ -14,15 +14,23 @@ export type Part = { text: string; keep: number; join?: string }
 const joinBefore = (part: Part, beforeShown: boolean) =>
   part.join && beforeShown ? part.join : " · "
 
+/** What goes before each figure in the line the shown ones make: nothing
+ *  before the first shown, and null for one that is not shown. The line is
+ *  written from these (joinFigures) and drawn from them (whole.tsx). */
+export function joinsOf(parts: Part[], shown: boolean[]): (string | null)[] {
+  let any = false
+  return parts.map((p, i) => {
+    if (!shown[i]) return null
+    const join = any ? joinBefore(p, shown[i - 1]) : ""
+    any = true
+    return join
+  })
+}
+
 /** The line the shown figures make. */
 export function joinFigures(parts: Part[], shown: boolean[]): string {
-  let out = ""
-  parts.forEach((p, i) => {
-    if (!shown[i]) return
-    if (out) out += joinBefore(p, shown[i - 1])
-    out += p.text
-  })
-  return out
+  const joins = joinsOf(parts, shown)
+  return parts.map((p, i) => (joins[i] === null ? "" : joins[i] + p.text)).join("")
 }
 
 /**

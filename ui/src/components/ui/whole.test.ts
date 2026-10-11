@@ -1,7 +1,7 @@
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
-import { Figures, Whole } from "@/components/ui/whole"
+import { FigureLine, Figures, Whole } from "@/components/ui/whole"
 
 const parts = [
   { text: "18 inputs", keep: 2 },
@@ -36,8 +36,28 @@ describe("Whole", () => {
     expect(out).toMatch(/<span class="block truncate"[^>]*>A long name<\/span>/)
   })
 
-  it("shows no tip until the text is cut and something asks for it", () => {
+  it("is its own tip's trigger, so the pointer on the text is what asks for it", () => {
     const out = renderToStaticMarkup(createElement(Whole, { text: "A long name" }))
-    expect(out).not.toContain("data-whole")
+    expect(out).toMatch(/<span[^>]*data-slot="tooltip-trigger"[^>]*>A long name<\/span>/)
+  })
+})
+
+describe("a figure drawn as more than its text", () => {
+  // A ★ go: drawn with the star icon, read and measured as its words.
+  const drawn = [
+    { text: "★ Dym 2", keep: 3, node: createElement("b", null, "Dym 2") },
+    { text: "Sat 19 Sep", keep: 1 },
+    { text: "3 weeks ago", keep: 0, join: ", " },
+  ]
+
+  it("shows its drawing, and is read as its words", () => {
+    const out = renderToStaticMarkup(createElement(Figures, { parts: drawn }))
+    expect(out).toContain('<span class="sr-only">★ Dym 2 · Sat 19 Sep, 3 weeks ago</span>')
+    expect(out).toMatch(/data-shown="true"><b>Dym 2<\/b> · Sat 19 Sep, 3 weeks ago<\/span>/)
+  })
+
+  it("is drawn the same in the line a tip carries", () => {
+    const out = renderToStaticMarkup(createElement(FigureLine, { parts: drawn }))
+    expect(out).toBe("<b>Dym 2</b> · Sat 19 Sep, 3 weeks ago")
   })
 })

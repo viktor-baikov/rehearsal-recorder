@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { fitFigures, joinFigures, type Part } from "@/lib/figures"
+import { fitFigures, joinFigures, joinsOf, type Part } from "@/lib/figures"
 
 const p = (text: string, keep: number, join?: string): Part => ({ text, keep, join })
 const parts = [p("18 inputs", 2), p("48 kHz", 1), p("24 bit", 0)]
@@ -55,4 +55,13 @@ describe("joinFigures: the line the shown figures make", () => {
   })
 
   it("is empty when nothing shows", () => expect(joinFigures(parts, [false, false, false])).toBe(""))
+})
+
+describe("joinsOf: what goes before each figure the line shows", () => {
+  it("nothing before the first shown, null for one not shown", () => {
+    const dated = [p("a", 2), p("b", 0), p("c", 1, ", ")]
+    expect(joinsOf(dated, [true, true, true])).toEqual(["", " · ", ", "])
+    expect(joinsOf(dated, [true, false, true])).toEqual(["", null, " · "])
+    expect(joinsOf(dated, [false, true, true])).toEqual([null, "", ", "])
+  })
 })

@@ -344,7 +344,17 @@ The other shared components, each with its stories:
   staying while focus is there, even when focusing scrolled the panel.
   `Figures` is the line of figures beside a name: it takes the room the name
   leaves, drops whole figures, the least needed first (`lib/figures.ts`), and
-  shows them all on hover once it has dropped any.
+  shows them all on hover once it has dropped some. Once it has dropped them
+  all there is nothing of it left to hover, so it says so (`onBare`) and the
+  name's own tip says them under the name (WholeTip's and Whole's `figures`,
+  drawn by `FigureLine`). A figure can be drawn as more than its words, such
+  as a ★ go with the star icon (`node`), and is read and measured as drawn.
+- **Mark**, `mark.tsx`: a mark's pieces (C8). `LabelDot` is the one label
+  dot, 8 px and round, in the label's colour; `MarkLine` is the one note
+  line: the dot, the time, the take where the line is away from it, then the
+  label and what was written, cut at the end of the room. Last time uses
+  both; the other dots and note lines move onto them as their screens are
+  redone.
 
 ## Writing components
 
