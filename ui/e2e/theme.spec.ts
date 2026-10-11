@@ -243,8 +243,13 @@ test.describe("motion", () => {
     await page.getByRole("button", { name: /Record take 1/ }).click()
     await expect(page.locator("html")).toHaveAttribute("data-recording")
     await expect(page.locator("[data-recording-line]")).toBeVisible()
+    // Let the screen settle first: polling until the first empty reading
+    // would let through an animation that starts a moment later, such as a
+    // spinner put up after the first levels. Past 0:01 the levels and the
+    // clock have come round more than once.
+    await expect(page.getByRole("timer")).toHaveText(/^0:(0[2-9]|[1-5]\d)$/, { timeout: 10_000 })
     // The record dot and every spinner included: still, all of it.
-    await expect.poll(() => playing(page)).toEqual([])
+    expect(await playing(page)).toEqual([])
 
     // A spinner put up meanwhile stands still too.
     expect(await animationOf(page, "animate-spin")).toBe("none")
