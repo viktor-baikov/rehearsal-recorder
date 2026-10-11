@@ -1,0 +1,95 @@
+# The checks: on every pull request, every push to main, and by hand.
+#
+# One of the two workflows here, named by when it runs; the other,
+# release.yml, runs when a release is published, builds the apps and puts
+# the website up. Nothing in this one hands anything to people, apart from
+# a pull request's preview of the site on Vercel.
+#
+# The first job, `what changed`, reads the pull request's own diff once and
+# says which of the rest it needs; every other job asks it rather than
+# deciding for itself:
+#
+#   app (app · macos, app · windows, interface)  for anything but a change
+#                                                to the site alone
+#   site                                         for site/, ui/ (the site
+#                                                draws with the interface's
+#                                                components) and CHANGELOG.md
+#                                                (its "What's new" line)
+#   site · preview                               only for site/ itself (Alex,
+#                                                2026-10-11)
+#
+# A change to this file runs all of them, and so does a pull request git
+# cannot read the diff of. A push to main runs the app's checks, as it
+# always has; by hand, the app's and the site's. A job that is not needed
+# shows as skipped under its own name: none of them is a matrix, since
+# GitHub shows a skipped matrix job under its unexpanded name instead. main
+# requires none of these checks today (its ruleset only stops it being
+# deleted or force-pushed), so a skipped one holds nothing up.
+#
+# CodeQL also checks every pull request. It is GitHub's default setup
+# (Settings, Code security), not a file here.
+
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Reading the repository is all these need, bar the preview, which reads
+# its own secrets. Said here because the default token can write, and a
+# pull request from a fork runs this workflow.
+permissions:
+  contents: read
+
+# A pull request's newer push replaces its older run. Every other run has a
+# group of its own, so each push to main is checked: in a shared group a
+# third push would cancel the second's waiting run.
+concurrency:
+  group: checks-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: what changed
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.changes.outputs.app }}
+      site: ${{ steps.changes.outputs.site }}
+      preview: ${{ steps.changes.outputs.preview }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # A pull request's merge commit and the base it was merged onto,
+          # so HEAD^1..HEAD is exactly what the pull request changes.
+          fetch-depth: 2
+
+      # The table at the top of this file. If git cannot say what changed,
+      # everything runs: a check run for nothing costs minutes, a check
+      # skipped for nothing lets a break through.
+      - name: What it touches
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          app=false site=false preview=false
+          if [ "$EVENT" != pull_request ]; then
+            app=true
+            if [ "$EVENT" = workflow_dispatch ]; then site=true; fi
+          elif ! files=$(git -c core.quotePath=false diff --name-only HEAD^1 HEAD); then
+            echo "::warning::Could not tell what this pull request changes, so every check runs."
+            app=true site=true preview=true
+          else
+            while IFS= read -r f; do
+              case "$f" in
+                "") ;;
+                site/*|.github/actions/site/*) site=true preview=true ;;
+                .github/workflows/checks.yml)  app=true site=true preview=true ;;
+                ui/*|CHANGELOG.md)             app=true site=true ;;
+                *)                             app=true ;;
+              esac
+            done <<< "$files"
+          fi
+          echo "app=$app site=$site preview=$preview"
+          { echo "app=$app"; echo "site=$site"; echo "preview=$preview"; } >> "$GITHUB_OUTPUT"
