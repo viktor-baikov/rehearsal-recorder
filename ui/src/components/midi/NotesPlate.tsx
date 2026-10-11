@@ -1,19 +1,28 @@
 import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { MidiGlyph } from "@/components/midi/MidiGlyph"
-import { cn } from "@/lib/utils"
+import { LanePlate } from "@/components/ui/lane-plate"
+
+/** The least a notes plate is tall, and so the lane beside it: room to name
+ *  six drum rows, 11 px each (NotesLane's LABEL_MIN_PX) between 3 px above and
+ *  below, and under the 1 px line a lower half has. Its own text takes 69,
+ *  which left the drums' rows unnamed; a lane of notes is not so short that a
+ *  kit cannot be read. */
+const MIN_PX = 73
 
 /**
  * The plate beside a lane of notes: what the notes are, the port they came
  * from, and that they are for a DAW. Nothing to mute, solo or turn up: the
  * app never plays them.
  *
+ * It is the audio plate's own box (ui/lane-plate) with other things in it.
  * Paired, it is the lower half of a Both track's card, under its audio plate
- * and a dashed line, and says MIDI with the MIDI sign: the name and the icon
- * are on the half above. On its own, for a track that records MIDI only, it
- * has the track's icon and name.
+ * and a line, and says MIDI with the MIDI sign: the name and the icon are on
+ * the half above. On its own, for a track that records MIDI only, it has the
+ * track's icon and name.
  *
- * Its height is what it holds: the lane beside it grows to it. A long name
- * or port goes onto more lines rather than losing its end.
+ * Its height is what it holds, and no less than MIN_PX: the lane beside it
+ * grows to it. A long name or port goes onto more lines rather than losing
+ * its end.
  */
 export function NotesPlate({
   name,
@@ -33,16 +42,15 @@ export function NotesPlate({
   missing?: boolean
 }) {
   return (
-    <div
+    <LanePlate
       data-notes-plate={name}
       data-paired={paired || undefined}
       data-missing={missing || undefined}
-      className={cn(
-        "flex h-full flex-col justify-center gap-2 rounded-lg border bg-card px-3.5 py-2",
-        paired && "rounded-t-none [border-top-style:dashed]"
-      )}
+      half={paired ? "bottom" : undefined}
+      className="gap-2"
+      style={{ minHeight: MIN_PX }}
     >
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
         {paired ? (
           <MidiGlyph className="size-4 shrink-0 text-muted-foreground" />
         ) : (
@@ -62,6 +70,6 @@ export function NotesPlate({
       <span className="text-[11px] leading-3.5 text-muted-foreground">
         {missing ? "Not connected, no .mid saved" : "Saved as .mid, not played here"}
       </span>
-    </div>
+    </LanePlate>
   )
 }

@@ -119,13 +119,14 @@ test.describe("notes in the player", () => {
     await expect(midi.getByRole("button")).toHaveCount(0)
     await expect(midi.locator("input")).toHaveCount(0)
     await expect(midi.getByRole("meter")).toHaveCount(0)
-    // One card: the halves touch, with a dashed line between them.
+    // One card: the halves touch, with a solid line between them.
     const a = await box(audio)
     const m = await box(midi)
     expect(Math.abs(m.y - (a.y + a.height))).toBeLessThan(1)
     expect(Math.abs(m.x - a.x)).toBeLessThan(1)
     expect(Math.abs(m.width - a.width)).toBeLessThan(1)
-    expect(await midi.evaluate((e) => getComputedStyle(e).borderTopStyle)).toBe("dashed")
+    expect(await midi.evaluate((e) => getComputedStyle(e).borderTopStyle)).toBe("solid")
+    expect(await midi.evaluate((e) => getComputedStyle(e).borderTopWidth)).toBe("1px")
     expect(await audio.evaluate((e) => getComputedStyle(e).borderBottomWidth)).toBe("0px")
     // And the lane is right under the waveform, as tall as its plate.
     const wave = await box(audioLane(page, "Drums"))
@@ -134,7 +135,7 @@ test.describe("notes in the player", () => {
     expect(Math.abs(lane.y - m.y)).toBeLessThan(1)
     expect(Math.abs(lane.height - m.height)).toBeLessThan(1)
     expect(await notesLane(page, "Drums").evaluate((e) => getComputedStyle(e).borderTopStyle)).toBe(
-      "dashed"
+      "solid"
     )
     // A lane's worth of height: the drum rows are named, and the notes by
     // pitch have their Cs.
@@ -154,8 +155,8 @@ test.describe("notes in the player", () => {
     await expect(keys).toContainText("Saved as .mid, not played here")
     await expect(keys.getByRole("button")).toHaveCount(0)
     await expect(keys.locator("input")).toHaveCount(0)
-    // A card of its own, not half of the guitar's.
-    expect(await keys.evaluate((e) => getComputedStyle(e).borderTopStyle)).toBe("solid")
+    // A card of its own, not half of the guitar's: no line on top.
+    expect(await keys.evaluate((e) => getComputedStyle(e).borderTopWidth)).toBe("0px")
     const gtr = await box(plate(page, "Gtr"))
     expect((await box(keys)).y - (gtr.y + gtr.height)).toBeGreaterThan(6)
     // The band's order: the drummer, the drums' notes, the guitar, the keys,
@@ -226,7 +227,7 @@ test.describe("notes in the player", () => {
     await review(page, "window.__MIDI_GONE__ = ['TD-17'];")
     // The audio half is as it always is, its waveform drawn.
     await expect(plate(page, "Drums").getByRole("button", { name: "Mute Drums" })).toBeVisible()
-    expect((await box(audioLane(page, "Drums"))).height).toBeGreaterThanOrEqual(91.5)
+    expect((await box(audioLane(page, "Drums"))).height).toBeCloseTo(56, 0)
     await expect
       .poll(async () => (await drawnAlong(audioLane(page, "Drums"), 0.5)).length)
       .toBeGreaterThan(0)
@@ -237,7 +238,8 @@ test.describe("notes in the player", () => {
     await expect(midi).toContainText("TD-17")
     await expect(midi).toContainText("Not connected, no .mid saved")
     await expect(notesLane(page, "Drums")).toContainText("No notes in this take")
-    expect(await midi.evaluate((e) => getComputedStyle(e).borderTopStyle)).toBe("dashed")
+    expect(await midi.evaluate((e) => getComputedStyle(e).borderTopStyle)).toBe("solid")
+    expect(await midi.evaluate((e) => getComputedStyle(e).borderTopWidth)).toBe("1px")
     const a = await box(plate(page, "Drums"))
     expect(Math.abs((await box(midi)).y - (a.y + a.height))).toBeLessThan(1)
     const wave = await box(audioLane(page, "Drums"))
@@ -444,11 +446,11 @@ test.describe("notes in the player", () => {
     expect(Math.abs(note.from - 0.5)).toBeLessThan(0.005)
   })
 
-  test("audio lanes keep their 92 px, and a notes lane is as tall as its plate", async ({
+  test("audio lanes keep their 56 px, and a notes lane is as tall as its plate", async ({
     page,
   }) => {
     // A keyboard with a long name on a port with a long name: its plate is
-    // taller than a lane, and squeezes the lanes beside it.
+    // taller than a lane, and leaves the lanes beside it as they are.
     const name = "Keys and the old Juno 106 that has lived in the corner of the rehearsal room since 1990"
     const port = "Launchkey Mini MK3 MIDI Port, the one on the left of the desk"
     await page.setViewportSize({ width: 960, height: 1000 })
@@ -463,7 +465,7 @@ test.describe("notes in the player", () => {
     await expect(keys).toContainText(name)
     await expect(keys).toContainText(port)
     for (const track of ["Drums", "Gtr", "Bass"])
-      expect((await box(plate(page, track))).height).toBeGreaterThanOrEqual(91.5)
+      expect((await box(plate(page, track))).height).toBeCloseTo(56, 0)
     for (const track of ["Drums", name]) {
       const p = notesPlate(page, track)
       // Nothing in it cut: the plate is as tall as it needs, and its lane
@@ -477,11 +479,12 @@ test.describe("notes in the player", () => {
       expect(Math.abs(lane.height - (await box(p)).height)).toBeLessThan(1)
     }
     // The keyboard's plate is taller than a lane, and its lane with it; the
-    // drums' half card is left what it needs, less than a lane.
-    expect((await box(keys)).height).toBeGreaterThan(96)
-    expect((await box(notesPlate(page, "Drums"))).height).toBeLessThan(92)
-    // Its rows are too thin to name there.
-    await expect(notesLane(page, "Drums").getByText("Kick", { exact: true })).toBeHidden()
+    // drums' half card is left what it needs, which is less.
+    expect((await box(keys)).height).toBeGreaterThan(2 * 56)
+    expect((await box(notesPlate(page, "Drums"))).height).toBeLessThan((await box(keys)).height)
+    // Its rows are named all the same: a lane of notes is never so short that
+    // a kit cannot be read.
+    await expect(notesLane(page, "Drums").getByText("Kick", { exact: true })).toBeVisible()
   })
 
   test("the review screen hands the take's notes to crop_draft and keep_take", async ({

@@ -576,7 +576,9 @@ test.describe("the mix", () => {
 })
 
 test.describe("a track's plate", () => {
-  test("says what the track is: its icon, and one channel or two", async ({ page }) => {
+  test("says what the track is by its icon, and a stereo file by a meter in two", async ({
+    page,
+  }) => {
     await openApp(page, {
       before: `window.__BAND_ICONS__ = {Guitar: 'guitar-electric'};
         window.__STEREO_TRACKS__ = ['Vocals'];`,
@@ -587,11 +589,13 @@ test.describe("a track's plate", () => {
     const vocals = page.locator("[data-plate='Vocals']")
     await expect(guitar.locator("[data-icon]")).toHaveAttribute("data-icon", "guitar-electric")
     await expect(vocals.locator("[data-icon]")).toHaveAttribute("data-icon", "other")
-    // Read from the file: how many channels it has, not how it was set up.
-    await expect(guitar).toContainText("Mono")
-    await expect(vocals).toContainText("Stereo")
+    // There is no line for it: Mono or Stereo took a row a lane at 56 px
+    // has no room for.
+    await expect(guitar).not.toContainText("Mono")
+    await expect(vocals).not.toContainText("Stereo")
 
-    // A stereo track's meter is in two, left above right, so a dead side
+    // Read from the file, how many channels it has and not how it was set
+    // up: a stereo track's meter is in two, left above right, so a dead side
     // shows while it plays.
     const fills = (name: string) =>
       page.getByRole("meter", { name: `${name} level` }).locator("[data-fill]")
@@ -608,12 +612,12 @@ test.describe("a track's plate", () => {
       .toBe(true)
   })
 
-  test("is no taller than it needs, however tall the window", async ({ page }) => {
+  test("is 56 px tall, however tall the window", async ({ page }) => {
     await page.setViewportSize({ width: 1180, height: 1400 })
     await review(page)
     for (const name of ["Guitar", "Vocals"]) {
       const box = (await page.locator(`[data-plate='${name}']`).boundingBox())!
-      expect(box.height).toBeLessThanOrEqual(96)
+      expect(box.height).toBeCloseTo(56, 0)
     }
   })
 })

@@ -117,13 +117,17 @@ export function Shell({
 
       {aside ? (
         <div className="flex min-h-0 flex-1">
-          <main className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-6", className)}>
+          <main
+            className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-(--screen-pad-y)", className)}
+          >
             {children}
           </main>
           {aside}
         </div>
       ) : (
-        <main className={cn("min-h-0 flex-1 overflow-y-auto px-6 py-6", className)}>
+        <main
+          className={cn("min-h-0 flex-1 overflow-y-auto px-6 py-(--screen-pad-y)", className)}
+        >
           {children}
         </main>
       )}

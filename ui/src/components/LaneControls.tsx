@@ -1,6 +1,7 @@
 import { Volume1, Volume2, VolumeX } from "lucide-react"
 import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { Button } from "@/components/ui/button"
+import { LanePlate } from "@/components/ui/lane-plate"
 import { cn } from "@/lib/utils"
 
 /** At or above this the track is at full scale where the playhead stands. */
@@ -103,13 +104,13 @@ function MeteredFader({
 }
 
 /**
- * One track's controls, beside its lane: its icon and name, whether it is one
- * channel or two, mute and solo, a fader, and under it how loud that track is
- * coming out.
+ * One track's controls, beside its lane: its icon and name, mute and solo, a
+ * fader, and under it how loud that track is coming out.
  *
- * Mono or stereo is read from the file, not from how the band is set up
- * today: a take recorded before the keyboard went stereo is still one
- * channel.
+ * Nothing says whether the file is one channel or two: a lane at 56 px has no
+ * room for the line, and the meter shows it, in two bars for a stereo file.
+ * That is read from the file, not from how the band is set up today: a take
+ * recorded before the keyboard went stereo is still one channel.
  *
  * The level is measured in Python, in the mix, after this track's gain — so
  * it is what came out, not what is on disk, and mute and solo are already in
@@ -125,8 +126,7 @@ function MeteredFader({
  * It reads zero when nothing is playing, which is what a meter at rest does.
  *
  * A track that records its notes too is one card of two halves: these
- * controls above, and its notes' plate (midi/NotesPlate) below, under a
- * dashed line.
+ * controls above, and its notes' plate (midi/NotesPlate) below, under a line.
  */
 export function LaneControls({
   name,
@@ -163,48 +163,36 @@ export function LaneControls({
   onVolumeCommit: () => void
 }) {
   return (
-    <div
-      data-plate={name}
-      className={cn(
-        "flex h-full flex-col justify-center gap-2.5 rounded-lg border bg-card px-3.5 py-2",
-        paired && "rounded-b-none border-b-0"
-      )}
-    >
-      <div className="flex items-center gap-2.5">
+    <LanePlate data-plate={name} half={paired ? "top" : undefined} className="gap-1">
+      <div className="flex items-center gap-2">
         <InstrumentIcon icon={icon} className="size-4 shrink-0 text-muted-foreground" />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className={cn("truncate text-sm", dimmed && "text-muted-foreground")}>
-            {name}
-          </span>
-          {channels > 0 && (
-            <span className="text-[11px] leading-3.5 text-muted-foreground">
-              {channels > 1 ? "Stereo" : "Mono"}
-            </span>
-          )}
+        <span
+          className={cn("min-w-0 flex-1 truncate text-sm", dimmed && "text-muted-foreground")}
+        >
+          {name}
         </span>
-        <Button
-          variant={muted ? "default" : "outline"}
-          size="icon-row"
-          aria-pressed={muted}
-          aria-label={`Mute ${name}`}
-          onClick={onToggleMute}
-          className={cn(
-            "shrink-0 font-semibold",
-            muted && "bg-warn text-warn-foreground hover:bg-warn/90"
-          )}
-        >
-          M
-        </Button>
-        <Button
-          variant={soloed ? "default" : "outline"}
-          size="icon-row"
-          aria-pressed={soloed}
-          aria-label={`Solo ${name}`}
-          onClick={onToggleSolo}
-          className="shrink-0 font-semibold"
-        >
-          S
-        </Button>
+        <span className="flex shrink-0 gap-1.5">
+          <Button
+            variant={muted ? "default" : "outline"}
+            size="lane"
+            aria-pressed={muted}
+            aria-label={`Mute ${name}`}
+            onClick={onToggleMute}
+            className={cn("font-semibold", muted && "bg-warn text-warn-foreground hover:bg-warn/90")}
+          >
+            M
+          </Button>
+          <Button
+            variant={soloed ? "default" : "outline"}
+            size="lane"
+            aria-pressed={soloed}
+            aria-label={`Solo ${name}`}
+            onClick={onToggleSolo}
+            className="font-semibold"
+          >
+            S
+          </Button>
+        </span>
       </div>
 
       {/* A track's level cannot overtake its thumb: what comes out is the
@@ -218,7 +206,7 @@ export function LaneControls({
         onVolume={onVolume}
         onVolumeCommit={onVolumeCommit}
       />
-    </div>
+    </LanePlate>
   )
 }
 
@@ -257,12 +245,7 @@ export function MasterControls({
   className?: string
 }) {
   return (
-    <div
-      className={cn(
-        "flex h-full flex-col justify-center gap-3 rounded-lg border bg-card px-3.5 py-2.5",
-        className
-      )}
-    >
+    <LanePlate className={cn("gap-1", className)}>
       <div className="flex items-center gap-2 text-sm">
         <VolumeIcon volume={volume} className="size-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate">Master</span>
@@ -277,6 +260,6 @@ export function MasterControls({
         onVolume={onVolume}
         onVolumeCommit={onVolumeCommit}
       />
-    </div>
+    </LanePlate>
   )
 }

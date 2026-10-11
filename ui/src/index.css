@@ -202,6 +202,11 @@ html[data-recording]
   --label-orange: oklch(0.68 0.17 48);
   --label-violet: oklch(0.56 0.2 300);
   --label-pink: oklch(0.64 0.2 350);
+
+  /* The space above and below a screen's content, which Shell pads by. The
+     player's master strip holds to the edge past it (Timeline.tsx), so the
+     two follow one number. */
+  --screen-pad-y: 1.5rem;
 }
 
 .dark {
