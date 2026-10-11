@@ -45,8 +45,8 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   the same variable (`site/src/page/page.css`).
 - **F2. The accent is for the one main action and for what plays.** A blue
   that also meant "on", "selected" and Stop pointed at nothing in
-  particular. A selected tab, pill or row, and a switch or toggle that is
-  on, are `bg-selected`, a grey. Stop is `strong`, the text's own colour
+  particular. A selected tab, pill or row, and a switch that is on, are
+  `bg-selected`, a grey. Stop is `strong`, the text's own colour
   (`Button variant="strong"`): that look is Stop's alone. The record red,
   the danger red and the statuses keep their own colours. In a set, the song
   the next take is named after is a selected row, with *next* and ✓ in the
@@ -112,14 +112,13 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
 ### Motion
 
 - **F10. Smooth.** Motion says where a thing came from and that the app
-  heard the click; it is never decoration, and it is short, since at half a
-  second it starts to feel like a wait. What appears rises 12 px and fades
-  in over 250 ms, easing out: `animate-rise`, on `--ease-smooth`
-  (`cubic-bezier(.2,.8,.2,1)`). A screen brings its groups in one after
-  another, 40 ms apart, by setting `--i` on each to its place. Dialogs,
-  menus and notices take 220 ms (`animate-in`, `animate-out`); a hover's
-  colour takes 200 ms, the default transition. The screens take on
-  `animate-rise` as each is redone.
+  heard the click; it is never decoration, and it is short, never over
+  400 ms (F11). What appears rises 12 px and fades in over 250 ms, easing
+  out: `animate-rise`, on `--ease-smooth` (`cubic-bezier(.2,.8,.2,1)`). A
+  screen brings its groups in one after another, 40 ms apart, by setting
+  `--i` on each to its place. Dialogs, menus and notices take 220 ms
+  (`animate-in`, `animate-out`); a hover's colour takes 200 ms, the default
+  transition. The screens take on `animate-rise` as each is redone.
 - **F11. Motion gives way.** Someone who turns on the system's Reduce motion
   has said that movement on screen bothers them, and the app takes their
   word for it. While a take records, the screen is read from across the room
@@ -130,11 +129,13 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   take records, `animate-rise`, `animate-in` and `animate-out` do not play:
   a dialog is simply there. `index.css` turns them off; the recording screen
   puts `data-recording` on `<html>` while it is up; what CSS cannot reach,
-  such as a smooth scroll, asks `motionOff()` in `lib/motion.ts`. Meters and
-  the clock are readings, not motion, and keep moving. The recording dot
-  still pulses (`animate-ping` in `screens/Recording.tsx`); whether it keeps
-  its pulse is settled when that screen is redone. Nothing takes longer than
-  400 ms (`lib/theme.test.ts` checks every duration in the file).
+  such as a smooth scroll, asks `motionOff()` in `lib/motion.ts` as it
+  moves (a scroll through `scrollBehavior()`). Meters and the clock are
+  readings, not motion, and keep moving. The recording dot still pulses
+  (`animate-ping` in `screens/Recording.tsx`): that is a known gap against
+  this rule, and the recording screen's pull request removes it. Nothing
+  takes longer than 400 ms (`lib/theme.test.ts` checks every duration in
+  the file).
 
 ## The system's habits
 
@@ -155,8 +156,10 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
 
 Each piece below is to be one component, so that it looks and works the
 same wherever it appears. Those that exist are in `ui/src/components/ui/`,
-each with a story for every state (U5), except the notices, which are
-`components/Notices.tsx` and `lib/notices.ts`. A screen that still builds a
+each with a story for every state (U5), except three that are shared but
+live outside it: the notices (`components/Notices.tsx` and
+`lib/notices.ts`), `ConfirmDialog` (`components/ConfirmDialog.tsx`) and
+`TakeTitle` (`components/TakeTitle.tsx`). A screen that still builds a
 piece of its own moves onto the shared one when it is redone.
 
 - **C1. Button.** Every button is the shared `Button`: a hand-made
@@ -243,7 +246,8 @@ The other shared components, each with its stories:
   rename dialogs, a mark's note, a label's and a set's name, the folders in
   Settings.
 - **Label**, `label.tsx`: the name over or beside a field, on the start
-  screen, in Settings and its Sets and Under the hood, and in New set.
+  screen, in Settings and its Sets and Under the hood, and in New set. It is
+  regular weight, as the system's own form labels are.
 - **Select**, `select.tsx`: a pick-one list that opens over the screen, in
   `default` and `sm` sizes, for a choice too long for a row of buttons: a
   track's input on the start screen, the audio driver and device, the output
@@ -259,7 +263,8 @@ The other shared components, each with its stories:
 - **Separator**, `separator.tsx`: a 1 px line in the border colour, across
   or down. Nothing uses it yet; the dividers made by hand move onto it.
 - **Badge**, `badge.tsx`: a small pill for a word or a count, in the accent,
-  a neutral grey, the danger red, the signal green or the warning yellow.
+  a neutral grey, the danger red (full in both themes, as a destructive
+  Button is), the signal green or the warning yellow, its word at 600.
   Nothing uses it yet; the chips made by hand move onto it.
 - **Progress**, `progress.tsx`: a thin bar in the accent for how far along a
   job is, where it was started (the take being saved under Stop, a crop, a
@@ -424,10 +429,12 @@ cd ui
 npm run design-check
 ```
 
-It reads every `.tsx` under `ui/src/`, stories included, prints each
-problem as `path:line rule text`, and then says what each broken rule is
-for. The rules are in `ui/scripts/design-rules.mjs`, and their tests, which
-Vitest runs, in `ui/scripts/design-rules.test.mjs`.
+It reads every `.tsx` and `.ts` under `ui/src/`, stories included and
+tests left out (class strings live in `.ts` files too, such as
+`lib/laneHalf.ts`), prints each problem as `path:line rule text`, and then
+says what each broken rule is for. The rules are in
+`ui/scripts/design-rules.mjs`, and their tests, which Vitest runs, in
+`ui/scripts/design-rules.test.mjs`.
 
 | Rule | Refuses |
 |---|---|
@@ -438,7 +445,7 @@ Vitest runs, in `ui/scripts/design-rules.test.mjs`.
 | `uppercase` | the `uppercase` class |
 | `raw-button` | a hand-made `<button>` outside `components/ui/` |
 | `radix` | Radix imported outside `components/ui/` |
-| `dialog` | `role="dialog"` or `<dialog>` outside `components/ui/` |
+| `dialog` | `role="dialog"` or `<dialog>` outside `components/ui/`; a selector that finds one, `[role="dialog"]`, passes |
 | `story` | a component in `components/ui/` with no story beside it |
 
 **The allow-list.** The screens not yet redone are in

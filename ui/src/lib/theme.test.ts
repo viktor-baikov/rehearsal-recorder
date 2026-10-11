@@ -5,12 +5,25 @@ import { describe, expect, it } from "vitest"
 // not needed to read those. The page it makes is checked in e2e/theme.spec.ts.
 const css = readFileSync(new URL("../index.css", import.meta.url), "utf-8")
 
-/** What a rule sets between its braces. The theme's blocks hold no nested
- *  braces, so the first closing one is theirs. */
+/** The rule that starts at `start` in the file, to its own closing brace:
+ *  the braces are counted, so one nested inside (a block in @media, a
+ *  keyframe) and any formatting leave it whole. */
+function ruleAt(start: number): string {
+  const open = css.indexOf("{", start)
+  if (start < 0 || open < 0) throw new Error("no such rule in index.css")
+  let depth = 0
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === "{") depth++
+    else if (css[i] === "}" && --depth === 0) return css.slice(start, i + 1)
+  }
+  throw new Error("a rule in index.css is not closed")
+}
+
+/** What a rule sets between its braces. */
 function block(selector: string): string {
   const start = css.indexOf(`\n${selector} {`)
   if (start < 0) throw new Error(`no ${selector} block in index.css`)
-  return css.slice(start, css.indexOf("\n}", start))
+  return ruleAt(start)
 }
 
 const light = block(":root")
@@ -81,12 +94,16 @@ describe("a group", () => {
 })
 
 describe("the corners", () => {
-  it("are 4, 8 and 12 by role, and no --radius left to scale them", () => {
+  it("are 4, 8 and 12 by role, in px, so the Appearance scale leaves them be", () => {
     expect(css).toMatch(/--radius-sm:\s*4px;/)
     expect(css).toMatch(/--radius-md:\s*8px;/)
     expect(css).toMatch(/--radius-lg:\s*12px;/)
     expect(css).toMatch(/--radius-xl:\s*12px;/)
-    expect(css).not.toMatch(/--radius:/)
+  })
+
+  it("make the bare rounded 4 px too, the same as rounded-sm (F9)", () => {
+    // Tailwind's own is 0.25rem, which grows and shrinks with the scale.
+    expect([...css.matchAll(/--radius:\s*([^;]+);/g)].map((m) => m[1])).toEqual(["4px"])
   })
 })
 
@@ -110,8 +127,9 @@ describe("the motion", () => {
   })
 
   it("gives way: off under Reduce motion and while recording, prefixed classes too", () => {
-    const from = (start: string) => css.slice(css.indexOf(start), css.indexOf("\n}\n", css.indexOf(start)))
-    for (const rule of [from("@media (prefers-reduced-motion: reduce)"), from("html[data-recording]")]) {
+    const from = (start: string) => ruleAt(css.indexOf(start))
+    const rules = [from("@media (prefers-reduced-motion: reduce)"), from("html[data-recording]")]
+    for (const rule of rules) {
       expect(rule).toMatch(/animation:\s*none;/)
       for (const name of ["rise", "in", "out"]) {
         // The class, and the same class behind a variant (data-[state=open]:animate-in).
@@ -119,6 +137,18 @@ describe("the motion", () => {
         expect(rule).toContain(`[class*=":animate-${name}"]`)
       }
     }
+    // The two lists are one list written twice: what one stops, the other does.
+    const listed = (rule: string) => /:is\(([^)]*)\)/.exec(rule)?.[1].replace(/\s+/g, "")
+    expect(listed(rules[0])).toBeDefined()
+    expect(listed(rules[0])).toBe(listed(rules[1]))
+  })
+
+  it("rises from below to where the element is, leaving it its own opacity and transform", () => {
+    // With fill-mode both, a `to` frame would hold after the animation, over
+    // an opacity-* or a translate the element sets for itself.
+    const rise = ruleAt(css.indexOf("@keyframes rise"))
+    expect(rise).toMatch(/from\s*\{/)
+    expect(rise).not.toMatch(/\bto\s*\{/)
   })
 
   it("takes nothing over 400 ms", () => {

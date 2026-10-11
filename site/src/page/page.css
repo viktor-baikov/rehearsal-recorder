@@ -15,7 +15,7 @@
   --page-bg: #ffffff;
   --page-tile: #f4f5f7;
   --page-line: #e6e8ec;
-  --page-app: #fafafa; /* the app's own light ground */
+  --page-app: var(--background); /* the app's own light ground, from its theme */
   --page-fg: #16181d;
   --page-muted: #6a707a;
   --page-accent: var(--primary); /* the app's own accent, from its theme */

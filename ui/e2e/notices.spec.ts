@@ -61,6 +61,26 @@ test("a done notice under the pointer waits to be read", async ({ page }) => {
   await expect(saved).toHaveCount(0)
 })
 
+test("a notice under the pointer keeps the time it had left, and goes on from there", async ({
+  page,
+}) => {
+  await openSettings(page)
+  await page.getByRole("button", { name: "Look again" }).click()
+  const said = page.locator("[data-notice='done']", { hasText: "No new interfaces" })
+  await expect(said).toBeVisible()
+  // The page's time stands still from half a second on, and moves only when
+  // told, so a check that waits cannot let the notice's time run out by
+  // itself. Less than 3.5 of its 4 s are left by then.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 500)
+  await said.hover()
+  await page.clock.fastForward(6000)
+  await expect(said).toHaveCount(1)
+  // Left: what it had, under 3.5 s, and not 4 s all over again.
+  await page.mouse.move(20, 20)
+  await page.clock.fastForward(3600)
+  await expect(said).toHaveCount(0)
+})
+
 test("a notice closed under the pointer does not hold the next ones up", async ({ page }) => {
   // Taking a notice away from under the pointer fires no mouseleave: the
   // pause for "somebody is reading" must end with the notice that earned it.

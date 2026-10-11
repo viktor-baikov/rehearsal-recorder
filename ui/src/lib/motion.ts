@@ -14,3 +14,9 @@ export function motionOff(): boolean {
   const reduce = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
   return reduce || document.documentElement.hasAttribute("data-recording")
 }
+
+/** How a scroll the code makes moves: smoothly, or at once where motion is
+ *  off (motionOff), asked at each scroll. */
+export function scrollBehavior(): ScrollBehavior {
+  return motionOff() ? "auto" : "smooth"
+}

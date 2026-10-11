@@ -13,16 +13,17 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { sep } from "node:path"
 import { fileURLToPath } from "node:url"
-import { checkText, judge, missingStories, RULES } from "./design-rules.mjs"
+import { checkText, isChecked, judge, missingStories, RULES } from "./design-rules.mjs"
 
 // ui/, whatever directory the script is started from.
 const root = fileURLToPath(new URL("..", import.meta.url))
 
-// Every .tsx under src/, as `src/...` with forward slashes (the allow-list is
-// the same on every system), in a fixed order.
+// Every .tsx and .ts under src/ but the tests (isChecked), as `src/...` with
+// forward slashes (the allow-list is the same on every system), in a fixed
+// order.
 const files = readdirSync(`${root}src`, { recursive: true })
   .map((p) => `src/${p.split(sep).join("/")}`)
-  .filter((p) => p.endsWith(".tsx"))
+  .filter(isChecked)
   .sort()
 
 const findings = [

@@ -53,6 +53,34 @@ export function lifetime(n: Notice): number | null {
   return n.kind === "done" ? DONE_MS : null
 }
 
+/**
+ * A notice's time, `ms` long, then `onDone`. `run` starts it, or lets it go
+ * on; `stop` pauses it and keeps what is left. The pointer over a notice
+ * stops it, and leaving runs it on from there, so somebody reading gets the
+ * rest of the time and not all of it again (spec C4).
+ */
+export function countdown(ms: number, onDone: () => void) {
+  let left = ms
+  let since = 0
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return {
+    run() {
+      if (timer !== null) return
+      since = Date.now()
+      timer = setTimeout(() => {
+        timer = null
+        onDone()
+      }, left)
+    },
+    stop() {
+      if (timer === null) return
+      clearTimeout(timer)
+      timer = null
+      left = Math.max(0, left - (Date.now() - since))
+    },
+  }
+}
+
 let current: Notice[] = []
 let nextId = 1
 const listeners = new Set<() => void>()

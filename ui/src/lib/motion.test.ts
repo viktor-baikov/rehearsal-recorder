@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { motionOff } from "@/lib/motion"
+import { motionOff, scrollBehavior } from "@/lib/motion"
 
 /** A page as far as motionOff() looks at it: whether Reduce motion is on,
  *  and whether <html> says a take is being recorded. */
@@ -30,5 +30,21 @@ describe("motionOff", () => {
 
   it("is off where there is no page to ask, as in the tests that need none", () => {
     expect(motionOff()).toBe(false)
+  })
+})
+
+describe("scrollBehavior", () => {
+  it("smooths a scroll the code makes, where motion is allowed", () => {
+    page({})
+    expect(scrollBehavior()).toBe("smooth")
+  })
+
+  it("jumps instead under Reduce motion, and while a take records, asked at each scroll", () => {
+    page({ reduce: true })
+    expect(scrollBehavior()).toBe("auto")
+    page({ recording: true })
+    expect(scrollBehavior()).toBe("auto")
+    page({})
+    expect(scrollBehavior()).toBe("smooth")
   })
 })

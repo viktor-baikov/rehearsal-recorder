@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { FooterRow } from "@/components/FooterRow"
 import { HealthLine } from "@/components/HealthLine"
 import { Shell } from "@/components/Shell"
@@ -122,8 +122,9 @@ export function Recording({
 
   // Nothing moves while a take is recording (spec F11): <html> says so for
   // the stylesheet and for motionOff(), and stops saying so when this screen
-  // is gone.
-  useEffect(() => {
+  // is gone. Before the first paint and after the last, so that no frame
+  // starts an animation the attribute would have stopped.
+  useLayoutEffect(() => {
     document.documentElement.setAttribute("data-recording", "")
     return () => document.documentElement.removeAttribute("data-recording")
   }, [])

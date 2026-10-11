@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { scrollBehavior } from "@/lib/motion"
 
 /** How far a row fades out at an end that has more of it past the edge. */
 export const FADE = 48
 
-/** A fade at each end of a row that has more past it. */
+/** A fade at each end of a row that has more past it. A mask reads only
+ *  how opaque each stop is: black shows the row, transparent hides it, and
+ *  neither is a colour on screen. */
 function fadeMask(before: boolean, after: boolean): string {
   if (!before && !after) return ""
-  const from = before ? `transparent, #000 ${FADE}px` : "#000"
-  const to = after ? `#000 calc(100% - ${FADE}px), transparent` : "#000"
+  const from = before ? `transparent, black ${FADE}px` : "black"
+  const to = after ? `black calc(100% - ${FADE}px), transparent` : "black"
   return `linear-gradient(to right, ${from}, ${to})`
 }
 
@@ -123,10 +126,13 @@ export function useRowEdges(keep: string) {
   }, [row, keep, measure, reveal])
 
   /** The next screenful one way, less the fades, so the tab half under one
-   *  is whole after the move. */
+   *  is whole after the move: smoothly, unless motion is off now (F11). */
   const page = useCallback(
     (dir: -1 | 1) => {
-      row?.scrollBy({ left: dir * Math.max(row.clientWidth - 2 * FADE, FADE), behavior: "smooth" })
+      row?.scrollBy({
+        left: dir * Math.max(row.clientWidth - 2 * FADE, FADE),
+        behavior: scrollBehavior(),
+      })
     },
     [row]
   )

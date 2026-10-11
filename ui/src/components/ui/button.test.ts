@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { buttonVariants } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 // The class list a variant or size ends up with, as one string.
 const looks = (props: Parameters<typeof buttonVariants>[0]) => buttonVariants(props)
@@ -8,7 +9,14 @@ describe("Button variants", () => {
   it("makes destructive full colour in both themes, not 60% in the dark", () => {
     const red = looks({ variant: "destructive" })
     expect(red).toContain("text-destructive-foreground")
-    expect(red).not.toContain("/60")
+    expect(red).not.toContain("dark:bg-destructive")
+  })
+
+  it("draws a destructive button's focus in its own red, not a cobalt line around it", () => {
+    // As the Button merges its classes: the variant's border wins over the base's.
+    const red = cn(looks({ variant: "destructive" }))
+    expect(red).toContain("focus-visible:border-destructive")
+    expect(red).not.toContain("focus-visible:border-ring")
   })
 
   it("gives strong the text's own colour (Stop is neutral, F2)", () => {

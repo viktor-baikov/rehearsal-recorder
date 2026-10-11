@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { labelCounts, labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import { isFalseStart } from "@/lib/evening"
-import { motionOff } from "@/lib/motion"
+import { scrollBehavior } from "@/lib/motion"
 import { TakeTitle } from "@/components/TakeTitle"
 import { SongName } from "@/components/SongName"
 import { SetPlayedCard } from "@/components/SetPlayed"
@@ -185,7 +185,7 @@ export function RehearsalOverview({
           onGoTo={(title) =>
             groups.current
               .get(title)
-              ?.scrollIntoView({ behavior: motionOff() ? "auto" : "smooth", block: "start" })
+              ?.scrollIntoView({ behavior: scrollBehavior(), block: "start" })
           }
         />
       )}

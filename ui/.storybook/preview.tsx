@@ -1,5 +1,6 @@
 import type { Preview } from "@storybook/react-vite"
-import { setSystem, type System } from "../src/lib/platform.ts"
+import type { System } from "../src/lib/platform.ts"
+import { Globals } from "./Globals.tsx"
 import "../src/index.css"
 
 // Two switches in the toolbar. The theme is the app's own: a .dark class on
@@ -29,11 +30,11 @@ const preview: Preview = {
   // Dark is where the app starts (index.html).
   initialGlobals: { theme: "dark", system: "mac" },
   decorators: [
-    (Story, { globals }) => {
-      document.documentElement.classList.toggle("dark", globals.theme === "dark")
-      setSystem(globals.system as System)
-      return <Story />
-    },
+    (Story, { globals }) => (
+      <Globals theme={globals.theme as string} system={globals.system as System}>
+        <Story />
+      </Globals>
+    ),
   ],
 }
 

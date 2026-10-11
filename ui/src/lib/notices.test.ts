@@ -3,6 +3,7 @@ import {
   ACTION_MS,
   DONE_MS,
   MAX_NOTICES,
+  countdown,
   dismiss,
   dismissNotice,
   getNotices,
@@ -268,6 +269,69 @@ describe("lifetime", () => {
     for (const kind of ["done", "warning", "error"] as const) {
       expect(lifetime(notice({ kind, action }))).toBe(ACTION_MS)
     }
+  })
+})
+
+describe("countdown", () => {
+  // A notice's time: the pointer over it stops it, and leaving lets it go on
+  // from where it stopped, not from the start (spec C4: hovering pauses it).
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it("ends once its time has run", () => {
+    const done = vi.fn()
+    countdown(4000, done).run()
+    vi.advanceTimersByTime(3999)
+    expect(done).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(done).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps what is left while it is stopped, and goes on from there", () => {
+    const done = vi.fn()
+    const time = countdown(10_000, done)
+    time.run()
+    vi.advanceTimersByTime(6000)
+    time.stop()
+    vi.advanceTimersByTime(60_000)
+    expect(done).not.toHaveBeenCalled()
+    time.run()
+    vi.advanceTimersByTime(3999)
+    expect(done).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(done).toHaveBeenCalledTimes(1)
+  })
+
+  it("counts every stretch it ran, however often it is stopped", () => {
+    const done = vi.fn()
+    const time = countdown(4000, done)
+    for (let i = 0; i < 3; i++) {
+      time.run()
+      vi.advanceTimersByTime(1000)
+      time.stop()
+      vi.advanceTimersByTime(5000)
+    }
+    time.run()
+    vi.advanceTimersByTime(999)
+    expect(done).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(done).toHaveBeenCalledTimes(1)
+  })
+
+  it("runs one timer however often it is started, and none once stopped", () => {
+    const done = vi.fn()
+    const time = countdown(1000, done)
+    time.run()
+    time.run()
+    vi.advanceTimersByTime(1000)
+    expect(done).toHaveBeenCalledTimes(1)
+    const other = vi.fn()
+    const stopped = countdown(1000, other)
+    stopped.run()
+    stopped.stop()
+    stopped.stop()
+    vi.advanceTimersByTime(5000)
+    expect(other).not.toHaveBeenCalled()
   })
 })
 

@@ -256,8 +256,9 @@ export const RULES = [
     name: "dialog",
     why: "A dialog is the shared Dialog (components/ui/dialog), not role=\"dialog\" or <dialog>.",
     outsideUi: true,
+    // Not `[role="dialog"]`, a selector that finds one (hooks/useSpacebar.ts).
     find: (code) => [
-      ...hits(re(String.raw`\brole\s*[=:]\s*\{?\s*["'\x60](?:alert)?dialog["'\x60]`), code),
+      ...hits(re(String.raw`(?<!\[\s*)\brole\s*[=:]\s*\{?\s*["'\x60](?:alert)?dialog["'\x60]`), code),
       ...hits(re(String.raw`<dialog${END}`), code),
     ],
   },
@@ -269,8 +270,10 @@ export const RULES = [
 
 const RULE_NAMES = new Set(RULES.map((r) => r.name))
 
-/** Only the interface's components and screens are held to the rules. */
-const isChecked = (path) => /^src\/.+\.tsx$/.test(path)
+/** The interface's components and screens, and the .ts beside them (class
+ *  strings live in .ts too, such as lib/laneHalf.ts and lib/labels.ts), are
+ *  held to the rules; their tests are not. */
+export const isChecked = (path) => /^src\/.+\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path)
 const isShared = (path) => path.startsWith(SHARED_DIR)
 
 // Where a `/` starts a regular expression and not a division: where an

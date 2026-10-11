@@ -32,8 +32,9 @@
   --color-panel: var(--panel);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  /* A selected tab, pill or row is neutral, not the accent (F2); Stop and
-     whatever is on is the text's own colour, "strong". */
+  /* A selected tab, pill or row, and a switch that is on, are neutral, not
+     the accent: "selected" (F2). "strong", the text's own colour, is Stop's
+     alone. */
   --color-selected: var(--selected);
   --color-strong: var(--strong);
   --color-strong-foreground: var(--strong-foreground);
@@ -64,7 +65,9 @@
 
   /* Three by role: 4 for small things (key chips, tags, take bars), 8 for
      controls (buttons, fields, menus), 12 for groups and dialogs; the bare
-     "rounded" is 4 too, and "rounded-full" is for round things. */
+     "rounded" is 4 too (--radius, Tailwind's own being 0.25rem, which the
+     Appearance scale would grow), and "rounded-full" is for round things. */
+  --radius: 4px;
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -87,14 +90,12 @@
    element that animates and not once on :root. */
 @theme inline {
   --animate-rise: rise 250ms var(--ease-smooth) calc(var(--i, 0) * 40ms) both;
+  /* From below to the element as it is: no `to`, which fill-mode both
+     would hold over its own opacity-* or transform once it has risen. */
   @keyframes rise {
     from {
       opacity: 0;
       transform: translateY(12px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
     }
   }
 
@@ -123,7 +124,8 @@
    The ones with a prefix (data-[state=open]:animate-in, which is how every
    dialog and menu asks for it) are not .animate-in to a selector, hence the
    second half of each list. Outside any layer, so these win over Tailwind's
-   utilities whatever their specificity. */
+   utilities whatever their specificity. The two lists are one: keep them
+   the same (lib/theme.test.ts compares them). */
 @media (prefers-reduced-motion: reduce) {
   :is(
       .animate-rise,
@@ -177,7 +179,7 @@ html[data-recording]
   --muted-foreground: oklch(0.55 0.014 285.9);
   --accent: oklch(0.935 0.004 286.3);
   --accent-foreground: oklch(0.21 0.006 285.9);
-  /* Selected is neutral (F2); strong is Stop and whatever is on. */
+  /* Selected is neutral, and so is what is on (F2); strong is Stop's alone. */
   --selected: oklch(0.92 0.004 286.3);
   --strong: oklch(0.21 0.006 285.9);
   --strong-foreground: oklch(0.985 0 0);

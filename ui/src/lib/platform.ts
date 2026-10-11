@@ -57,32 +57,34 @@ export type Words = {
   trash: "the Trash" | "the Recycle Bin"
 }
 
-const MAC: Words = {
+// One table a system, handed to every caller: frozen, so that none of them
+// can change the words for the others.
+const MAC: Readonly<Words> = Object.freeze({
   mod: "⌘",
   undoKey: "⌘Z",
   fileManager: "Finder",
   folderButton: "Show in Finder",
   trash: "the Trash",
-}
+})
 
-const WINDOWS: Words = {
+const WINDOWS: Readonly<Words> = Object.freeze({
   mod: "Ctrl",
   undoKey: "Ctrl+Z",
   fileManager: "Explorer",
   folderButton: "Show in Explorer",
   trash: "the Recycle Bin",
-}
+})
 
-const OTHER: Words = {
+const OTHER: Readonly<Words> = Object.freeze({
   mod: "Ctrl",
   undoKey: "Ctrl+Z",
   fileManager: "file manager",
   folderButton: "Open folder",
   trash: "the Trash",
-}
+})
 
 /** What this system calls things. A component passes useSystem() so it is
  *  drawn again if the system changes; other code leaves the argument out. */
-export function words(s: System = system()): Words {
+export function words(s: System = system()): Readonly<Words> {
   return s === "mac" ? MAC : s === "windows" ? WINDOWS : OTHER
 }

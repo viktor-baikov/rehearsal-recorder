@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { cn } from "@/lib/utils"
 import {
+  countdown,
   dismissNotice,
   lifetime,
   runAction,
@@ -91,16 +92,19 @@ function NoticeItem({
   onLeave: () => void
 }) {
   const system = useSystem()
-  // Keyed on the notice's id: a notice that replaced this one under the same
-  // key is a different element with a timer of its own, and this one's
-  // cleanup cannot end it. A notice is never changed once raised, so
-  // `notice` itself is the dependency.
-  useEffect(() => {
+  // This notice's own time, made once: a notice that replaced it under the
+  // same key is a different element with a time of its own, and this one's
+  // cannot end it. A pause stops it and keeps what is left, and the time
+  // runs on from there (lib/notices.ts countdown).
+  const [time] = useState(() => {
     const ms = lifetime(notice)
-    if (ms === null || paused) return
-    const timer = window.setTimeout(() => dismissNotice(notice.id), ms)
-    return () => window.clearTimeout(timer)
-  }, [notice, paused])
+    return ms === null ? null : countdown(ms, () => dismissNotice(notice.id))
+  })
+  useEffect(() => {
+    if (time === null || paused) return
+    time.run()
+    return () => time.stop()
+  }, [time, paused])
 
   const look = LOOK[notice.kind]
   return (

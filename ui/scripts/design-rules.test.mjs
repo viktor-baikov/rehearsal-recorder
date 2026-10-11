@@ -358,6 +358,11 @@ describe("dialog", () => {
     expect(broken(`<div role="group">`)).toEqual([])
   })
 
+  it("lets a selector that finds a dialog through: it makes none", () => {
+    expect(broken(`const open = document.querySelectorAll('[role="dialog"]')`)).toEqual([])
+    expect(broken(`const LAYERS = '[role="dialog"], [ role = "alertdialog" ], [role="menu"]'`)).toEqual([])
+  })
+
   it("lets components/ui build its own", () => {
     expect(broken(`<dialog open>`, SHARED)).toEqual([])
   })
@@ -488,12 +493,18 @@ describe("what counts as code", () => {
     ])
   })
 
-  it("checks only src/**/*.tsx", () => {
+  it("checks src/**/*.tsx and the .ts beside them, but not tests", () => {
     const bad = `<button className="uppercase text-lg" />`
     expect(checkText("e2e/example.tsx", bad)).toEqual([])
-    expect(checkText("src/lib/example.ts", bad)).toEqual([])
     expect(checkText("src/index.css", bad)).toEqual([])
     expect(checkText("src/screens/Example.tsx", bad).length).toBeGreaterThan(0)
+    // Class strings live in .ts too (lib/laneHalf.ts, lib/labels.ts).
+    expect(checkText("src/lib/example.ts", `const look = "rounded-[3px] text-[13px]"`)).toEqual([
+      { rule: "px-text", line: 1, text: "text-[13px]" },
+      { rule: "radius", line: 1, text: "rounded-[3px]" },
+    ])
+    expect(checkText("src/lib/example.test.ts", bad)).toEqual([])
+    expect(checkText("src/components/ui/button.test.ts", bad)).toEqual([])
   })
 
   it("checks stories like any other file", () => {

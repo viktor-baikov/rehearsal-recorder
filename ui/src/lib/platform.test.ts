@@ -36,6 +36,17 @@ describe("words", () => {
     expect(w.trash).toBe("the Trash")
   })
 
+  it("cannot be changed by whoever asks for them: every caller shares them", () => {
+    for (const s of ["mac", "windows", "other"] as const) {
+      const w = words(s)
+      expect(Object.isFrozen(w), s).toBe(true)
+      expect(() => {
+        ;(w as { trash: string }).trash = "the Bin"
+      }, s).toThrow(TypeError)
+    }
+    expect(words("windows").trash).toBe("the Recycle Bin")
+  })
+
   it("are those of the system we are on when none is named", () => {
     setSystem("windows")
     expect(words().folderButton).toBe("Show in Explorer")
