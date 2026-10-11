@@ -1,0 +1,113 @@
+# The website, reha.stream (site/ in this repository), built and tested,
+# and laid out as the files that go up to Vercel, left as the artifact
+# `site`. A pull request's check (checks.yml) and a release (release.yml)
+# both build it here; only the release's deploy job and a pull request's
+# preview put it on Vercel. The job checks out first, and uploads the
+# Playwright report itself if a step fails.
+#
+# The picture a chat shows for a link to the site, og.png, is drawn here
+# from the build (npm run og, after the build and before the tests), so it
+# shows the app as the build has it.
+
+name: The site, built and tested
+description: Builds and tests reha.stream, draws its link picture and lays the build out for Vercel.
+
+inputs:
+  version:
+    description: The release's tag; empty in a pull request, where the build takes the newest version in CHANGELOG.md
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # For the build, and for the tests, which check the page against it.
+    - name: Which version
+      if: inputs.version != ''
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: echo "VITE_SITE_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version: "22"
+        cache: npm
+        cache-dependency-path: |
+          ui/package-lock.json
+          site/package-lock.json
+
+    # The site draws with the interface's components and its React, so the
+    # interface's packages come first.
+    - name: Install
+      shell: bash
+      run: |
+        npm ci --prefix ui
+        npm ci --prefix site
+
+    - name: Vitest
+      shell: bash
+      working-directory: site
+      run: npm test
+
+    - name: Build
+      shell: bash
+      working-directory: site
+      run: npm run build
+
+    - name: Install the browser
+      shell: bash
+      working-directory: site
+      run: npx playwright install --with-deps chromium
+
+    # The app in the link picture draws in the computer's own font, which
+    # the runner does not have: Inter stands in for it, as when the picture
+    # was chosen (site/scripts/og-fonts.conf). The browser's step has just
+    # updated apt's lists. A stuck mirror fails it after five minutes rather
+    # than hold the job.
+    - name: Fonts for the link picture
+      shell: bash
+      run: |
+        timeout 300 sudo apt-get install -y --no-install-recommends fonts-inter
+        sudo cp site/scripts/og-fonts.conf /etc/fonts/conf.d/56-og-fonts.conf
+        fc-match -f '%{family}\n' -- -apple-system | grep -q '^Inter' ||
+          { echo "::error::The link picture would not be in Inter."; exit 1; }
+
+    # og.png, the picture a chat shows for a link to the site: og.html,
+    # photographed from this build (see site/scripts/og.mjs).
+    - name: Draw the link picture
+      shell: bash
+      working-directory: site
+      run: npm run og
+
+    - name: Playwright
+      shell: bash
+      working-directory: site
+      run: npm run test:e2e
+
+    # What goes up to Vercel: the build's files, served as they are, and a
+    # vercel.json that says so (nothing to install, nothing to build, the
+    # files at the top), whatever the project's settings there say, with
+    # the site's routes from vercel-config.json. Vercel still makes the
+    # deployment through its own build step, which is what gives it the
+    # addresses Web Analytics and Speed Insights load their scripts from
+    # (/_vercel/insights/, /_vercel/speed-insights/): a build uploaded
+    # ready-made (vercel deploy --prebuilt, until 0.11.1) served neither.
+    - name: Lay out the build for Vercel
+      shell: bash
+      run: |
+        mkdir -p site/vercel-upload
+        cp -R site/dist/. site/vercel-upload/
+        routes='[]'
+        if [ -f site/vercel-config.json ]; then
+          routes=$(jq '.routes' site/vercel-config.json)
+        fi
+        jq -n --argjson routes "$routes" \
+          '{framework: null, installCommand: "", buildCommand: "", outputDirectory: ".", routes: $routes}' \
+          > site/vercel-upload/vercel.json
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: site
+        path: site/vercel-upload/
+        if-no-files-found: error

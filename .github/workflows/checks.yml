@@ -194,3 +194,61 @@ jobs:
           name: playwright-report
           path: ui/playwright-report/
           if-no-files-found: ignore
+
+  # The website, built and tested as a release would build it, so an
+  # interface change that breaks the page shows up here, not on the day of
+  # a release. In a pull request the version is the newest one in
+  # CHANGELOG.md.
+  site:
+    name: site
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/site
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: site-playwright-report
+          path: site/playwright-report/
+          if-no-files-found: ignore
+
+  # A pull request's build on Vercel as a preview, never production: the
+  # pull request shows it as "View deployment", and it opens after logging
+  # in to Vercel, with Vercel's toolbar for comments on the page. Only a pull
+  # request that changes the site itself gets one (Alex, 2026-10-11). Secrets
+  # reach a pull request only from a branch of this repository, so one from
+  # a fork or from Dependabot is built and tested and gets no preview. It
+  # needs the repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and
+  # VERCEL_PROJECT_ID, as the release's deploy does.
+  preview:
+    name: site · preview
+    needs: [changes, site]
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]' &&
+      needs.changes.outputs.preview == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: site
+
+      - name: Deploy
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          url=$(npx --yes vercel@62.4.0 deploy site --token "$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "This pull request's site is at $url" >> "$GITHUB_STEP_SUMMARY"
