@@ -32,6 +32,10 @@ from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, 
 LABEL_COLOURS = ("grey", "red", "amber", "green", "teal", "blue", "violet", "pink")
 LABEL_NAME_MAX = 40
 
+# Why something a record names cannot come back: said to the person as it is.
+REHEARSAL_GONE = "Its rehearsal is gone."
+TAKE_GONE = "Its take is gone."
+
 
 class LabelRefused(ValueError):
     """A change to the labels that cannot be made. The message says why, to
@@ -983,11 +987,15 @@ class Library:
             row = self._find_take(db, folder, take_number, selectinload(Take.markers))
             if row is None:
                 return None
-            current = [{"at": m.at, "label_id": m.label_id, "note": m.note}
-                       for m in row.markers]
-            kept = sorted(self._labelled(db, fn(current)), key=lambda m: m["at"])
-            row.markers = [Marker(**m) for m in kept]
-            return kept
+            return self._rewrite_markers(db, row, fn)
+
+    def _rewrite_markers(self, db, row, fn):
+        """A take's marks as fn(its marks as they are) gives them, each on a
+        label there is (_labelled), in time order. Returns them as kept."""
+        current = [{"at": m.at, "label_id": m.label_id, "note": m.note} for m in row.markers]
+        kept = sorted(self._labelled(db, fn(current)), key=lambda m: m["at"])
+        row.markers = [Marker(**m) for m in kept]
+        return kept
 
     def set_starred(self, folder, take_number, starred):
         """Puts ★ on the take, or takes it off. Returns the take, or None
@@ -1129,7 +1137,7 @@ class Library:
             for record in records:
                 rehearsal = self._rehearsal_of(db, record.get("rehearsal"))
                 if rehearsal is None:
-                    raise ValueError("Its rehearsal is gone.")
+                    raise ValueError(REHEARSAL_GONE)
                 self._put_take_back(db, rehearsal, record)
 
     def _put_take_back(self, db, rehearsal, record):
@@ -1175,11 +1183,12 @@ class Library:
                     return True
         return False
 
-    def cloud_paths(self):
+    def cloud_paths(self, but=None):
         """Every path in the cloud folder a take in the library names as its
-        copy, relative to the cloud folder."""
+        copy, relative to the cloud folder; but the take whose id is `but`."""
         with self._session() as db:
             return {p for row in db.scalars(select(CloudCopy))
+                    if but is None or row.take_id != but
                     for p in (row.mix, row.tracks) if p}
 
     def take_there(self, record):
@@ -1215,27 +1224,26 @@ class Library:
         """
         A crop undone, in one transaction: the take (its row by id, number
         `take_number`, in the rehearsal `ref` names, wherever that is now)
-        gets back its length, and the marks fn(its marks as they are) gives,
-        each on a label there is (_labelled); and has no cloud copy, the one
-        it has being of the cropped take. Returns the marks as kept. Raises
-        ValueError, saying why, when its rehearsal or the take is gone.
+        gets back its length, and the marks fn(its marks as they are) gives
+        (_rewrite_markers); and has no cloud copy, the one it has being of
+        the cropped take. Returns {"markers": as kept, "cloud": the copy it
+        had, as take() gives it}. Raises ValueError, saying why, when its
+        rehearsal or the take is gone.
         """
         with self._session.begin() as db:
             rehearsal = self._rehearsal_of(db, ref)
             if rehearsal is None:
-                raise ValueError("Its rehearsal is gone.")
+                raise ValueError(REHEARSAL_GONE)
             row = db.get(Take, take_id) if take_id is not None else None
             if (row is None or row.rehearsal_id != rehearsal.id
                     or row.take_number != int(take_number)):
-                raise ValueError("Its take is gone.")
-            current = [{"at": m.at, "label_id": m.label_id, "note": m.note}
-                       for m in row.markers]
-            kept = sorted(self._labelled(db, fn(current)), key=lambda m: m["at"])
-            row.markers = [Marker(**m) for m in kept]
+                raise ValueError(TAKE_GONE)
+            kept = self._rewrite_markers(db, row, fn)
+            had = self._cloud_dict(self._copy_data(row.cloud_copy), self._cloud_dir())
             row.duration_sec = float(duration_sec)
             row.cloud_error = None
             row.cloud_copy = None
-            return kept
+            return {"markers": kept, "cloud": had}
 
     def _marks_back(self, db, markers):
         """Recorded marks as rows, every column kept, each on a label there
