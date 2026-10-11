@@ -142,6 +142,71 @@ describe("raw-colour", () => {
     expect(broken(`const css = "background: linear-gradient(#fff, #000)"`)).toEqual(["raw-colour", "raw-colour"])
   })
 
+  it("catches a hex inside a longer style value, whatever the quotes", () => {
+    // Each as a string and as a template literal; the property is outside the
+    // string, so the key before the opening quote is what says it holds a colour.
+    const values = [
+      ["boxShadow", "0 0 0 1px #fff", 1],
+      ["border", "1px solid #1a1a1a", 1],
+      ["background", "linear-gradient(to right, #fff, #000)", 2],
+      ["filter", "drop-shadow(0 0 2px #fff)", 1],
+      ["color", "color-mix(in oklab, #fff 20%, transparent)", 1],
+      ["backgroundImage", "radial-gradient(#fff 10%, transparent)", 1],
+      ["textShadow", "0 0 4px #000", 1],
+      ["trackColor", "linear-gradient(#fff, #000)", 2],
+      ["stroke", "url(#a) #fff", 1],
+    ]
+    for (const [key, value, count] of values) {
+      const expected = Array(count).fill("raw-colour")
+      expect(broken(`<i style={{ ${key}: "${value}" }} />`), `${key}, string`).toEqual(expected)
+      expect(broken(`<i style={{ ${key}: '${value}' }} />`), `${key}, single quotes`).toEqual(expected)
+      expect(broken("<i style={{ " + key + ": `" + value + "` }} />"), `${key}, template`).toEqual(expected)
+    }
+  })
+
+  it("catches a hex after an interpolation, and in a quoted key", () => {
+    expect(broken("<i style={{ boxShadow: `0 0 ${w}px #fff` }} />")).toEqual(["raw-colour"])
+    expect(broken("<i style={{ boxShadow: `${a} ${b} #fff` }} />")).toEqual(["raw-colour"])
+    expect(broken(`const look = { "box-shadow": "0 0 0 1px #fff" }`)).toEqual(["raw-colour"])
+    expect(broken(`<circle stroke-width="2" stop-color="url(#g) #fff" />`)).toEqual(["raw-colour"])
+  })
+
+  it("catches a hex in a rule of CSS, one line or several", () => {
+    expect(broken("const css = `.a { color: #fff }`")).toEqual(["raw-colour"])
+    expect(broken(`const css = ".a { background-color: #fff; border: 1px solid #000 }"`)).toEqual([
+      "raw-colour",
+      "raw-colour",
+    ])
+    const text = ["const css = `", "  .a {", "    color: #fff;", "  }", "`"].join("\n")
+    expect(checkText(SCREEN, text)).toEqual([{ rule: "raw-colour", line: 3, text: "#fff" }])
+  })
+
+  it("does not take every string in a style for a colour", () => {
+    expect(broken(`<i label="Take #123" />`)).toEqual([])
+    expect(broken(`<i style={{ label: "Take #123", content: "item #fee" }} />`)).toEqual([])
+    expect(broken("<i style={{ content: `item #fee` }} />")).toEqual([])
+    expect(broken(`<i data-note="see #add" aria-label="Take #fee" />`)).toEqual([])
+  })
+
+  it("reads a property only when it is one that holds a colour", () => {
+    expect(broken(`const css = "color: #fff"`)).toEqual(["raw-colour"])
+    expect(broken(`const css = "border: 1px solid #fff"`)).toEqual(["raw-colour"])
+    expect(broken(`const css = "fill:#000"`)).toEqual(["raw-colour"])
+    expect(broken(`const css = "box-shadow: 0 0 0 1px #fff"`)).toEqual(["raw-colour"])
+    expect(broken(`const css = "take: #123 saved"`)).toEqual([])
+    expect(broken(`toast("error: #404")`)).toEqual([])
+    expect(broken(`<i title="note: #fee" />`)).toEqual([])
+    expect(broken(`const msg = "image: #123 uploaded, text: #add"`)).toEqual([])
+  })
+
+  it("does not skip a gradient's to-stop as if it were a link", () => {
+    const text = [`const g = {`, `  from: "#fff",`, `  to: "#000",`, `}`].join("\n")
+    expect(checkText(SCREEN, text)).toEqual([
+      { rule: "raw-colour", line: 2, text: "#fff" },
+      { rule: "raw-colour", line: 3, text: "#000" },
+    ])
+  })
+
   it("catches a colour function written in the code", () => {
     expect(broken(`<i style={{ color: "oklch(0.7 0.1 50)" }} />`)).toEqual(["raw-colour"])
     expect(broken(`<i style={{ background: "rgb(0, 0, 0)" }} />`)).toEqual(["raw-colour"])

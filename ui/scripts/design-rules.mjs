@@ -54,13 +54,44 @@ const COLOUR_FUNCTION = re(
 // A string that is a link, a name or a label may be spelled like a hex ("#add"
 // is both an anchor and a colour), so as a whole string value it is only a
 // colour when the thing it is the value of is not one of these.
-const NOT_A_COLOUR_KEY = /^(?:href|xlinkHref|id|htmlFor|for|to|name|key|src|alt|title|placeholder|aria-[\w-]+)$/
+const NOT_A_COLOUR_KEY = /^(?:href|xlinkHref|id|htmlFor|for|name|key|src|alt|title|placeholder|aria-[\w-]+)$/
+
+// The CSS and SVG properties that hold a colour, or something with one in it
+// (a shadow, a border, a gradient), in either spelling (`boxShadow`,
+// `box-shadow`), and the props that hand one to them (`trackColor`). When a
+// string is the value of one, every hex in it is a colour; for any other key
+// only a hex that is the whole string is (`label="Take #123"` is not one).
+const COLOUR_PROPERTY = String.raw`(?:(?:colou?r|background|bg|border|outline|text-?decoration|filter|fill|stroke|mask)[\w-]*|[\w-]*(?:colou?r|shadow|gradient|background))`
+const COLOUR_KEY = new RegExp(`^${COLOUR_PROPERTY}$`, "i")
+// ... and the same inside a string of CSS: `color: #fff`, `.a { fill: #000 }`.
+const COLOUR_DECLARATION = new RegExp(String.raw`(?:^|[;{])\s*${COLOUR_PROPERTY}\s*:[^;}]*$`, "i")
+
+// Where the string that holds `at` begins: the index of its opening quote, or
+// -1 when it began on an earlier line (a template literal over several lines).
+// A string with a ${ } in it is several stretches of text with code between;
+// the stretch after one starts at the `}` that closes it, and the search
+// carries on from the `${`.
+function stringStart(code, quoted, at) {
+  let j = at
+  for (;;) {
+    while (j > 0 && quoted[j - 1]) j--
+    if (code[j] === '"' || code[j] === "'" || code[j] === "`") return j
+    if (code[j] !== "}") return -1
+    j--
+    while (j > 0 && !(quoted[j] && code[j] === "{" && code[j - 1] === "$")) j--
+    if (j <= 0) return -1
+    j--
+  }
+}
 
 /** Whether a hex found by HEX is a colour and not an anchor, a number or a
  *  label. It is, inside a string, when it is
  *   - in a Tailwind arbitrary value: `bg-[#fff]`, `shadow-[0_0_0_1px_#fff]`;
+ *   - anywhere in the value of a property that holds a colour:
+ *     `boxShadow: "0 0 0 1px #fff"`, `background: "linear-gradient(#fff, #000)"`;
  *   - the whole string: `"#1a1a1a"`, `fill="#fff"` (but not `href="#add"`);
- *   - in a CSS declaration: `"color: #fff"`, `"background: linear-gradient(#fff, #000)"`.
+ *   - in a declaration written in the string: `"border: 1px solid #fff"`,
+ *     `.a { color: #fff }`.
  *  "Take #123" in a label, or in running text, is none of these. */
 function hexIsColour(code, quoted, m) {
   const at = m.index
@@ -78,16 +109,21 @@ function hexIsColour(code, quoted, m) {
     }
   }
 
-  let start = at
-  while (start > 0 && quoted[start - 1]) start--
+  const opening = stringStart(code, quoted, at)
+  const key = opening < 0 ? null : /([\w$-]+)["']?\s*[=:]\s*\{?\s*$/.exec(code.slice(0, opening))
+  if (key && COLOUR_KEY.test(key[1])) return true
+
   const quote = code[at - 1]
-  if (start === at - 1 && /["'\x60]/.test(quote) && code[at + m[0].length] === quote) {
-    const key = /([\w$-]+)\s*[=:]\s*\{?\s*$/.exec(code.slice(0, at - 1))
+  if (opening === at - 1 && code[at + m[0].length] === quote) {
     return !(key && NOT_A_COLOUR_KEY.test(key[1]))
   }
 
-  const text = code.slice(start, at).replace(/^["'\x60]/, "")
-  return /(?:^|;)\s*[a-z-]+\s*:[^;]*$/.test(text)
+  let from = opening + 1
+  if (opening < 0) {
+    from = at
+    while (from > 0 && quoted[from - 1]) from--
+  }
+  return COLOUR_DECLARATION.test(code.slice(from, at))
 }
 
 /** Whether the `{` that holds position `col` of line `ctx.i` is a style
