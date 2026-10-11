@@ -11158,6 +11158,30 @@ def main():
        cut_d6.get("ok") is True
        and cr.undo_trash(cut_d6.get("undo")) == {"ok": True, "kind": "crop", "temp_dir": str(d6)}
        and bytes71(d6) == uncut_d6)
+    # A discard of the draft arriving while it is being cropped, as from
+    # another thread: before the crop's first os.replace, its files aside.
+    d7, tracks_d7, note_d7 = draft_c(7)
+    during_d7 = {}
+
+    class Discarding_c:
+        """os, except that the crop's first os.replace is preceded by a
+        discard of the draft."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def replace(self, src, dst):
+            if "answer" not in during_d7:
+                during_d7["answer"] = cr.discard_take(str(d7))
+            return os71.replace(src, dst)
+
+    apimod_c.os = Discarding_c()
+    cut_d7 = cr.crop_draft(str(d7), tracks_d7, 1.0, 3.0, notes=[note_d7])
+    apimod_c.os = os71
+    ok("a draft being cropped is not discarded meanwhile: that waits until the crop is done",
+       during_d7.get("answer") == {"ok": False, "error": "Wait until the crop is done."}
+       and cut_d7.get("ok") is True and wav_frames(d7 / "Gtr.wav") == 2 * SR)
+    cr.end_trash(cut_d7.get("undo"))
     cr.end_trash(cut_d5.get("undo"))
     cr.end_trash(dropped_d5.get("undo"))
 
@@ -11585,17 +11609,201 @@ def main():
     drain_c(cr_v)
     cr_v.end_trash(token30)
 
-    print("  its rehearsal gone")
-    dir13 = take_c(cr_v, folder_c, 13, "Oktyabr")
-    token13 = cr_v.crop_take(str(folder_c), 13, 1.0, 3.0).get("undo")
-    cropped13 = bytes71(dir13)
-    cr_v.forget_rehearsal(str(folder_c))
-    ok("o. Undo of a crop whose rehearsal is gone says so, and moves nothing",
-       cr_v.undo_trash(token13) == {"ok": False, "error": "Its rehearsal is gone."}
-       and bytes71(dir13) == cropped13 and token13 in entries71(rec_c))
-    cr_v.end_trash(token13)
+    print("  an Undo while the take is cropped again")
+    dir31 = take_c(cr_v, folder_c, 31, "Kapel")
+    uncut31 = bytes71(dir31)
+    first31 = cr_v.crop_take(str(folder_c), 31, 1.0, 3.0)
+    cropped31 = bytes71(dir31)
+    during31 = {}
 
-    cr_v.shutdown()
+    class Racing_c:
+        """os, except that before the second crop's first os.replace (its
+        originals aside, its new files written) the first crop is undone and
+        the take deleted, as from other threads; then that replace fails, and
+        the second crop with it."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def replace(self, src, dst):
+            if "undo" not in during31:
+                during31["undo"] = cr_v.undo_trash(first31.get("undo"))
+                during31["delete"] = cr_v.delete_take(str(folder_c), 31)
+                during31["takes"] = cr_v.delete_takes(str(folder_c), [31])
+                during31["rehearsal"] = cr_v.delete_rehearsal(str(folder_c))
+                during31["held"] = bytes71(held_c(first31.get("undo"), dir31))
+                during31["aside"] = bytes71(folder_c / f"{dir31.name} (before crop)")
+                during31["writing"] = sorted(
+                    n for n in bytes71(dir31) if n.startswith(apimod_c.WRITING_PREFIX))
+                raise OSError(5, "Input/output error", str(dst))
+            return os71.replace(src, dst)
+
+    apimod_c.os = Racing_c()
+    second31 = cr_v.crop_take(str(folder_c), 31, 0.25, 1.75)
+    apimod_c.os = os71
+    wait_c = {"ok": False, "error": "Wait until the crop is done."}
+    ok("an Undo of a take's crop while the take is being cropped again waits until that crop "
+       "is done, and so does deleting the take",
+       during31.get("undo") == wait_c and during31.get("delete") == wait_c)
+    ok("on its own, with others, or with its rehearsal",
+       during31.get("takes") == {"ok": True, "deleted": [], "undo": None, "failed": [
+           {"take_number": 31, "error": "Wait until the crop is done."}]}
+       and during31.get("rehearsal") == wait_c)
+    ok("every version of the take on disk meanwhile: as it was, in the first crop's entry; "
+       "cropped once, beside the take; cropped twice, being written",
+       during31.get("held") == uncut31 and during31.get("aside") == cropped31
+       and during31.get("writing") == sorted(apimod_c.WRITING_PREFIX + n
+                                             for n in ("Bass.wav", "Drums.mid", "Gtr.wav")))
+    ok("the second crop failing, the take is as the first one left it, and that crop's Undo "
+       "still waits",
+       second31.get("ok") is False and bytes71(dir31) == cropped31
+       and first31.get("undo") in entries71(rec_c))
+    ok("and brings back the take as it was",
+       cr_v.undo_trash(first31.get("undo")).get("ok") is True and bytes71(dir31) == uncut31
+       and length_c(cr_v, folder_c, 31) == 4.0)
+
+    print("  an end that cannot finish an Undo")
+
+    def aside_c(token, take_dir):
+        """Where a crop's entry holds the cropped files during its Undo."""
+        return rec_c / "_deleting" / str(token) / "1" / f"{take_dir.name} (cropped)"
+
+    def versions_c(take_dir, token):
+        """Every file of a take's two versions, wherever each is: in its
+        place, or in its crop's entry."""
+        entry = rec_c / "_deleting" / str(token)
+        return sorted([*bytes71(take_dir).values(),
+                       *(b for name, b in bytes71(entry).items()
+                         if not name.endswith("record.json"))])
+
+    def stuck_c(api, number, title):
+        """A take cropped, and its crop's Undo left part way, as the 23rd
+        was: Gtr.wav's place would take neither version."""
+        take_dir = take_c(api, folder_c, number, title)
+        uncut = bytes71(take_dir)
+        token = api.crop_take(str(folder_c), number, 1.0, 3.0).get("undo")
+        cropped = bytes71(take_dir)
+        jammed_c["place"] = take_dir / "Gtr.wav"
+        holding71.os = Jammed_c()
+        api.undo_trash(token)
+        holding71.os = os71
+        return take_dir, uncut, cropped, token
+
+    dir32, uncut32, cropped32, token32 = stuck_c(cr_v, 32, "Rosa")
+    cr_v._lib.uncrop_take = locked_c
+    mark_c = len(sent71)
+    ended32 = cr_v.end_trash(token32)
+    del cr_v._lib.uncrop_take
+    ok("an end whose library refuses an Undo left part way keeps it under way, both versions "
+       "of the take on disk, and nothing in the Trash",
+       ended32 == {"ok": False, "error": "database is locked"}
+       and record_c(token32).get("rows") == "restoring"
+       and bytes71(dir32) == uncut32 and bytes71(aside_c(token32, dir32)) == cropped32
+       and sent_c(mark_c) == [])
+    ok("and the next end finishes it",
+       cr_v.end_trash(token32) == {"ok": True} and bytes71(dir32) == uncut32
+       and length_c(cr_v, folder_c, 32) == 4.0 and marks_c(cr_v, folder_c, 32) == marks_before
+       and sent_c(mark_c) == [f"{dir32.name} (cropped)"] and token32 not in entries71(rec_c))
+
+    dir33, uncut33, cropped33, token33 = stuck_c(cr_v, 33, "Lilia")
+
+    def unavailable_c(*args, **kwargs):
+        raise apimod_c.LibraryUnavailable("The library is not open")
+
+    cr_v._lib.uncrop_take = unavailable_c
+    mark_c = len(sent71)
+    ended33 = cr_v.end_trash(token33)
+    del cr_v._lib.uncrop_take
+    ok("and so does one whose library is not open",
+       ended33 == {"ok": False, "error": "The library is not open"}
+       and record_c(token33).get("rows") == "restoring"
+       and bytes71(dir33) == uncut33 and bytes71(aside_c(token33, dir33)) == cropped33
+       and sent_c(mark_c) == [])
+    cr_x = fresh_api(tmp_c)[1]
+    opened_c.append(cr_x)
+    ok("which the next start finishes",
+       bytes71(dir33) == uncut33 and length_c(cr_x, folder_c, 33) == 4.0
+       and sent_c(mark_c) == [f"{dir33.name} (cropped)"] and token33 not in entries71(rec_c))
+
+    dir34, uncut34, cropped34, token34 = stuck_c(cr_x, 34, "Fialka")
+    forward_c = {"place": dir34 / "Gtr.wav"}
+
+    class Forward_c:
+        """os, except that the uncut Gtr.wav will not go into its place
+        (Windows holding it, say); the cropped one would go back."""
+
+        def __getattr__(self, name):
+            return getattr(os71, name)
+
+        def rename(self, src, dst):
+            if Path(dst) == forward_c["place"] and "(before crop)" in str(src):
+                raise PermissionError(13, "The file is being used by another process", str(src))
+            return os71.rename(src, dst)
+
+    holding71.os = Forward_c()
+    mark_c = len(sent71)
+    ended34 = cr_x.end_trash(token34)
+    holding71.os = os71
+    ok("an end whose exchange fails on the way keeps the Undo under way, what moved staying "
+       "moved, every file of both versions on disk, and nothing in the Trash",
+       ended34.get("ok") is False and "being used" in str(ended34.get("error"))
+       and record_c(token34).get("rows") == "restoring" and sent_c(mark_c) == []
+       and versions_c(dir34, token34) == sorted([*uncut34.values(), *cropped34.values()])
+       and (dir34 / "Bass.wav").read_bytes() == uncut34["Bass.wav"])
+    ok("and the next end finishes it",
+       cr_x.end_trash(token34) == {"ok": True} and bytes71(dir34) == uncut34
+       and length_c(cr_x, folder_c, 34) == 4.0
+       and sent_c(mark_c) == [f"{dir34.name} (cropped)"] and token34 not in entries71(rec_c))
+
+    print("  an end the library fails")
+    take_c(cr_x, folder_c, 35, "Romashka")
+    cr_x._copy_to_cloud(str(folder_c), 35, "mix")
+    token35 = cr_x.crop_take(str(folder_c), 35, 1.0, 3.0).get("undo")
+    drain_c(cr_x)
+    copy35 = Path((cr_x._lib.take(folder_c, 35)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
+    cr_x._lib.cloud_paths = locked_c
+    cr_x.undo_trash(token35)
+    try:
+        ended35 = cr_x.end_trash(token35)
+    except RuntimeError as e:
+        ended35 = {"raised": str(e)}
+    del cr_x._lib.cloud_paths
+    ok("an end the library fails part way says so, and its entry waits for the next end",
+       ended35 == {"ok": False, "error": "database is locked"} and token35 in entries71(rec_c))
+    ok("which does it: the cropped copy out of the cloud folder, the take as it was asked for",
+       copy35.is_file() and cr_x.end_trash(token35) == {"ok": True}
+       and token35 not in entries71(rec_c) and not copy35.exists()
+       and cr_x._cloud_queue.states(str(folder_c)).get(35) == "queued")
+    drain_c(cr_x)
+
+    print("  a crop whose library fails before it starts")
+    dir36 = take_c(cr_x, folder_c, 36, "Vasilek")
+    uncut36 = bytes71(dir36)
+    waiting36 = entries71(rec_c)
+    cr_x._lib.cloud_paths = locked_c
+    try:
+        cut36 = cr_x.crop_take(str(folder_c), 36, 1.0, 3.0)
+    except RuntimeError as e:
+        cut36 = {"raised": str(e)}
+    del cr_x._lib.cloud_paths
+    ok("a crop whose library fails before it starts says so, and changes nothing: the take's "
+       "files, marks and length as they were, and nothing held",
+       cut36 == {"ok": False, "error": "Could not crop: database is locked"}
+       and bytes71(dir36) == uncut36 and length_c(cr_x, folder_c, 36) == 4.0
+       and marks_c(cr_x, folder_c, 36) == marks_before and entries71(rec_c) == waiting36
+       and not (folder_c / f"{dir36.name} (before crop)").exists())
+
+    print("  its rehearsal gone")
+    dir13 = take_c(cr_x, folder_c, 13, "Oktyabr")
+    token13 = cr_x.crop_take(str(folder_c), 13, 1.0, 3.0).get("undo")
+    cropped13 = bytes71(dir13)
+    cr_x.forget_rehearsal(str(folder_c))
+    ok("o. Undo of a crop whose rehearsal is gone says so, and moves nothing",
+       cr_x.undo_trash(token13) == {"ok": False, "error": "Its rehearsal is gone."}
+       and bytes71(dir13) == cropped13 and token13 in entries71(rec_c))
+    cr_x.end_trash(token13)
+
+    cr_x.shutdown()
     for api_c in opened_c[:-1]:
         api_c._library.close()
     apimod_c.move_to_trash = real_trash71

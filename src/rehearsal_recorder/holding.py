@@ -426,7 +426,8 @@ def check_swap(recordings: Path, token: str, inside: Path, aside: Path, pairs) -
     _swaps(recordings, token, inside, aside, pairs)
 
 
-def swap(recordings: Path, token: str, inside: Path, aside: Path, pairs) -> None:
+def swap(recordings: Path, token: str, inside: Path, aside: Path, pairs,
+         take_back: bool = True) -> None:
     """
     pairs: [(name, place, displace)]. The file `name` in the entry's folder
     `inside` goes to `place`; when something is at that place, and it may
@@ -440,6 +441,8 @@ def swap(recordings: Path, token: str, inside: Path, aside: Path, pairs) -> None
     A move that fails part way takes every pair back (unswap) and raises;
     should that fail too, Stuck says what would not go back, and where it
     is, and the caller's record carries on saying an exchange is under way.
+    Without `take_back` it only raises, whatever moved staying where it is,
+    for an exchange the caller's record says is under way to be done again.
     """
     todo = _swaps(recordings, token, inside, aside, pairs)
     try:
@@ -455,6 +458,8 @@ def swap(recordings: Path, token: str, inside: Path, aside: Path, pairs) -> None
                 raise FileExistsError(f"Something else is in its place now: {place}")
             os.rename(src, place)
     except OSError as e:
+        if not take_back:
+            raise
         try:
             unswap(recordings, token, inside, aside, pairs)
         except Stuck as again:

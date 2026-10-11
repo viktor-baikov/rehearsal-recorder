@@ -353,6 +353,10 @@ def _put_back_error(e):
 # (_end_uncrop), the notice ending first (end_trash).
 FINISHING = "It is being put back; it will be finished when the notice goes."
 
+# What an Undo, delete or discard of an item answers while it is being
+# cropped (Api._start_crop).
+CROPPING = "Wait until the crop is done."
+
 
 def _take_dir_name(take_number, name):
     """What a take's folder is called: "03 - Polyn 3"."""
@@ -655,6 +659,8 @@ class Api:
         # Renaming a take's files and putting names right do not run over
         # each other's folders.
         self._files_lock = threading.RLock()
+        # The takes and drafts being cropped (_start_crop), by identity.
+        self._cropping = []
         # Takes whose folder or cloud copy no longer carries their name are
         # renamed in the background — see names_pass.py.
         self._names_pass = NamesPass(
@@ -2769,6 +2775,8 @@ class Api:
                 return {"ok": False, "error": "It is not there any more"}
             ref = self._draft_rehearsal(draft_dir)
             ident = self._draft_identity(draft_dir, ref)
+            if ident is not None and self._being_cropped([ident]):
+                return {"ok": False, "error": CROPPING}
             self._end_before([ident] if ident is not None else [])
             # And again after: an end moves files.
             if not draft_dir.exists():
@@ -3508,6 +3516,38 @@ class Api:
                       done["aside"], e)
             return None, f"{e}, and is still at {done['aside']}"
 
+    def _start_crop(self, idents, reasons=None):
+        """
+        Before a crop moves anything, under _files_lock: an Undo of the item
+        (`idents`) that was broken off is finished first, as it moves the
+        item's files (_end_before with `broken`, only those made for one of
+        `reasons` when given); then the item is registered as being cropped,
+        until _end_crop. Meanwhile its crop's Undo (_uncrop), and its delete
+        or discard, wait ("Wait until the crop is done."): the crop moves the
+        take's files outside the lock, and its places are empty for a moment.
+        An earlier crop's entry ends only once this crop's own is held, so
+        that a crop that fails leaves that Undo there. False, with nothing
+        registered, when a crop of the item is under way already.
+        """
+        with self._files_lock:
+            self._end_before(idents, stale=False, reasons=reasons, broken=True)
+            if self._being_cropped(idents):
+                return False
+            self._cropping.extend(idents)
+            return True
+
+    def _end_crop(self, idents):
+        """The crop of the item is done (_start_crop), however it went."""
+        with self._files_lock:
+            for ident in idents:
+                self._cropping.remove(ident)
+
+    def _being_cropped(self, idents):
+        """Whether a crop of any of these items, or of something they hold
+        (a take of a rehearsal), is under way (_start_crop)."""
+        with self._files_lock:
+            return any(_ends(i, c) for i in idents if i for c in self._cropping)
+
     def crop_take(self, folder, take_number, start_sec, end_sec):
         """
         Keeps only [start, end) of a saved take. The take keeps its number,
@@ -3548,16 +3588,31 @@ class Api:
         if ref is None:
             return {"ok": False, "error": "Rehearsal not found"}
         ident = {"kind": "take", "rehearsal_id": ref["id"], "take_number": int(take_number)}
-        # An Undo of this take that was broken off (_broken_off) is finished
-        # first, as it moves the take's files, and the take is read again.
-        # An earlier crop's entry ends only once this crop's own is held
-        # (below): should this one fail, that Undo is still there.
-        with self._files_lock:
-            self._end_before([ident], stale=False, broken=True)
+        if not self._start_crop([ident]):
+            return {"ok": False, "error": CROPPING}
+        try:
+            return self._crop_take(folder, take_number, ident, ref, what_to_crop)
+        finally:
+            self._end_crop([ident])
+
+    def _crop_take(self, folder, take_number, ident, ref, what_to_crop):
+        """crop_take, once the take is registered as being cropped
+        (_start_crop)."""
+        # Read again: the end of a broken-off Undo can have moved its files.
         asked = what_to_crop()
         if not asked["ok"]:
             return asked
         take, tracks, notes, span = asked["take"], asked["tracks"], asked["notes"], asked["span"]
+        # What the crop needs of the library, read before any file moves: a
+        # library that fails here changes nothing on disk.
+        try:
+            rows = self._lib.take_record(folder, take_number)
+            live = self._lib.cloud_paths(but=rows["take"]["id"]) if rows is not None else set()
+        except Exception as e:  # noqa: BLE001 - nothing has moved: answered
+            log.error("crop: the library could not be read, so nothing was cropped: %s", e)
+            return {"ok": False, "error": f"Could not crop: {e}"}
+        if rows is None:
+            return {"ok": False, "error": "Take not found"}
 
         # Tracks are played through a memmap, and Windows will not let a
         # mapped file be renamed or removed. macOS will, which is exactly
@@ -3609,14 +3664,7 @@ class Api:
         had = _shape_of(take.get("cloud"))
         with self._files_lock:
             try:
-                rows = self._lib.take_record(folder, take_number)
-                if rows is not None:
-                    # Not a copy another take names now (one that came after
-                    # it under the same name): that one stays.
-                    self._remove_shared(self._unused(
-                        take.get("cloud"), self._lib.cloud_paths(but=rows["take"]["id"])))
-                found = (rows is not None
-                         and self._lib.edit_markers(folder, take_number, shift) is not None
+                found = (self._lib.edit_markers(folder, take_number, shift) is not None
                          and self._lib.update_take(
                              folder, take_number, duration_sec=done["duration_sec"]) is not None)
             except Exception:
@@ -3633,6 +3681,9 @@ class Api:
                     if not gone.get("ok"):
                         self._kept(token, gone.get("error"))
                 return {"ok": False, "error": "Take not found"}
+            # Not a copy another take names now (one that came after it under
+            # the same name): that one stays.
+            self._remove_shared(self._unused(take.get("cloud"), live))
             self._lib.set_cloud_copy(folder, take_number, None, None)
             token, error = self._hold_uncut({
                 "item": ident,
@@ -3704,12 +3755,18 @@ class Api:
         ref = self._draft_rehearsal(temp_dir)
         ident = self._draft_identity(temp_dir, ref)
         idents = [ident] if ident is not None else []
-        # As crop_take: a broken-off Undo of a crop of this draft is finished
-        # first, and an earlier crop's entry ends once this one's is held.
-        # Only a crop: a discard of a draft of that name is another draft's
-        # (keep_take).
-        with self._files_lock:
-            self._end_before(idents, stale=False, reasons={"crop"}, broken=True)
+        # As crop_take. Only a crop: a discard of a draft of that name is
+        # another draft's (keep_take).
+        if not self._start_crop(idents, reasons={"crop"}):
+            return {"ok": False, "error": CROPPING}
+        try:
+            return self._crop_draft(temp_dir, ident, idents, ref, what_to_crop)
+        finally:
+            self._end_crop(idents)
+
+    def _crop_draft(self, temp_dir, ident, idents, ref, what_to_crop):
+        """crop_draft, once the draft is registered as being cropped
+        (_start_crop)."""
         asked = what_to_crop()
         if not asked["ok"]:
             return asked
@@ -3927,6 +3984,8 @@ class Api:
                 if not self._lib.has(folder):
                     return {"ok": False, "error": "Rehearsal not found"}
                 return {"ok": False, "error": "Take not found"}
+            if self._take_being_cropped(folder, take_number):
+                return {"ok": False, "error": CROPPING}
             held = self._hold_takes(folder, [take_number], "take")
             if held["failed"]:
                 return {"ok": False, "error": held["failed"][0]["error"]}
@@ -3945,6 +4004,8 @@ class Api:
             for n in numbers:
                 if not self._inside_recordings(folder):
                     refused[n] = "Folder is outside the recordings directory"
+                elif self._take_being_cropped(folder, n):
+                    refused[n] = CROPPING
                 elif self._lib.take(folder, n) is not None:
                     found.append(n)
                 else:
@@ -3957,6 +4018,12 @@ class Api:
                 "failed": [{"take_number": n, "error": refused[n]}
                            for n in numbers if n in refused],
                 "undo": held["undo"]}
+
+    def _take_being_cropped(self, folder, take_number):
+        """Whether a crop of this take is under way (_start_crop)."""
+        ref = self._lib.rehearsal_ref(folder)
+        return ref is not None and self._being_cropped(
+            [{"kind": "take", "rehearsal_id": ref["id"], "take_number": int(take_number)}])
 
     def _hold_takes(self, folder, numbers, kind):
         """
@@ -4082,10 +4149,12 @@ class Api:
         if self._session is not None and Path(self._session["folder"]) == folder:
             return {"ok": False, "error": "Cannot delete the rehearsal in progress"}
         with self._files_lock:
-            self._release_player_in(folder)
             ref = self._lib.rehearsal_ref(folder)
             item = {"kind": "rehearsal", "folder": self._recordings_key(folder),
                     "rehearsal_id": None if ref is None else ref["id"]}
+            if self._being_cropped([item]):
+                return {"ok": False, "error": CROPPING}
+            self._release_player_in(folder)
             # Before its rows are read: an end can put a take of it back.
             self._end_before([item])
             rows = self._lib.rehearsal_record(folder)
@@ -4355,7 +4424,8 @@ class Api:
         with self._files_lock:
             try:
                 result = self._end(token)
-            except (LibraryUnavailable, OSError, ValueError) as e:
+            except Exception as e:  # noqa: BLE001 - every failure is answered
+                log.error("removal %s could not end now: %s", token, e)
                 result = {"ok": False, "error": str(e)}
             if not result.get("ok"):
                 self._kept(token, result.get("error"))
@@ -4560,30 +4630,45 @@ class Api:
     # cloud copy is forgotten, in one transaction; the record says it is done
     # ("undone"), with the cloud step still to do; the cloud step is done
     # (_uncrop_cloud); and only then do the cropped files go on to the Trash.
-    # A failure on the way, of whatever kind, takes it all back to the
-    # cropped take, and the entry waits as it was; one that cannot be taken
-    # back either is answered FINISHING. A crash on the way leaves the record
-    # saying "restoring", and the next end finishes it (_end_uncrop): which
-    # file is where says how far it got, and the marks are put back only
-    # once (the record's "expect"); or "undone", and the next end does what
-    # is left (_end).
+    # While the take is being cropped again, its Undo waits (_start_crop).
+    #
+    # In the person's Undo (undo_trash), a failure on the way, of whatever
+    # kind, takes it all back to the cropped take, and the entry waits as it
+    # was; one that cannot be taken back either is answered FINISHING. A
+    # crash on the way leaves the record saying "restoring", and the next end
+    # finishes it (_end_uncrop): which file is where says how far it got, and
+    # the marks are put back only once (the record's "expect"); or "undone",
+    # and the next end does what is left (_end). An end never takes the
+    # person's Undo back: one that fails on the way (the library, a file
+    # Windows holds) leaves it "restoring", both versions of the take on
+    # disk, for the next end. Only a place something else has taken since
+    # makes an end put the cropped take back, and end the crop as its own.
 
-    def _uncrop(self, token, data):
+    def _uncrop(self, token, data, at_end=False):
         """
         Undo of a crop, or one a crash or a failure broke off, done again
         (its record says "restoring"). {"ok": True, "kind": "crop", "folder",
         "take_numbers"}, or "temp_dir" for a draft's crop. {"ok": False,
         "error"}, whatever went wrong, with the cropped take in its places
         and the entry waiting as it was; or, when a broken-off one cannot
-        even be placed (its rehearsal gone, its drive not there), with
-        everything as it is. Raises holding.Stuck when a failure could not be
-        taken back either: the record then says "restoring", for the next
-        end (undo_trash answers FINISHING).
+        even be placed (its rehearsal gone, its drive not there) or the take
+        is being cropped again (CROPPING), with everything as it is. Raises
+        holding.Stuck when a failure could not be taken back either: the
+        record then says "restoring", for the next end (undo_trash answers
+        FINISHING).
+
+        `at_end` (_end_uncrop): nothing is taken back on a failure in the
+        exchange or in the library; it is raised, whatever moved staying
+        where it is and the record saying "restoring", for the next end.
+        Only a place taken since is taken back, as for the person's Undo.
         """
         rec = self._recordings_dir
         record = dict(data.get("record") or {})
         if record.get("undone"):
             return {"ok": False, "error": holding.GONE_TO_TRASH}
+        if self._being_cropped(_identities(record)):
+            # Its places are empty for a moment while the crop moves files.
+            return {"ok": False, "error": CROPPING}
         resuming = record.get("rows") == "restoring"
         inside = holding.held(rec, token, 0)
         if inside is None or (not resuming and not inside.is_dir()):
@@ -4675,11 +4760,19 @@ class Api:
             else:
                 # Recorded, but the app may have died before it was made.
                 aside.mkdir(parents=True, exist_ok=True)
-            holding.swap(rec, token, inside, aside, pairs)
+            holding.swap(rec, token, inside, aside, pairs, take_back=not at_end)
         except holding.Stuck:
             reopened()
             raise
         except OSError as e:
+            if at_end:
+                # An end never takes the person's Undo back: whatever moved
+                # stays moved, the record says "restoring", and the next end
+                # goes on from there.
+                reopened()
+                log.error("removal %s: its crop's Undo could not be finished now, and stays "
+                          "under way for the next end: %s", token, e)
+                raise
             # Nothing of it moved, or swap took back what had.
             return failed(_put_back_error(e))
 
@@ -4697,7 +4790,16 @@ class Api:
                 cleared = self._lib.uncrop_take(
                     record.get("rehearsal"), record.get("take_id"), n, marks,
                     float(record.get("duration_sec") or 0.0))["cloud"] or {}
-            except Exception as e:  # noqa: BLE001 - every failure is answered
+            except Exception as e:
+                # Every failure: answered, or at an end left under way.
+                if at_end:
+                    # As above: the uncut files stay in their places, the
+                    # cropped ones in the entry, until the next end.
+                    reopened()
+                    log.error("removal %s: the take's marks and length would not come back "
+                              "now; its crop's Undo stays under way for the next end: %s",
+                              token, e)
+                    raise
                 log.error("removal %s: the take's marks and length would not come back, "
                           "so the cropped take is put back: %s", token, e)
                 return failed(f"Could not put it back: {e}")
@@ -4757,6 +4859,12 @@ class Api:
         again (_uncrop_send). Then the record no longer carries it, so it is
         done once. Raises what the library raises, the entry then waiting for
         the next end, step and all.
+
+        Done again after a crash, or after the record could not be written,
+        the removal can meet the copy worker's known race (as _end's does):
+        a copy of the uncut take written but not yet recorded is not "in
+        use", and can go. The same step queues the take again, so that copy
+        is made once more.
         """
         step = record.get("cloud") or {}
         live = self._lib.cloud_paths()
@@ -4842,15 +4950,17 @@ class Api:
         """
         The end of a crop's entry whose Undo was broken off, by a crash or by
         a failure that could not be taken back: the Undo is finished, since
-        it was asked for. When it cannot be, the cropped take is put back
-        whole, as it was before the Undo, and the end is the crop's own: the
-        uncut take goes on to the Trash. {"ok": True}, or {"ok": False,
-        "error"} with the entry kept when neither can be done. Raises
-        LibraryUnavailable, the entry left as it is, when the library is
-        not open.
+        it was asked for (_uncrop with `at_end`). A failure on the way (the
+        library, a file that will not move) is not taken back: {"ok": False,
+        "error"}, the entry kept "restoring", both versions of the take on
+        disk, for the next end. Only when something else has taken one of its
+        places since is the cropped take put back whole, and the end is the
+        crop's own: the uncut take goes on to the Trash. {"ok": True}
+        otherwise. Raises LibraryUnavailable, the entry left as it is, when
+        the library is not open.
         """
         try:
-            done = self._uncrop(token, data)
+            done = self._uncrop(token, data, at_end=True)
         except holding.Gone:
             return {"ok": True}
         except LibraryUnavailable:
