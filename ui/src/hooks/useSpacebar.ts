@@ -32,6 +32,7 @@ export const LAYERS = '[role="dialog"], [role="listbox"], [role="menu"]'
 // The element the mouse last put focus on, or null when the keyboard did.
 let pointerFocused: Element | null = null
 let pointerWasLast = false
+let watchingInput = false
 let watchingFocus = false
 
 /**
@@ -52,17 +53,23 @@ let watchingFocus = false
  * those with nothing else for Escape to do: see stepOutOfField.
  */
 function watchFocus() {
+  watchInput()
   if (watchingFocus) return
   watchingFocus = true
+  window.addEventListener("keydown", stepOutOfField, true)
+}
+
+/**
+ * The half of watchFocus that tells the mouse's focus from the keyboard's
+ * (`focusIsLeftover`), without Escape's. The shared tooltip starts it when a
+ * trigger first shows: a tip opens at once on focus from the keys, and not
+ * on focus the mouse left, such as a menu shut with a click handing it back.
+ */
+export function watchInput() {
+  if (watchingInput) return
+  watchingInput = true
   window.addEventListener("pointerdown", () => (pointerWasLast = true), true)
-  window.addEventListener(
-    "keydown",
-    (e) => {
-      pointerWasLast = false
-      stepOutOfField(e)
-    },
-    true
-  )
+  window.addEventListener("keydown", () => (pointerWasLast = false), true)
   window.addEventListener(
     "focusin",
     (e) => {

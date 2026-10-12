@@ -1061,8 +1061,15 @@ export function Setup({
                 {update.latest && <NewDot />}
               </Button>
             </TooltipTrigger>
+            {/* "Settings" only repeats the button's name, so it is for the
+                eyes, and not read out again as its description; a new
+                version is news, and is. */}
             <TooltipContent>
-              {update.latest ? `${update.latest.version} is out` : "Settings"}
+              {update.latest ? (
+                `${update.latest.version} is out`
+              ) : (
+                <span aria-hidden>Settings</span>
+              )}
             </TooltipContent>
           </Tooltip>
         </div>

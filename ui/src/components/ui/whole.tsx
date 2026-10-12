@@ -53,7 +53,8 @@ export function useCut<T extends HTMLElement>() {
  * the fold), and Radix closes a tip when anything round its trigger scrolls.
  * So the tip stays open while focus is inside, from the focus and blur as
  * well as from Radix: only Esc, a press or a click, or focus leaving, closes
- * it then. A focus that comes with a press opens nothing, as in Radix.
+ * it then. A focus the mouse left opens nothing (tooltip.tsx): one that
+ * comes with a press, or that a menu shut with a click hands back.
  *
  * `figures` is the figure line beside the name when some of it has given
  * way (Figures' `onDropped`): the tip then says it whole under the name, cut
@@ -80,9 +81,10 @@ export function WholeTip({
   const says = cut || !!figures
   // Radix's: the pointer, a key, and the closing it does on its own.
   const [open, setOpen] = useState(false)
-  // Focus is inside the child, and did not come with a press.
+  // Focus is inside the child, and came from the keys: one the mouse left,
+  // with a press or as a menu shut with a click handed it back, comes with
+  // its default prevented (the shared TooltipTrigger).
   const [focused, setFocused] = useState(false)
-  const pressed = useRef(false)
   // Radix says "open" or "closed" only when that differs from the `open` it was
   // given, and while the name fits it is given false. So a hover over a name
   // that fits would be remembered with its leave never heard, and the tip
@@ -98,14 +100,10 @@ export function WholeTip({
     <Tooltip open={says && (open || focused)} onOpenChange={(next) => setOpen(says && next)}>
       <TooltipTrigger
         asChild
-        onPointerDown={() => {
-          pressed.current = true
-          setFocused(false)
-          document.addEventListener("pointerup", () => (pressed.current = false), { once: true })
-        }}
+        onPointerDown={() => setFocused(false)}
         onClick={() => setFocused(false)}
-        onFocus={() => {
-          if (!pressed.current) setFocused(true)
+        onFocus={(e) => {
+          if (!e.defaultPrevented) setFocused(true)
         }}
         onBlur={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false)

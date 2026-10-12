@@ -454,6 +454,79 @@ test.describe("a track's icon", () => {
     await expect(grid.locator("button:not([data-slot='button'])")).toHaveCount(0)
     await expect(chosen).toHaveCSS("font-size", "12px")
   })
+
+  test("one picked with the mouse leaves no tip behind, one picked with the keys says its name", async ({
+    page,
+  }) => {
+    await openApp(page, { before: "window.__BAND_ICONS__ = {Guitar: 'bass'};" })
+    const icon = page.getByRole("button", { name: "Track 1 icon" })
+    await icon.click()
+    const grid = page.getByRole("dialog", { name: "Icon for Guitar" })
+    await grid.getByRole("button", { name: "Drums" }).click()
+    await expect(grid).toHaveCount(0)
+    await expect(icon).toHaveAttribute("data-icon", "drums")
+    // The grid sends focus back to the button as it shuts, and the mouse
+    // put it there: no tip comes with it.
+    await expect(icon).toBeFocused()
+    await page.mouse.move(0, 0, { steps: 8 })
+    await page.waitForTimeout(800)
+    await expect(tooltip(page)).toHaveCount(0)
+
+    // From the keys, the tip says the one picked as focus comes back...
+    await page.keyboard.press("Enter")
+    await expect(grid).toBeVisible()
+    await page.keyboard.press("ArrowRight")
+    await page.keyboard.press("Enter")
+    await expect(grid).toHaveCount(0)
+    await expect(icon).toHaveAttribute("data-icon", "percussion")
+    await expect(icon).toBeFocused()
+    await expect(tooltip(page)).toHaveText("Percussion")
+    // ...and after Esc, which picks none.
+    await page.keyboard.press("Enter")
+    await expect(grid).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(grid).toHaveCount(0)
+    await expect(icon).toBeFocused()
+    await expect(tooltip(page)).toHaveText("Percussion")
+  })
+})
+
+// The header's icon buttons say what they are in the shared tip, never the
+// browser's own (C8); a tip that only repeats a button's name is for the
+// eyes, and is not read out a second time as its description.
+test.describe("the header's tips", () => {
+  test.use({ viewport: { width: 1180, height: 900 } })
+  const away = (page: Page) => page.mouse.move(0, 0, { steps: 8 })
+
+  test("the gear's tip says Settings once", async ({ page }) => {
+    await openApp(page)
+    const gear = page.getByRole("button", { name: "Settings", exact: true })
+    await gear.hover()
+    await expect(tooltip(page)).toHaveText("Settings")
+    await expect(gear).toHaveAccessibleDescription("")
+    await away(page)
+    await expect(tooltip(page)).toHaveCount(0)
+  })
+
+  test("the gear's tip says a new version is out, to a screen reader too", async ({ page }) => {
+    await openApp(page, { before: "window.__LATEST__ = {version: '0.3.0'};" })
+    const gear = page.getByRole("button", { name: "Settings, a new version is out" })
+    await gear.hover()
+    await expect(tooltip(page)).toHaveText("0.3.0 is out")
+    await expect(gear).toHaveAccessibleDescription("0.3.0 is out")
+  })
+
+  test("the playback volume says its level in the shared tip", async ({ page }) => {
+    await openApp(page)
+    const speaker = page.getByRole("button", { name: "Playback volume" })
+    await expect(speaker).toBeVisible()
+    await expect(speaker).not.toHaveAttribute("title")
+    await speaker.hover()
+    await expect(tooltip(page)).toHaveText(/^Playback volume \d+%$/)
+    await expect(speaker).toHaveAccessibleDescription(/^Playback volume \d+%$/)
+    await away(page)
+    await expect(tooltip(page)).toHaveCount(0)
+  })
 })
 
 /** A colour, as the browser draws it for a background: a theme colour by its
@@ -1368,6 +1441,22 @@ test.describe("Last time and long names on the shared pieces", () => {
 
     await check(beside(page), "beside the setup")
     await check(await openPanel(page), "in the panel")
+  })
+
+  test("a press the browser called off leaves the tip to the keyboard", async ({ page }) => {
+    await openBandApp(page, { stress: true })
+    const past = beside(page)
+    const name = songName(past, KALYCHANKA)
+    await expect(name.locator("[data-name]")).toHaveAttribute("data-cut")
+    // A touch that became a scroll: pressed, then called off, never released.
+    await name.dispatchEvent("pointerdown", { pointerId: 7, isPrimary: true, button: 0 })
+    await name.dispatchEvent("pointercancel", { pointerId: 7, isPrimary: true })
+    // Then the keys: from the row's ▶ to its name.
+    await past.locator(`[data-song='${KALYCHANKA}'] button[data-look]`).focus()
+    await page.keyboard.press("Tab")
+    await expect(name).toBeFocused()
+    await expect(tip(page)).toBeVisible()
+    await expect(tip(page)).toContainText(KALYCHANKA)
   })
 
   test("a cut name shows whole on hover", async ({ page }) => {

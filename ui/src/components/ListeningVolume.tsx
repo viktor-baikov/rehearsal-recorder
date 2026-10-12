@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { MasterControls, VolumeIcon } from "@/components/LaneControls"
 import {
   keepListeningVolume,
@@ -38,19 +39,25 @@ export function ListeningVolume() {
 
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Playback volume"
-          onPointerDown={() => (byPointer.current = true)}
-          onKeyDown={() => (byPointer.current = false)}
-          title={`Playback volume ${Math.round(volume * 100)}%`}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <VolumeIcon volume={volume} />
-        </Button>
-      </PopoverTrigger>
+      {/* How loud, in the shared tip beside the gear's: the button's name
+          says what it is, the tip what it is set to. */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Playback volume"
+              onPointerDown={() => (byPointer.current = true)}
+              onKeyDown={() => (byPointer.current = false)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <VolumeIcon volume={volume} />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{`Playback volume ${Math.round(volume * 100)}%`}</TooltipContent>
+      </Tooltip>
       <PopoverContent
         align="end"
         aria-label="Playback volume"
