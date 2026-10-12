@@ -319,7 +319,11 @@ test("the rehearsal screen has the same header", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Record take 3/ })).toBeVisible()
   await expect(fact(page, "Takes")).toHaveText("2, 1 song")
   await expect(fact(page, "On disk")).toHaveText("96 MB")
-  await expect(page.getByText("2 takes", { exact: true })).toHaveCount(0)
+  // The facts say the count once: no badge beside them in the header (the
+  // song's own "2 takes" is below it, with its takes).
+  const header = page.getByRole("banner")
+  await expect(header.getByRole("group", { name: "About this rehearsal" })).toBeVisible()
+  await expect(header.getByText("2 takes", { exact: true })).toHaveCount(0)
   await expect(page.getByText(/^\/rec\//)).toHaveCount(0)
   await facts(page).getByRole("button", { name: "Open folder" }).click()
   await expect.poll(async () => (await calls(page, "show_rehearsal_folder")).length).toBe(1)
