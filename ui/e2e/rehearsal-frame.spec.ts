@@ -363,4 +363,29 @@ test.describe("the screen", () => {
       expect(at.x + at.width).toBeLessThanOrEqual(960)
     }
   })
+
+  // What follows a bar goes under it only where there is no room for it beside
+  // the bar at its smallest (the test above): before that the longest take's
+  // bar is the first to give way. In a window of 880 the column has 12.75rem,
+  // too little for the badge of a false start, which goes under its bar, and
+  // enough for the length of every other take.
+  test("a take's length stays beside its bar, whose width gives way first, at 100 percent in an 880 by 680 window", async ({ page }) => {
+    await page.setViewportSize({ width: 880, height: 680 })
+    await openBandApp(page, { stress: "rehearsal" })
+    await startRehearsal(page, 33)
+    await settled(page)
+    const rows = page.locator("[data-take]:not([data-false-start])")
+    const under = await rows.evaluateAll((all) =>
+      all
+        .filter((row) => {
+          const middle = (el: Element) => el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2
+          const bar = row.querySelector("[data-bar-title]")!
+          const length = row.querySelector("span.tnum.grid")!
+          return Math.abs(middle(length) - middle(bar)) >= 4
+        })
+        .map((row) => (row as HTMLElement).dataset.take)
+    )
+    expect(under, "takes whose length is not beside their bar").toEqual([])
+    expect(await rows.count()).toBeGreaterThan(20)
+  })
 })

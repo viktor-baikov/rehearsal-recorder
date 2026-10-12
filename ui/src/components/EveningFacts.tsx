@@ -11,11 +11,14 @@ import { notify } from "@/lib/notices"
 import { useSystem, words } from "@/lib/platform"
 import { cn } from "@/lib/utils"
 
+const LABEL = "text-xs text-muted-foreground"
+const VALUE = "text-sm font-semibold"
+
 function Fact({ label, value, hidden }: { label: string; value: string; hidden?: boolean }) {
   return (
     <div className={cn("flex-col gap-0.5 whitespace-nowrap", hidden ? "hidden" : "flex")}>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm font-semibold">{value}</dd>
+      <dt className={LABEL}>{label}</dt>
+      <dd className={VALUE}>{value}</dd>
     </div>
   )
 }
@@ -33,29 +36,36 @@ function Fact({ label, value, hidden }: { label: string; value: string; hidden?:
  * at them says all four, as one line, once any has given way; a screen
  * reader is read that line whatever shows. The folder button never gives
  * way.
+ *
+ * `takes` is null while they are being read: the place is there all the
+ * same, as tall as ever, with the folder button in it and no figure (no
+ * zeros), so that what is beside it is laid out once and does not move when
+ * they arrive.
  */
 export function EveningFacts({
   takes,
   bytes,
   folder,
 }: {
-  takes: Take[]
+  takes: Take[] | null
   bytes: number | null
   folder: string
 }) {
-  const f = eveningOf(takes)
+  const f = takes && eveningOf(takes)
   const { folderButton } = words(useSystem())
   const show = async () => {
     const res = await api().show_rehearsal_folder(folder)
     if (!res.ok) notify({ key: "folder", kind: "error", text: res.error ?? "Could not open the folder" })
   }
   // In the order they stand; `keep` says which goes first (lowest first).
-  const facts = [
-    { label: "Length", value: lengthLabel(f.seconds), keep: 3 },
-    { label: "Takes", value: takesLine(f), keep: 2 },
-    { label: "In the cloud", value: `${f.inCloud} of ${f.takes}`, keep: 1 },
-    ...(bytes !== null ? [{ label: "On disk", value: formatBytes(bytes), keep: 0 }] : []),
-  ]
+  const facts = f
+    ? [
+        { label: "Length", value: lengthLabel(f.seconds), keep: 3 },
+        { label: "Takes", value: takesLine(f), keep: 2 },
+        { label: "In the cloud", value: `${f.inCloud} of ${f.takes}`, keep: 1 },
+        ...(bytes !== null ? [{ label: "On disk", value: formatBytes(bytes), keep: 0 }] : []),
+      ]
+    : []
   const parts = facts.map((x) => ({ text: `${x.label} ${x.value}`, keep: x.keep }))
   const all = joinFigures(parts, parts.map(() => true))
 
@@ -118,6 +128,13 @@ export function EveningFacts({
           </dl>
         </WholeTip>
         <span className="sr-only">{all}</span>
+        {/* As tall as a fact and no wider than nothing: the row is the same
+            height whether four facts show, one, or none (the takes not read,
+            or every fact given way), and the button in it stays where it is. */}
+        <div aria-hidden className="invisible flex w-0 flex-col gap-0.5 overflow-hidden">
+          <span className={LABEL}>&nbsp;</span>
+          <span className={VALUE}>&nbsp;</span>
+        </div>
         {/* The path is not shown (Alex, 2026-10-06): the button is enough, and
             it says where it goes when the mouse rests on it. */}
         <Tooltip>

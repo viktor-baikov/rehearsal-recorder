@@ -1013,11 +1013,18 @@ export function HistoryScreen({
   const reading = rehearsals === null || view === null
   const noSongs = songIndex !== null && songOrder.length === 0
   // The evening's figures, in the head of the pane of a rehearsal that is on
-  // disk and read: the overview under it does not say them, and the header
-  // has them only once a take is open.
+  // disk: the overview under it does not say them, and the header has them
+  // only once a take is open. Their place is there from the first frame,
+  // with the folder button and no figure until the takes are read, so that
+  // the name is laid out once, and not again when they arrive or at each
+  // switch from one rehearsal to another.
   const facts =
-    summary && readable && opened?.folder === current ? (
-      <EveningFacts takes={opened.takes} bytes={summary.disk_bytes} folder={opened.folder} />
+    summary && readable ? (
+      <EveningFacts
+        takes={opened?.folder === current ? opened.takes : null}
+        bytes={summary.disk_bytes}
+        folder={summary.folder}
+      />
     ) : null
 
   return (
@@ -1189,15 +1196,25 @@ export function HistoryScreen({
                         {formatDay(summary.created_at).split(" ")[0]}{" "}
                         {formatDateHuman(summary.created_at)}
                       </span>
-                      <span aria-hidden>·</span>
-                      {summary.set_name && (
-                        <>
-                          <SetName name={summary.set_name} className="shrink" />
+                      {/* The set and the folder are cut to what the name leaves
+                          and ask for no room of their own: a path of 60 letters
+                          would set the name's width, and the facts have what
+                          the name does not need. With under 5rem they are not
+                          drawn at all, rather than a dot and the edge of an
+                          icon. */}
+                      <div className="@container min-w-0 flex-1 overflow-hidden">
+                        <div className="hidden items-center gap-2 @min-[5rem]:flex">
                           <span aria-hidden>·</span>
-                        </>
-                      )}
-                      <FolderOpen className="size-3.5 shrink-0" />
-                      <span className="truncate font-mono">{summary.folder}</span>
+                          {summary.set_name && (
+                            <>
+                              <SetName name={summary.set_name} className="max-w-1/2 shrink-0" />
+                              <span aria-hidden>·</span>
+                            </>
+                          )}
+                          <FolderOpen className="size-3.5 shrink-0" />
+                          <span className="truncate font-mono">{summary.folder}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   {facts}

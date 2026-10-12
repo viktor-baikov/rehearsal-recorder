@@ -393,121 +393,130 @@ export function TakeRow({
           aria-keyshortcuts={here ? "Space" : undefined}
         />
 
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Button
-            type="button"
-            variant="ghost"
-            aria-label={takeButtonLabel(take, status)}
-            aria-describedby={error ? why : undefined}
-            onClick={() => open(take)}
-            disabled={missing}
-            data-starred={starred || undefined}
-            className={cn(
-              "relative h-8 min-w-24 shrink justify-start gap-2 overflow-hidden rounded-sm px-2.5 py-0 text-left whitespace-nowrap disabled:opacity-100",
-              missing || falseStart ? FILLS.quiet : starred ? FILLS.starred : FILLS.rest
-            )}
-            style={{ width: `${(take.duration_sec / longest) * BAR_SHARE}%` }}
-          >
-            {/* In this order, so each is over the one before: the ticks, then
-                the number and the name on their backing, which a mark in a
-                take's first seconds would otherwise strike out, then the part
-                played, which washes over the name, and the playhead, over
-                everything. */}
-            {(take.markers ?? []).map((m) => (
-              <MarkTick
-                key={m.at}
-                colour={labelOf(labels, m.label_id).colour}
-                at={along(m.at)}
-                className="inset-y-[5px]"
-              />
-            ))}
-            <span
-              data-bar-title
-              className="relative -mx-1 flex min-w-0 items-center gap-2 rounded-sm px-1 [background:inherit]"
-            >
-              <span className="tnum text-xs text-muted-foreground">
-                {String(take.take_number).padStart(2, "0")}
-              </span>
-              <span
-                className={cn(
-                  "flex min-w-0 text-sm",
-                  (unnamed || falseStart) && "text-muted-foreground"
-                )}
-              >
-                <TakeTitle take={take} cut />
-              </span>
-            </span>
-            {played !== null && (
-              <span
-                aria-hidden
-                className="absolute inset-y-0 left-0 bg-primary/20"
-                style={{ width: `${played}%` }}
-              />
-            )}
-            {played !== null && (
-              <span
-                aria-hidden
-                className="absolute inset-y-0 w-0.5 bg-primary"
-                style={{ left: `${played}%` }}
-              />
-            )}
-          </Button>
-
-          {/* Nothing jumps (B4): the time played has its room kept before
-              the length, so the bar keeps its width and the length its place
-              while the take plays here. */}
-          <span className={cn("tnum grid shrink-0 justify-items-end text-sm", falseStart && "text-muted-foreground")}>
-            <span aria-hidden className="invisible col-start-1 row-start-1">
-              {formatMMSS(here ? here.duration || take.duration_sec : take.duration_sec)} /{" "}
-              {formatMMSS(take.duration_sec)}
-            </span>
-            <span className="col-start-1 row-start-1">
-              {here && (
-                <>
-                  <span className="text-primary">{formatMMSS(here.position)}</span>
-                  {" / "}
-                </>
+        {/* Where the row has under 17rem for the bar, the length, the badge and
+            the rest, and they do not fit with the bar at its smallest, what
+            follows the bar goes under it, rather than out over the edge of
+            the screen: the buttons at the right keep their place, and at a
+            large scale in a narrow window that leaves nothing else. The bar
+            asks for 6rem and has the rest of the line up to its share, so
+            that it is the first to give way. */}
+        <div className="@container min-w-0">
+          <div className="flex items-center gap-x-2.5 gap-y-1 @max-[17rem]:flex-wrap">
+            <Button
+              type="button"
+              variant="ghost"
+              aria-label={takeButtonLabel(take, status)}
+              aria-describedby={error ? why : undefined}
+              onClick={() => open(take)}
+              disabled={missing}
+              data-starred={starred || undefined}
+              className={cn(
+                "relative h-8 min-w-24 flex-[1_1_6rem] justify-start gap-2 overflow-hidden rounded-sm px-2.5 py-0 text-left whitespace-nowrap disabled:opacity-100",
+                missing || falseStart ? FILLS.quiet : starred ? FILLS.starred : FILLS.rest
               )}
-              {formatMMSS(take.duration_sec)}
-            </span>
-          </span>
-          {falseStart && <Badge variant="warn">false start</Badge>}
-          {shared && (
-            <CloudCheck
-              data-in-cloud
-              aria-label="In the cloud folder"
-              className="size-3.5 shrink-0 text-signal"
-            />
-          )}
-          {status && !missing && (
-            error ? (
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="truncate text-xs text-destructive">{status}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>{error}</TooltipContent>
-                </Tooltip>
-                {/* The bar's description: the status in its name is the
-                    reason's heading. */}
-                <span id={why} className="sr-only">
-                  {error}
+              style={{ maxWidth: `${(take.duration_sec / longest) * BAR_SHARE}%` }}
+            >
+              {/* In this order, so each is over the one before: the ticks, then
+                  the number and the name on their backing, which a mark in a
+                  take's first seconds would otherwise strike out, then the part
+                  played, which washes over the name, and the playhead, over
+                  everything. */}
+              {(take.markers ?? []).map((m) => (
+                <MarkTick
+                  key={m.at}
+                  colour={labelOf(labels, m.label_id).colour}
+                  at={along(m.at)}
+                  className="inset-y-[5px]"
+                />
+              ))}
+              <span
+                data-bar-title
+                className="relative -mx-1 flex min-w-0 items-center gap-2 rounded-sm px-1 [background:inherit]"
+              >
+                <span className="tnum text-xs text-muted-foreground">
+                  {String(take.take_number).padStart(2, "0")}
                 </span>
-              </>
-            ) : (
-              <span className="truncate text-xs text-muted-foreground">{status}</span>
-            )
-          )}
-          {/* Its rehearsal is what tells it from the others here, so the
-              bar gives way to it rather than it to the bar. */}
-          {where && (
-            <span className="max-w-1/2 shrink-0 truncate text-xs text-muted-foreground">
-              {where}
+                <span
+                  className={cn(
+                    "flex min-w-0 text-sm",
+                    (unnamed || falseStart) && "text-muted-foreground"
+                  )}
+                >
+                  <TakeTitle take={take} cut />
+                </span>
+              </span>
+              {played !== null && (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 bg-primary/20"
+                  style={{ width: `${played}%` }}
+                />
+              )}
+              {played !== null && (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 w-0.5 bg-primary"
+                  style={{ left: `${played}%` }}
+                />
+              )}
+            </Button>
+
+            {/* Nothing jumps (B4): the time played has its room kept before
+                the length, so the bar keeps its width and the length its place
+                while the take plays here. */}
+            <span className={cn("tnum grid shrink-0 justify-items-end text-sm", falseStart && "text-muted-foreground")}>
+              <span aria-hidden className="invisible col-start-1 row-start-1">
+                {formatMMSS(here ? here.duration || take.duration_sec : take.duration_sec)} /{" "}
+                {formatMMSS(take.duration_sec)}
+              </span>
+              <span className="col-start-1 row-start-1">
+                {here && (
+                  <>
+                    <span className="text-primary">{formatMMSS(here.position)}</span>
+                    {" / "}
+                  </>
+                )}
+                {formatMMSS(take.duration_sec)}
+              </span>
             </span>
-          )}
-          {missing && (
-            <span className="shrink-0 text-xs text-destructive">Not found on disk</span>
-          )}
+            {falseStart && <Badge variant="warn">false start</Badge>}
+            {shared && (
+              <CloudCheck
+                data-in-cloud
+                aria-label="In the cloud folder"
+                className="size-3.5 shrink-0 text-signal"
+              />
+            )}
+            {status && !missing && (
+              error ? (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="truncate text-xs text-destructive">{status}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>{error}</TooltipContent>
+                  </Tooltip>
+                  {/* The bar's description: the status in its name is the
+                      reason's heading. */}
+                  <span id={why} className="sr-only">
+                    {error}
+                  </span>
+                </>
+              ) : (
+                <span className="truncate text-xs text-muted-foreground">{status}</span>
+              )
+            )}
+            {/* Its rehearsal is what tells it from the others here, so the
+                bar gives way to it rather than it to the bar. */}
+            {where && (
+              <span className="max-w-1/2 shrink-0 truncate text-xs text-muted-foreground">
+                {where}
+              </span>
+            )}
+            {missing && (
+              <span className="shrink-0 text-xs text-destructive">Not found on disk</span>
+            )}
+          </div>
         </div>
 
         {missing ? (
