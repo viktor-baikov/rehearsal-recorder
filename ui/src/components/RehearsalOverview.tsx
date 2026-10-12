@@ -216,11 +216,7 @@ export function RehearsalOverview({
                 <SongName title={isUnnamed ? null : row.name} onOpen={onOpenSong} />
               </h3>
               <span className="text-xs text-muted-foreground">
-                {isUnnamed
-                  ? takesLabel(row.takes.length)
-                  : row.takes.length === 1
-                    ? "1 go"
-                    : `${row.takes.length} goes`}
+                {takesLabel(row.takes.length)}
               </span>
             </div>
             {row.takes.map((t) => (

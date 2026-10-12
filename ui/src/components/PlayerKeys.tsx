@@ -32,7 +32,7 @@ export function PlayerKeys({ spaceKey, goKeys }: { spaceKey: boolean; goKeys?: b
     [["Home"], "To the start"],
     // Only where the take strip is: the review screen has one take.
     ...(goKeys
-      ? [[["↑", "↓"], "Previous / next go at this song"] as [string[], string]]
+      ? [[["↑", "↓"], "Previous / next take of this song"] as [string[], string]]
       : []),
     [["M"], "Mark this spot"],
     [["R"], "Repeat on / off"],

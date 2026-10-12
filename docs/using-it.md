@@ -74,17 +74,17 @@ recording quality into account.
 ### Last time
 
 Left of the tracks is the rehearsal before this one, song by song: how many
-goes each song got and how long they ran, with the notes you left while
+takes each song got and how long they ran, with the notes you left while
 listening. In a window narrower than 1100 px (wider as the Appearance size
 grows) it is behind the **Last time** button in the header, which opens it
 from the left and shows when something from it plays. ▶ on a song plays its
 newest starred take (★), wherever you played it, and says which and when if
-it is not last time's last go. A song with no star plays its last go, which
+it is not last time's last take. A song with no star plays its last take, which
 is usually the version you settled on. Listen to where you left off before
 you start.
 
 Under it are the songs you did not play last time, each with the day it was
-last played and its newest starred take, or its last go, to listen to, and
+last played and its newest starred take, or its last take, to listen to, and
 the rehearsals before that. **Open**, or a rehearsal in the list, opens it in
 History, and **History** under the list opens the newest, as the button at
 the top does. A soundcheck with no named takes is skipped: last time is the
@@ -126,7 +126,7 @@ set** under the list makes another.
 
 Press **Start rehearsal**, or Space. The rehearsal screen shows the takes
 recorded so far, grouped by song. Each take is a bar drawn to its length,
-with its markers on it and its notes under it, so a go that ran long or
+with its markers on it and its notes under it, so a take that ran long or
 stopped short stands out before you read anything.
 
 - **Play** at the start of a row plays the take right there. Space pauses
@@ -138,11 +138,11 @@ stopped short stands out before you read anything.
   it to the cloud or delete it. The ★ stays in view on a starred take.
 
 The evening is sorted here, as it goes, while everyone still remembers
-which go was the good one. None of it has to be done:
+which take was the good one. None of it has to be done:
 
 - A take nobody named has the songs under it, the same ones as under Next
   take. Click one to name the take after that song: it becomes the song's
-  next go and moves into the song's group. For a song nobody has played
+  next take and moves into the song's group. For a song nobody has played
   yet, use the pencil.
 - A take shorter than 30 seconds, with no ★ and no marks, is a false
   start: a count-in, or a stop after eight bars. Its bar is dashed, its
@@ -172,12 +172,12 @@ In a narrow window only the length, the takes and the button fit. The player
 in History has the same header.
 
 On the right is **Next take**: the name the next take will get, in a field
-of its own, and under it the songs. A new take is another go at the song
-before it, so the name stays until you move on to another song.
+of its own, and under it the songs. A new take is of the same song as the
+one before it, so the name stays until you move on to another song.
 
 Playing by a set, the set comes first, as a card: "Gig on the 25th — 3 of 6
 played", then its songs in order. The song in the field is lit, and the one
-after it says **next**. A song played tonight has ✓ and how many goes it
+after it says **next**. A song played tonight has ✓ and how many takes it
 got. The evening's first take is the set's first song. Under the set,
 **Other songs** are the songs outside it. With no set they are **Songs**,
 every song you have played: tonight's first, then the songs of earlier
@@ -197,13 +197,13 @@ To move on to another song:
   is a new song, and Enter keeps it.
 
 The take is then recorded under that name, and the recording screen can say
-how long the last go at that song took. ✕ in the field puts back the name
+how long the last take of that song took. ✕ in the field puts back the name
 the take would have had anyway. If you discard the take, the next one keeps
 the name you picked.
 
 ### While recording
 
-![Recording: the take's name over a big clock, how long the last go at this song took, and a tile for each track](screenshots/recording.png)
+![Recording: the take's name over a big clock, how long the last take of this song took, and a tile for each track](screenshots/recording.png)
 
 The recording screen is made to be read from where you play, not from the
 laptop.
@@ -213,10 +213,10 @@ laptop.
   there: that is the sign the name was forgotten. Put it right after Stop.
   The take's number is up top, beside the red RECORDING.
 - **The clock** shows how long the take has been running.
-- **The bar under it** shows up when this is another go at a song you have
-  already played in this rehearsal: "Took 2:21 last time". The first go of
-  the evening at a song played before is measured against the go ▶ plays
-  for it in Last time: its newest ★ go, or the last go of the last
+- **The bar under it** shows up when this is another take of a song you have
+  already played in this rehearsal: "Took 2:21 last time". The evening's first
+  take of a song played before is measured against the take ▶ plays
+  for it in Last time: its newest ★ take, or the last take of the last
   rehearsal that played it, "Took 3:20 on 22 Sep". It fills as you
   play, so you can see how far into the song you are.
 - **Each track has a tile** that fills from the bottom with its level. The
@@ -246,16 +246,16 @@ during a take. Press **Stop**, or Space, when the song is over.
 
 ### Keep the take or not
 
-![After stopping: the take's song and its goes tonight, then save or discard it](screenshots/review.png)
+![After stopping: the take's song and its takes tonight, then save or discard it](screenshots/review.png)
 
 After you stop, the take opens straight away so you can listen to it. The
-bottom left says what was recorded: the song, with the go it is, "Viasna 2",
-and under it how long the take ran against the last go at the song tonight,
-"2:31 · 10 s longer than go 1". With no go at it tonight it is measured
-against the go before tonight, with the day: "8 s longer than on 22 Sep".
-Left of the title is a bar for each of the song's goes tonight, the last
+bottom left says what was recorded: the song with its number, "Viasna 2",
+and under it how long the take ran against the last take of the song tonight,
+"2:31 · 10 s longer than take 1". With no take of it tonight it is measured
+against the take before tonight, with the day: "8 s longer than on 22 Sep".
+Left of the title is a bar for each of the song's takes tonight, the last
 ten of them, as tall as it ran: this one in the colour of the text, the ★
-goes green, the others grey. A take nobody named says "Take 7", grey, and how long it ran.
+takes green, the others grey. A take nobody named says "Take 7", grey, and how long it ran.
 
 The name is filled in for you: after a take called "Pałyn", the next one is
 "Pałyn 2". Check it, then press **Save take** (Space) or **Discard**. A
@@ -283,19 +283,19 @@ markers are saved with the take.
 
 The strip at the top has a tab for each song of the evening, in the order
 they were first played, and one for each take with no song. Under a song's
-name is its go that is open, or on another tab the go a click on it opens:
-the song's last go that evening. **Songs** at the start of the strip, or the
-open go's number, opens the tabs out into a column of goes each. Click a go
-in a column to open it. All a take's tracks play together on one timeline,
+name is the number of its open take, or on another tab of the take a click
+on it opens: the song's last take that evening. **Songs** at the start of the strip, or the
+open take's number, opens the tabs out into a column of takes each. Click a
+take in a column to open it. All a take's tracks play together on one timeline,
 so they always stay in sync.
 
-Another go at the same song opens at the same place: the same second, the
+Another take of the same song opens at the same place: the same second, the
 same selection, Repeat on or off, the same zoom, and playing if the last
-one was. Loop the chorus of one go, then open the next to hear the same
-bars. The goes don't line up exactly, but close enough to find a chorus by
-ear. ↑ and ↓ go to the previous and next go at the song the same way.
-Another song's go opens from its start. Opened from a song's page in
-History, the song's column has every go at it from every rehearsal, the
+one was. Loop the chorus of one take, then open the next to hear the same
+bars. The takes don't line up exactly, but close enough to find a chorus by
+ear. ↑ and ↓ go to the previous and next take of the song the same way.
+Another song's take opens from its start. Opened from a song's page in
+History, the song's column has every take of it from every rehearsal, the
 oldest first, under each rehearsal's day, and ↑ and ↓ go on from one
 rehearsal into the next.
 
@@ -315,7 +315,7 @@ rehearsal into the next.
 - **Mark a moment** with **Mark**, or the M key, while the take plays. Pick
   its label and type a short comment if you like. A new mark has the first
   label in the list (see [Marks and their labels](#marks-and-their-labels)).
-  A mark is drawn in its label's colour on the waveform, and the go's line
+  A mark is drawn in its label's colour on the waveform, and the take's line
   in the strip shows those colours too, so you can see which takes were
   marked what without opening them. Click a marker to jump to it.
 - **Loop a part:** drag across the tracks to select it, then turn on
@@ -387,14 +387,14 @@ stops following until the playhead comes back into view.
 
 ## Names and songs
 
-Each take is a go at a song. You name it with the song's title, and the app
-counts the goes: the number beside the name, "Pałyn 1", "Pałyn 2", goes on
+Each take belongs to a song. You name it with the song's title, and the app
+counts the song's takes: the number beside the name, "Pałyn 1", "Pałyn 2", goes on
 from one rehearsal to the next, so "Pałyn 17" is one take wherever it was
-played. Deleting a take does not free its number. A new take is another go at the song before it, so you only name a
+played. Deleting a take does not free its number. A new take is of the same song as the one before it, so you only name a
 take when the band moves on to another song.
 
 Type the title only; the number is the app's. Typing "Pałyn 5" names the
-take Pałyn, at whatever go is next. A song is spelled one way everywhere:
+take Pałyn, at whatever number is next. A song is spelled one way everywhere:
 typing "pałyn" gives "Pałyn" when that song is there. A title can end in a
 number, like "Opus 5", as long as no song is called "Opus". A take nobody
 named is called by its number, "Take 4", is not counted as a song, and so is
@@ -405,7 +405,7 @@ Wherever you name a take, the songs you have already played are listed, so
 you do not have to type them again. On the rehearsal screen they are the
 rows under **Next take** (see [The rehearsal screen](#the-rehearsal-screen)).
 In Rename take, Rename song and History's **Name:** they are under the name,
-each with the go it would be, dimmed beside it, and **All songs…** at the
+each with the number it would be, dimmed beside it, and **All songs…** at the
 end lists every song you have ever played, alphabetically. A click puts only
 the title in the field. Typing narrows the list to the songs that match, and
 clicking one then takes you out of the field, so the next Space records or
@@ -422,7 +422,7 @@ folder keeps its date: `Tuesday jam - 2026-09-18 19-00`. If you rename a take
 that is open in the player, it starts again from the beginning.
 
 To rename a song, use the pencil beside its title on its page in History.
-Every go is renamed, with its folder on disk and its copies in the cloud
+Every take is renamed, with its folder on disk and its copies in the cloud
 folder; the files follow in the background, and the background-work list
 says so. A title that differs only in capitals respells the song. Here a
 number at the end is part of the title: "Opus 5" is the whole of it. "Take 4"
@@ -431,7 +431,7 @@ cannot be a song's title, since it is what a take with no song is called.
 The same song typed two ways, "Palyn" one night and "Pałyn" the next, is two
 songs until you merge them. Rename song lists the other songs under the
 title: click one, or type its title, and **Rename** becomes **Merge…**. The
-app asks first, saying how many goes from how many rehearsals are renamed
+app asks first, saying how many takes from how many rehearsals are renamed
 and what they become. They are numbered after the song's own, in the order
 they were played, so Palyn 1 and 2 become Pałyn 8 and 9; stars stay where
 they were. A merge is not undone in one step: to split a song again, rename
@@ -458,7 +458,7 @@ the chosen one beside the list. It opens on the newest. Each rehearsal in the
 list shows when it was, how long you played and how many takes there are,
 with the evening drawn as a strip: a bar for each take, as long as the take,
 grouped by song, and green for a starred take. You can see at a
-glance how many songs you played and how many goes each one got.
+glance how many songs you played and how many takes each one got.
 
 Click a rehearsal to show it, or go through them with ↑ and ↓. Its takes
 work the same way as on the rehearsal screen: **Play** on a take plays it
@@ -470,7 +470,7 @@ starred** and **Clear false starts**.
 A rehearsal played by a set has the set's name under its date, in the list
 and under its title. Over its songs, a card says how much of the set was
 played, "Gig on the 25th — 4 of 6 played", and lists the set's songs in
-order: each one played with ✓ and its goes, each other **not played**. Click
+order: each one played with ✓ and its takes, each other **not played**. Click
 a played song to go to its takes. The card shows the set as it was that
 evening, whatever has changed in it since.
 
@@ -486,32 +486,32 @@ drive that is not plugged in, the rehearsal is marked **Not found on disk**.
 **Locate folder…** lets you show the app where the folder is now.
 **Remove from history** takes it off the list without touching any files.
 
-![History's Songs view: Pałyn's goes, one line a rehearsal](screenshots/history-songs.png)
+![History's Songs view: Pałyn's takes, one line a rehearsal](screenshots/history-songs.png)
 
 **Songs** lists every song you have played, alphabetically, with how many
-goes and rehearsals it had, when it was last played and how many of its goes
+takes and rehearsals it had, when it was last played and how many of its takes
 are starred. The takes nobody named come last, as **Not named**. Click a
 song, or go through them with ↑ and ↓.
 
-A song's page starts with a big **▶**, which plays its newest ★ go, or its
-last go when none is starred. The pencil beside the title renames the song,
+A song's page starts with a big **▶**, which plays its newest ★ take, or its
+last take when none is starred. The pencil beside the title renames the song,
 or merges it into another (see [Names and songs](#names-and-songs)); what is
-playing stops first. Its ★ goes come next, then the marks left on it
+playing stops first. Its ★ takes come next, then the marks left on it
 the last time it was played; a mark opens its take at that spot. Then every
-go at the song, one line a rehearsal, newest first: the rehearsal's day and
-name, and its goes as bars side by side, all drawn to the song's longest go.
-A go that ran long or stopped short shows without reading a number; a ★ go is
+take of the song, one line a rehearsal, newest first: the rehearsal's day and
+name, and its takes as bars side by side, all drawn to the song's longest take.
+A take that ran long or stopped short shows without reading a number; a ★ take is
 green, and a mark is a tick in its label's colour.
 
-Click a line to open it to its goes, and again to close it. The newest
+Click a line to open it to its takes, and again to close it. The newest
 rehearsal is open to begin with, and the lines you open stay open while
-History is. The goes in an open line play, open in the player, take a star,
+History is. The takes in an open line play, open in the player, take a star,
 are renamed or deleted, as they are anywhere else, and **Open … in
 Rehearsals** under them shows the whole evening. Esc from the player comes
 back to the song, scrolled where you were.
 
 A rehearsal whose folder is not on disk stays on a song's page, greyed and
-marked **not on disk**. Its goes are counted, but they cannot be played or
+marked **not on disk**. Its takes are counted, but they cannot be played or
 opened until the drive is back.
 
 ![History's Marks view: every Went wrong, from every rehearsal](screenshots/history-marks.png)
@@ -795,7 +795,7 @@ While listening:
 |---|---|
 | ← and → | jump 10 seconds back or forward |
 | Home | go back to the start |
-| ↑ and ↓ | the previous or next go at the open song, at the same place |
+| ↑ and ↓ | the previous or next take of the open song, at the same place |
 | M | add a marker |
 | R | turn Repeat on or off |
 | ? | show the keys |

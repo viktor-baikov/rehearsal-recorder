@@ -135,14 +135,14 @@ export function SongPage({
             {unnamed ? (
               "Takes nobody named. Rename one to give it a song."
             ) : !plays ? (
-              "Nothing to play: every go is on a drive that is not plugged in"
+              "Nothing to play: every take is on a drive that is not plugged in"
             ) : plays.take.starred ? (
               <>
                 ▶ plays <span className="text-signal">★</span> {plays.take.name} ·{" "}
                 {formatDayIn(plays.created_at)}
               </>
             ) : (
-              `▶ plays the last go, ${plays.take.name} · ${formatDayIn(plays.created_at)}`
+              `▶ plays the last take, ${plays.take.name} · ${formatDayIn(plays.created_at)}`
             )}
           </p>
           {!unnamed && <OldNames names={page.also ?? []} onForget={onForgetName} />}

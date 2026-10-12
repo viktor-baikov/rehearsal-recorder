@@ -292,6 +292,14 @@ given once and kept. Each song keeps a count of the goes it has given, and a
 song is kept when its last take goes, so deleting the latest go does not give
 its number out again.
 
+**The interface says take; the code says go.** The interface used the code's
+word at first ("4 goes", "Every go at Pałyn"), but a musician calls an attempt
+at a song a take, so the interface now says take everywhere: "4 takes",
+"Every take of Pałyn", the number beside the title as before. The code and
+the database keep `go` for that number, so nothing was migrated. A take with
+no song is still called by its number in the evening, "Take 7", which can sit
+beside "Pałyn, take 3" in the strip; the song's name tells the two apart.
+
 **Names are put right in the background.** A take's folder and cloud copy
 are named after it, so when its name changes without them — migration 0002
 numbering every old go afresh — `names_pass.py` renames them on the next

@@ -159,10 +159,10 @@ test.describe("Songs in History", () => {
     await openSongs(page)
     const daroha = rows(page).and(page.locator("[data-song='Daroha']"))
     // The year shows once the clock passes New Year.
-    await expect(daroha).toContainText(/4 goes · 2 rehearsals · last 25 Aug( 2026)?/)
+    await expect(daroha).toContainText(/4 takes · 2 rehearsals · last 25 Aug( 2026)?/)
     await expect(daroha).toContainText("★ 1")
     await expect(head(page)).toContainText(
-      /4 goes in 2 rehearsals · first 20 Aug( 2026)? · last 25 Aug( 2026)?/
+      /4 takes in 2 rehearsals · first 20 Aug( 2026)? · last 25 Aug( 2026)?/
     )
   })
 
@@ -180,7 +180,7 @@ test.describe("Songs in History", () => {
   test("with no star, the play button plays the last go on disk", async ({ page }) => {
     await openApp(page)
     await openSongs(page)
-    await expect(head(page)).toContainText("▶ plays the last go, Daroha 2 · Tue 25 Aug")
+    await expect(head(page)).toContainText("▶ plays the last take, Daroha 2 · Tue 25 Aug")
   })
 
   test("Not named has no play button", async ({ page }) => {
@@ -463,7 +463,7 @@ test.describe("Songs in History", () => {
   test("another song picked there goes through that evening's goes only", async ({ page }) => {
     await toFirstRehearsal(page)
     const strip = page.getByRole("group", { name: "Take strip" })
-    await strip.getByRole("button", { name: /^Daroha, go 2/ }).click()
+    await strip.getByRole("button", { name: /^Daroha, take 2/ }).click()
     await expect(strip.locator("[data-tab][aria-current='true']")).toHaveAttribute("data-tab", "song:Daroha")
     await strip.getByRole("button", { name: "Songs", exact: true }).click()
     const column = strip.locator("[data-column='song:Daroha']")
@@ -672,7 +672,7 @@ test.describe("Songs in History", () => {
     await expect(rows(page).and(page.locator("[data-song='Pałyn']"))).toHaveCount(1)
     await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(0)
     await expect(rows(page).and(page.locator("[data-song='Daroha']"))).toContainText(
-      "2 goes · 1 rehearsal"
+      "2 takes · 1 rehearsal"
     )
     // Undo brings the rehearsal back, and its songs with it.
     await notices(page)

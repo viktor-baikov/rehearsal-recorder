@@ -188,7 +188,7 @@ export function shots({
     marks: {
       left: true,
       pieces: (
-        <Piece wide label="Four goes at the song Pałyn, with their marks and comments">
+        <Piece wide label="Four takes of the song Pałyn, with their marks and comments">
           <Goes last={last} song="Pałyn" />
         </Piece>
       ),
@@ -196,7 +196,7 @@ export function shots({
     names: {
       left: true,
       pieces: (
-        <Piece label="The Next take field with Palyn typed: Palyn is Pałyn now, at its next go, the one song left under it">
+        <Piece label="The Next take field with Palyn typed: Palyn is Pałyn now, at its next take, the one song left under it">
           <Panel>
             {/* "Make Palyn a new song" floats over the songs on the screen,
                 and here would hide the one this tile is about. */}

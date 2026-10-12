@@ -77,6 +77,10 @@ opening.
   Space picks one; **Check signal** and **Start rehearsal** show a spinner
   when they take more than a second; an empty list of tracks says how to add
   one; and every screen's title is 20 px.
+- **A song's attempts are called takes.** Where the app said *go* for each
+  attempt at a song, "4 goes" or *Every go at Pałyn*, it now says *take*, as
+  musicians do: "4 takes", *Every take of Pałyn*. The number beside a song's
+  title is as it was, and so is "Take 7" for a take nobody named.
 
 ## 0.11.1
 

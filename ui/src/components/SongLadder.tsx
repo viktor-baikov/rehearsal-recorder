@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Take } from "@/lib/api"
-import { formatDayIn, formatMMSS, goesLabel, takesLabel } from "@/lib/format"
+import { formatDayIn, formatMMSS, takesLabel } from "@/lib/format"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
 import { motionOff } from "@/lib/motion"
 import { hereFor, placed, type PlacedPlayback, type PlacedTake, type Rung } from "@/lib/songs"
@@ -54,18 +54,17 @@ export function SongLadder({
   onOpenRehearsal: (folder: string) => void
 }) {
   const labels = useLabels()
-  const count = (n: number) => (unnamed ? takesLabel(n) : goesLabel(n))
 
   return (
-    <section aria-label="Every go" className="flex flex-col gap-0.5">
+    <section aria-label="Every take" className="flex flex-col gap-0.5">
       <div
         aria-hidden
         className="grid grid-cols-[18px_150px_minmax(0,1fr)_70px] gap-3 px-2.5 pb-1 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
       >
         <span />
         <span>Rehearsal</span>
-        <span>{unnamed ? "Takes, to scale" : "Goes, to scale"}</span>
-        <span className="text-right">{unnamed ? "Takes" : "Goes"}</span>
+        <span>Takes, to scale</span>
+        <span className="text-right">Takes</span>
       </div>
 
       {rungs.map((rung) => {
@@ -150,7 +149,7 @@ export function SongLadder({
                 })}
               </span>
               <span className="text-right text-xs whitespace-nowrap text-muted-foreground">
-                {count(rung.goes.length)}
+                {takesLabel(rung.goes.length)}
               </span>
             </button>
 

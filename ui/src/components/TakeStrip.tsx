@@ -173,7 +173,7 @@ export function TakeStrip({
       <button
         type="button"
         aria-expanded={expanded}
-        title="Every song's goes"
+        title="Every song's takes"
         onClick={(e) => {
           onExpandedChange(!expanded)
           e.currentTarget.blur()

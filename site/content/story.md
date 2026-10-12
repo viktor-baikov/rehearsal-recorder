@@ -17,7 +17,7 @@ One track per musician, filled in from last time.
 
 Hear how the song went last week, then play it.
 
-- ▶ beside Pałyn on the start screen plays its best go from last week.
+- ▶ beside Pałyn on the start screen plays its best take from last week.
 - Start, and ↑ picks Pałyn under Next take.
 - Record: the take's name over a big clock, and a tile per track that turns red when it clips.
 
@@ -35,11 +35,11 @@ Every rehearsal, every mark and every song, in History.
 
 - History opens on the newest rehearsal.
 - Marks: every Went wrong, from every rehearsal. ▶ plays from just before it.
-- A click on Pałyn: its page, every go at it, one line an evening.
+- A click on Pałyn: its page, every take of it, one line an evening.
 
-## Compare goes. {#compare}
+## Compare takes. {#compare}
 
-Loop the bridge, then hear it in the next go.
+Loop the bridge, then hear it in the next take.
 
 - Open Pałyn 5 and loop its bridge.
 - Step to Pałyn 6: it starts at the same bar, still looping.

@@ -1,5 +1,5 @@
 import type { Marker, NotNamedSummary, SongGo, SongIndex, SongSummary, Take } from "@/lib/api"
-import { formatDate, formatDayIn, goesLabel, rehearsalsLabel, takesLabel } from "@/lib/format"
+import { formatDate, formatDayIn, rehearsalsLabel, takesLabel } from "@/lib/format"
 
 /** Song titles in the order a person looks for them: alphabetical, any
  *  script, capitals or not. The All songs panel and History's Songs view
@@ -119,9 +119,9 @@ export function fromLastTime(goes: SongGo[]): { go: SongGo; marker: Marker }[] {
     )
 }
 
-/** "7 goes · 4 rehearsals · last 28 Sep", under a song in the list. */
+/** "7 takes · 4 rehearsals · last 28 Sep", under a song in the list. */
 export function songLine(s: SongSummary, now: Date = new Date()): string {
-  return `${goesLabel(s.goes)} · ${rehearsalsLabel(s.rehearsals)} · last ${formatDate(s.last_played, now)}`
+  return `${takesLabel(s.goes)} · ${rehearsalsLabel(s.rehearsals)} · last ${formatDate(s.last_played, now)}`
 }
 
 /** "3 takes · 2 rehearsals · last 22 Sep", under Not named in the list. */
@@ -129,7 +129,7 @@ export function notNamedLine(n: NotNamedSummary, now: Date = new Date()): string
   return `${takesLabel(n.takes)} · ${rehearsalsLabel(n.rehearsals)} · last ${formatDate(n.last_played, now)}`
 }
 
-/** Under a song's title on its page: "12 goes in 5 rehearsals · first 2 Aug
+/** Under a song's title on its page: "12 takes in 5 rehearsals · first 2 Aug
  *  · last 30 Sep"; for the takes nobody named, "3 takes in 2 rehearsals ·
  *  last Tue 22 Sep". */
 export function pageLine(goes: SongGo[], unnamed: boolean, now: Date = new Date()): string {
@@ -139,7 +139,7 @@ export function pageLine(goes: SongGo[], unnamed: boolean, now: Date = new Date(
   const oldest = rungs[rungs.length - 1].created_at
   if (unnamed)
     return `${takesLabel(goes.length)} in ${rehearsalsLabel(rungs.length)} · last ${formatDayIn(newest, now)}`
-  return `${goesLabel(goes.length)} in ${rehearsalsLabel(rungs.length)} · first ${formatDate(oldest, now)} · last ${formatDate(newest, now)}`
+  return `${takesLabel(goes.length)} in ${rehearsalsLabel(rungs.length)} · first ${formatDate(oldest, now)} · last ${formatDate(newest, now)}`
 }
 
 /** What a merge will do, as its dry run counted it (api.merge_songs). */
@@ -158,7 +158,7 @@ export function mergeQuestion(
   const become = first === last ? `${into} ${first}` : `${into} ${first}–${last}`
   const says =
     goes === 1
-      ? `1 go in ${rehearsalsLabel(rehearsals)} becomes ${become}, and its folder and cloud copies are renamed. To split it off again, rename the take.`
-      : `${goesLabel(goes)} in ${rehearsalsLabel(rehearsals)} become ${become}, and their folders and cloud copies are renamed. To split them again, rename the takes one by one.`
+      ? `1 take in ${rehearsalsLabel(rehearsals)} becomes ${become}, and its folder and cloud copies are renamed. To split it off again, rename it.`
+      : `${takesLabel(goes)} in ${rehearsalsLabel(rehearsals)} become ${become}, and their folders and cloud copies are renamed. To split them again, rename them one by one.`
   return { title: `Merge “${from}” into “${into}”?`, says }
 }

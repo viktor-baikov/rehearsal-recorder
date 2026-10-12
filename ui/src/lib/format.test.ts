@@ -14,7 +14,6 @@ import {
   formatMMSS,
   formatMonth,
   formatWhen,
-  goesLabel,
   inCloudLabel,
   inputsLabel,
   longAgo,
@@ -65,10 +64,6 @@ describe("times", () => {
     expect(longAgo("2026-09-15T19:00:00", now)).toBe("2 weeks ago")
     expect(formatWhen("2026-09-22T19:00:00")).toBe("Tue 22 Sep, 19:00")
     expect(formatWhen("2026-09-22")).toBe("Tue 22 Sep")
-  })
-  it("counts goes at a song", () => {
-    expect(goesLabel(1)).toBe("1 go")
-    expect(goesLabel(4)).toBe("4 goes")
   })
 })
 

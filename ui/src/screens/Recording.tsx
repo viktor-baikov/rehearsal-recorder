@@ -291,7 +291,7 @@ export function Recording({
           <div className="flex w-full max-w-xl flex-col gap-2">
             <div
               role="progressbar"
-              aria-label="Against the last go"
+              aria-label="Against the last take"
               aria-valuemin={0}
               aria-valuemax={Math.round(lastAttempt.duration_sec)}
               aria-valuenow={Math.round(Math.min(elapsed, lastAttempt.duration_sec))}

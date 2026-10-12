@@ -147,11 +147,6 @@ export function savedLine(n: number): string {
     : `${n} takes are saved and stay where they are.`
 }
 
-/** "1 go", "4 goes": takes at one song, which are attempts at it. */
-export function goesLabel(n: number): string {
-  return n === 1 ? "1 go" : `${n} goes`
-}
-
 /** "1 rehearsal", "4 rehearsals": how many rehearsals a song, take or mark was in. */
 export function rehearsalsLabel(n: number): string {
   return n === 1 ? "1 rehearsal" : `${n} rehearsals`
