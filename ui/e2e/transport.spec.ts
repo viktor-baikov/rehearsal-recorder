@@ -302,7 +302,7 @@ test.describe("the player's line", () => {
     // One line: no taller than the line holds.
     expect((await words.boundingBox())!.height).toBeLessThanOrEqual(24)
     await words.hover()
-    await expect(page.locator("[data-whole]")).toHaveText(QUIET)
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(QUIET)
   })
 
   test("a line that is cut takes Tab and shows whole in the tip", async ({ page }) => {
@@ -314,7 +314,7 @@ test.describe("the player's line", () => {
     await page.getByRole("button", { name: "Player keys" }).focus()
     await page.keyboard.press("Tab")
     await expect(alert).toBeFocused()
-    await expect(page.locator("[data-whole]")).toHaveText(QUIET)
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(QUIET)
     // The shared focus ring, round the line: the words are cut at their own
     // box, which would clip a ring drawn round them.
     expect((await style(alert, "box-shadow"))["box-shadow"]).not.toBe("none")
@@ -579,7 +579,7 @@ test.describe("the marks and the region", () => {
     const cut = await words.locator("span").evaluate((el) => el.scrollWidth > el.clientWidth + 1)
     expect(cut, "the words are longer than the chip's room").toBe(true)
     await words.hover()
-    await expect(page.locator("[data-whole]")).toContainText(long)
+    await expect(page.locator("[data-whole][data-state$='open']")).toContainText(long)
   })
 
   test("the player says what its icon buttons do in the shared tip, not a native title", async ({
