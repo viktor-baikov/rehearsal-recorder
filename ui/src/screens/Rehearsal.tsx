@@ -16,7 +16,7 @@ import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEveningSettings } from "@/hooks/useEveningSettings"
 import { TakeNameField, type TakeNameFieldHandle } from "@/components/TakeNameField"
-import { SetCard, SongRows } from "@/components/NextTakeSongs"
+import { PanelParts, SetCard, SongRows } from "@/components/NextTakeSongs"
 import { SHORT, otherSongs, rowsFor, shortList, songOf, useListOpen } from "@/lib/setSongs"
 import { SongKeys } from "@/components/SongKeys"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
@@ -388,76 +388,6 @@ export function Rehearsal({
 
   // The panel is wider from 1100 px, which follows the Appearance scale.
   const wide = useWide()
-  // The panel's parts, in order: the field, the set when the rehearsal has
-  // one, and the band's other songs when there are any.
-  const parts = [
-    {
-      key: "name",
-      part: (
-        <TakeNameField
-          ref={fieldRef}
-          id="next-take-name"
-          label="Next take"
-          value={nextName}
-          fallback={fallback}
-          choices={nextChoices}
-          knownGo={knownGo}
-          onCommit={nameNextTake}
-          onPanel
-          songs="none"
-          onDraft={(text) => {
-            // What is typed changed, or the field was left: no row is
-            // highlighted any more.
-            if (text !== (typing?.text ?? null)) setHighlight(null)
-            setTyping((t) => (text === null ? null : { from: t?.from ?? text, text }))
-          }}
-          onArrow={arrowWhileTyping}
-          highlighted={() => highlight}
-          selectOnClick
-          labelAside={<SongKeys hidden={selected !== null} />}
-        />
-      ),
-    },
-    ...(session.set
-      ? [
-          {
-            key: "set",
-            part: (
-              <SetCard
-                set={session.set}
-                goes={goesTonight}
-                current={current}
-                onPick={pickSong}
-                highlighted={highlight}
-              />
-            ),
-          },
-        ]
-      : []),
-    ...(others.length > 0
-      ? [
-          {
-            key: "songs",
-            part: (
-              <SongRows
-                titles={others}
-                lastTake={lastTakes}
-                goes={goesTonight}
-                current={current}
-                typed={narrowBy}
-                typing={typing !== null}
-                inSet={setTitles}
-                title={session.set ? "Other songs" : "Songs"}
-                onPick={pickSong}
-                highlighted={highlight}
-                open={listOpen}
-                onOpen={setListOpen}
-              />
-            ),
-          },
-        ]
-      : []),
-  ]
 
   return (
     <Shell
@@ -497,18 +427,55 @@ export function Rehearsal({
             wide ? "w-[26rem]" : "w-[22.5rem]"
           )}
         >
-          {parts.map(({ key, part }, i) => (
-            <div
-              key={key}
-              className={cn(
-                "-mx-8 px-8",
-                i > 0 && "border-t pt-6",
-                i < parts.length - 1 && "pb-6"
-              )}
-            >
-              {part}
-            </div>
-          ))}
+          <PanelParts bleed={8}>
+            <TakeNameField
+              ref={fieldRef}
+              id="next-take-name"
+              label="Next take"
+              value={nextName}
+              fallback={fallback}
+              choices={nextChoices}
+              knownGo={knownGo}
+              onCommit={nameNextTake}
+              onPanel
+              songs="none"
+              onDraft={(text) => {
+                // What is typed changed, or the field was left: no row is
+                // highlighted any more.
+                if (text !== (typing?.text ?? null)) setHighlight(null)
+                setTyping((t) => (text === null ? null : { from: t?.from ?? text, text }))
+              }}
+              onArrow={arrowWhileTyping}
+              highlighted={() => highlight}
+              selectOnClick
+              labelAside={<SongKeys hidden={selected !== null} />}
+            />
+            {session.set && (
+              <SetCard
+                set={session.set}
+                goes={goesTonight}
+                current={current}
+                onPick={pickSong}
+                highlighted={highlight}
+              />
+            )}
+            {others.length > 0 && (
+              <SongRows
+                titles={others}
+                lastTake={lastTakes}
+                goes={goesTonight}
+                current={current}
+                typed={narrowBy}
+                typing={typing !== null}
+                inSet={setTitles}
+                title={session.set ? "Other songs" : "Songs"}
+                onPick={pickSong}
+                highlighted={highlight}
+                open={listOpen}
+                onOpen={setListOpen}
+              />
+            )}
+          </PanelParts>
         </aside>
       }
       footer={

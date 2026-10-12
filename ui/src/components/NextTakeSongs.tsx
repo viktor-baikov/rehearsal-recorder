@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react"
+import { Children, isValidElement, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty"
@@ -82,6 +82,32 @@ function SongRow({
       </WholeTip>
     </li>
   )
+}
+
+/**
+ * The panel's parts as one group: the field, the set and the other songs,
+ * each after the first under a 1 px line across the panel, with 24 px either
+ * side of the line. A part that is null, undefined or false is not drawn, and
+ * leaves no line. `bleed` is how far the line runs past the padding the parts
+ * sit in, in spacing steps: 8 (32 px) in the rehearsal screen's panel, whose
+ * padding it takes back; none, the default, where the parts have the room to
+ * themselves (reha.stream's tiles).
+ */
+export function PanelParts({ children, bleed = 0 }: { children: ReactNode; bleed?: 0 | 8 }) {
+  const parts = Children.toArray(children)
+  return parts.map((part, i) => (
+    <div
+      // A part keeps its own box as the others come and go.
+      key={isValidElement(part) ? part.key : i}
+      className={cn(
+        bleed === 8 && "-mx-8 px-8",
+        i > 0 && "border-t pt-6",
+        i < parts.length - 1 && "pb-6"
+      )}
+    >
+      {part}
+    </div>
+  ))
 }
 
 /**

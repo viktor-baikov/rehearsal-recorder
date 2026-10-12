@@ -110,6 +110,18 @@ test("the sets tile shows a rehearsal mid-set", async ({ page }) => {
   await expect(card.locator("[data-set-song='Viasna']")).toHaveAttribute("aria-current", "true")
 })
 
+test("the Next take tiles draw the panel's line between the field and what is under it", async ({
+  page,
+}) => {
+  await page.goto("/")
+  const tiles = page.locator("#features")
+  // The part a group sits in is the box the line is drawn on, as in the app.
+  const part = (label: RegExp, group: string) =>
+    tiles.getByRole("img", { name: label }).locator(group).locator("xpath=..")
+  await expect(part(/Gig on the 25th/, "[data-set-card]")).toHaveCSS("border-top-width", "1px")
+  await expect(part(/Palyn is Pałyn now/, "[data-song-list]")).toHaveCSS("border-top-width", "1px")
+})
+
 /** The MIDI tile, found by its heading. */
 const midiTile = (page: Page) =>
   page.locator("#features article").filter({

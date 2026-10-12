@@ -3,6 +3,7 @@ import {
   callCount,
   colour,
   expect,
+  literally,
   openApp,
   openBandApp,
   openEvening,
@@ -80,8 +81,12 @@ test.describe("the Next take panel", () => {
   }) => {
     await openApp(page)
     await startRehearsal(page)
-    // Layout works in 1/64 px: 22.5 rem of 20.8 px comes out as 467.98.
-    const width = () => panel(page).evaluate((el) => Math.round(el.getBoundingClientRect().width))
+    // Layout works in 1/64 px: 22.5 rem of 20.8 px comes out as 467.98. Once
+    // the panel has risen into place, as a box is only measured then.
+    const width = async () => {
+      await settled(page)
+      return panel(page).evaluate((el) => Math.round(el.getBoundingClientRect().width))
+    }
 
     await expect.poll(width).toBe(416)
     await page.setViewportSize({ width: 1000, height: 820 })
@@ -127,6 +132,23 @@ test.describe("the Next take panel", () => {
     await startRehearsal(page)
     await field(page).fill("Pałyn\nViasna")
     await expect(field(page)).toHaveValue("Pałyn Viasna")
+  })
+
+  test("a line break pasted into the middle of the name leaves the caret after the paste", async ({
+    page,
+  }) => {
+    await openApp(page)
+    await startRehearsal(page)
+    await field(page).fill("Pałyn")
+    await field(page).evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(2, 2))
+    await page.keyboard.insertText("a\nb")
+    await expect(field(page)).toHaveValue("Paa błyn")
+    // Just after the "b", not at the end of the name.
+    await expect
+      .poll(() =>
+        field(page).evaluate((el: HTMLTextAreaElement) => [el.selectionStart, el.selectionEnd])
+      )
+      .toEqual([5, 5])
   })
 
   test("the next take label has no capitals", async ({ page }) => {
@@ -225,7 +247,9 @@ test.describe("the Next take panel", () => {
       await page.keyboard.press("Escape")
       await expect(field(page)).not.toBeFocused()
       expect(await callCount(page, "finish_rehearsal")).toBe(0)
-      await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+      await expect(
+        page.getByRole("button", { name: new RegExp(literally("Record take 1")) })
+      ).toBeVisible()
     })
   })
 })

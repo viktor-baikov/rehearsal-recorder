@@ -21,6 +21,9 @@ function without(choices: SongChoices | null, name: string): SongChoices | null 
   return { here: choices.here.map(strip), other: choices.other.map(strip) }
 }
 
+/** A line break, with the spaces round it: one space in a name. */
+const LINE_BREAKS = /\s*[\r\n]+\s*/g
+
 /** What a list drawn beside the field, not under it (the rehearsal
  *  screen's songs), names the take through: as a pill would. */
 export type TakeNameFieldHandle = { put: (name: string) => void }
@@ -199,7 +202,8 @@ export function TakeNameField({
   const oldLine =
     old && offerNewSong ? (
       // On one line when it fits, else two, each cut with the whole on hover:
-      // floating over the set card, it covers no more than the set's name.
+      // hung under the field in a popover, it covers no more than the set's
+      // name.
       <p
         data-old-name
         className={cn(
@@ -344,7 +348,16 @@ export function TakeNameField({
             <textarea
               {...props}
               rows={1}
-              onChange={(e) => change(e.target.value.replace(/\s*[\r\n]+\s*/g, " "))}
+              onChange={(e) => {
+                const field = e.target
+                const typed = field.value
+                const text = typed.replace(LINE_BREAKS, " ")
+                // Rewritten, the value puts the caret at its end: it goes back
+                // to where the paste ended, once the field is drawn.
+                const caret = typed.slice(0, field.selectionStart).replace(LINE_BREAKS, " ").length
+                change(text)
+                if (text !== typed) queueMicrotask(() => field.setSelectionRange(caret, caret))
+              }}
               className="col-start-1 row-start-1 block size-full resize-none overflow-hidden bg-transparent py-1.5 pr-11 pl-3.5 text-2xl leading-8 font-semibold break-words whitespace-pre-wrap outline-none"
             />
           ) : (
