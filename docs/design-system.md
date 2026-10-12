@@ -178,8 +178,8 @@ piece of its own moves onto the shared one when it is redone.
   cannot be brought back; full red in the dark theme too, where 60% read as
   switched off), `outline`, `ghost`, and `link` (the text's colour with a
   thin underline). Sizes say where it goes: `default`,
-  `row`, `footer`, `footer-aside`, `icon`, `icon-row`, `icon-tiny`, `player`
-  and `lane`. Every variant has the same weight and the same 1 px border, so
+  `row`, `footer`, `footer-aside`, `icon`, `icon-row`, `icon-tiny` and
+  `player`. Every variant has the same weight and the same 1 px border, so
   a toggle that swaps variants never changes width and never moves what is
   beside it; all but `link`, which has no frame: it is bare words, never
   swapped with a filled button, and a clear frame set them 1 px in from what
@@ -430,8 +430,8 @@ These hold after the rollout too, for every new screen and feature.
   nothing like it, as with `PlayButton` and `LanePlate`.
 - **U2. A different look is a variant, not a copy.** A copy drifts: a fix or
   a restyle reaches one and not the other, which is how the app came to have
-  four dialog frames and four key chips. A smaller button is a new size in
-  `Button`, as `lane` is; a component is never copied to change it. A shadcn
+  four dialog frames and four key chips. A smaller toggle is a new size in
+  `Toggle`, as `lane` is; a component is never copied to change it. A shadcn
   component, once added, is our code, and is changed in its own file to
   follow the theme.
 - **U3. Shared, or the screen's own.** A piece used on two screens or more

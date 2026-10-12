@@ -26,7 +26,7 @@ describe("Toggle", () => {
     expect(toggleVariants({ size: "icon-row" })).toContain("size-8")
   })
 
-  it("has a lane size, as small as Button's, for M and S on a plate", () => {
+  it("has a lane size, 20 px with a 4 px corner, for M and S on a plate", () => {
     const css = toggleVariants({ size: "lane" })
     expect(css).toContain("size-5")
     expect(css).toContain("rounded-sm")
