@@ -147,17 +147,19 @@ which take was the good one. None of it has to be done:
 - A take shorter than 30 seconds, with no ★ and no marks, is a false
   start: a count-in, or a stop after eight bars. Its bar is dashed, its
   name and length are grey, and it says **false start**. **Clear false
-  starts**, over the takes, moves them all to the Trash at once, and their
-  copies in the cloud go with them; **Undo** brings them back. See
+  starts**, at the head of the songs, moves them all to the Trash at once,
+  and their copies in the cloud go with them; **Undo** brings them back. See
   [Undo](#undo). How short a false start is
   can be changed in **Settings → Folders**, from 5 to 120 seconds.
 - **Send starred**, beside it, sends every ★ take that is not in the
   cloud folder yet, as **What gets published** in Settings says. See
   [Sending takes to the cloud](#sending-takes-to-the-cloud).
 
-Each of the two buttons shows how many takes it would act on. With none
-it is greyed, and pointing at it says why. In a narrow window the buttons
-go on a line of their own under the figures.
+The two buttons sit at the head of the songs, beside the evening's marks
+counted by label, each with its colour: "2 Keep this", "1 Went wrong". The
+evening's figures are not over them: they are at the top of the window.
+Each of the two buttons shows how many takes it would act on. With none it
+is greyed, and pointing at it says why.
 
 Press **Record take**, or Space, to start recording. **Finish** ends the
 rehearsal and goes back to the start screen, where Last time shows the
@@ -168,22 +170,28 @@ The top of the window says what there is so far, beside the rehearsal's
 name: how long its takes run, how many takes there are and of how many
 songs, how many are in the cloud, and how much of the disk the rehearsal
 uses. **Show in Finder** (**Show in Explorer** on Windows) opens its folder.
-In a narrow window only the length, the takes and the button fit. The player
-in History has the same header.
+A long name wraps, with its pencil after its last word, and is never cut.
+The figures give way when the name needs the room, a whole figure at a
+time: the size on disk first, then the cloud, then the takes, and the
+length last. Once one has gone, pointing at them shows them all. The button
+always stays. The player in History has the same figures and button beside
+the rehearsal's name, which wraps there too, but no pencil.
 
 On the right is **Next take**: the name the next take will get, in a field
-of its own, and under it the songs. A new take is of the same song as the
-one before it, so the name stays until you move on to another song.
+of its own, and under it the songs. A long name wraps in the field. A new
+take is of the same song as the one before it, so the name stays until you
+move on to another song.
 
-Playing by a set, the set comes first, as a card: "Gig on the 25th — 3 of 6
-played", then its songs in order. The song in the field is lit, and the one
-after it says **next**. A song played tonight has ✓ and how many takes it
-got. The evening's first take is the set's first song. Under the set,
-**Other songs** are the songs outside it. With no set they are **Songs**,
-every song you have played: tonight's first, then the songs of earlier
-rehearsals, the latest first. Five show, and **All 18 songs** under them
-opens the rest; the song in the field shows even when it is not among the
-five.
+Playing by a set, the set is the first part of the panel, under the field:
+"Gig on the 25th — 3 of 6 played", then its songs in order. The song in the
+field is lit, and the one after it says **next**. A song played tonight has
+✓ and how many takes it got. The evening's first take is the set's first
+song. A set with no songs in it yet says so, and that they are added in
+**Settings → Sets**. Under the set, **Other songs** are the songs outside
+it. With no set they are **Songs**, every song you have played: tonight's
+first, then the songs of earlier rehearsals, the latest first. Five show,
+and **All 18 songs** under them opens the rest; the song in the field shows
+even when it is not among the five.
 
 To move on to another song:
 
@@ -303,10 +311,14 @@ rehearsal into the next.
 - **Play and pause** with the big button or Space. The arrow keys jump 10
   seconds back and forward, and Home goes back to the start. Click anywhere
   on the tracks to jump there.
-- **Each track** shows its icon and name.
-- **Balance the band** with the fader under each track name. **M** mutes a
-  track and **S** plays it on its own. Volumes are remembered by track name,
-  so the next take starts with the same balance.
+- **Each track** shows its icon and name. The tracks are one panel, with no
+  lines between them: each track's waveform sits on a darker well of its
+  own. A name too long for its place is cut, and shows whole when you point
+  at it or reach it with Tab.
+- **Balance the band** with the fader under each track name. **M**, after
+  the fader, mutes a track, and **S**, after **M**, plays it on its own;
+  each is grey while it is on. Volumes are remembered by track name, so the
+  next take starts with the same balance.
 - **Turn the whole take up or down** with **Master** under the tracks. It
   only changes how loud you hear it. The balance and the copy sent to the
   cloud stay as they are. The app remembers it for the next take. Its meter
@@ -314,8 +326,10 @@ rehearsal into the next.
   The speaker at the top of the window is the same control, there on every
   screen a take can be played from, even with no take open.
 - **Mark a moment** with **Mark**, or the M key, while the take plays. Pick
-  its label and type a short comment if you like. A new mark has the first
-  label in the list (see [Marks and their labels](#marks-and-their-labels)).
+  its label and type a short comment if you like. The labels are one
+  switch: Tab comes to it once, the arrow keys move along it, and Space
+  picks the label you are on. A new mark has the first label in the list
+  (see [Marks and their labels](#marks-and-their-labels)).
   A mark is drawn in its label's colour on the waveform, and the take's line
   in the strip shows those colours too, so you can see which takes were
   marked what without opening them. Click a marker to jump to it.
@@ -375,9 +389,9 @@ the part on screen, so you see real detail. At the closest zoom about two
 seconds fit on the screen. The keys button at the end of the player's row,
 or the ? key, lists all of this with the player's keys.
 
-Above the ruler is a map of the whole take. Zoomed in, the blue stretch on
+Above the ruler is a map of the whole take. Zoomed in, the grey stretch on
 it is the part on screen, and the orange one is the selection, if there is
-one. At the closest zoom the map says so. Drag the blue stretch to move along the take, or
+one. At the closest zoom the map says so. Drag the grey stretch to move along the take, or
 click anywhere else on the map to go there. Zoomed in, **Whole take**, beside the
 map, zooms back out. The buttons beside the selection's times and Crop are
 only on screen with the selection: zoomed to another part of the take, go
@@ -469,6 +483,16 @@ whole window. Esc brings the list back. An evening is sorted here the same
 way too: the songs under a take nobody named, the false starts, **Send
 starred** and **Clear false starts**.
 
+The rehearsal's own head, over its songs, has the evening's figures beside
+its name, as the rehearsal screen's header does: how long its takes run,
+how many takes there are and of how many songs, how many are in the cloud
+and how much of the disk it uses, then **Show in Finder** (**Show in
+Explorer** on Windows). The figures give way when the name needs the room,
+the size on disk first, and once one has gone, pointing at them shows them
+all. A long name wraps, and is never cut. Under them, across the whole
+head, are the day it was played, its set if it was played by one, and its
+folder.
+
 A rehearsal played by a set has the set's name under its date, in the list
 and under its title. Over its songs, a card says how much of the set was
 played, "Gig on the 25th — 4 of 6 played", and lists the set's songs in
@@ -476,10 +500,10 @@ order: each one played with ✓ and its takes, each other **not played**. Click
 a played song to go to its takes. The card shows the set as it was that
 evening, whatever has changed in it since.
 
-You can rename and delete takes and whole rehearsals here. The pencil and
-the bin next to the rehearsal's name work on the rehearsal. Deleting moves
-the take or the rehearsal's folder to the Trash at once; **Undo** brings it
-back. See [Undo](#undo).
+You can rename and delete takes and whole rehearsals here. The pencil
+beside the rehearsal's name and the bin at the end of its head work on the
+rehearsal. Deleting moves the take or the rehearsal's folder to the Trash
+at once; **Undo** brings it back. See [Undo](#undo).
 The header shows how many rehearsals there are, how long you played in all
 and how much disk space they take.
 
@@ -555,10 +579,10 @@ There are three ways to send takes:
 
 - **By hand:** press the cloud button on a take and choose what to send. The
   copy is made in the background, so you can keep working.
-- **The starred ones:** **Send starred**, over the takes on the rehearsal
-  screen and in History, sends every ★ take of the evening that is not in
-  the cloud folder yet and not waiting to go. Its tooltip says why when
-  there is nothing to send.
+- **The starred ones:** **Send starred**, at the head of the songs on the
+  rehearsal screen and in History, sends every ★ take of the evening that
+  is not in the cloud folder yet and not already waiting to be sent. Its
+  tooltip says why when there is nothing to send.
 - **Automatically:** turn on **Send saved takes automatically** in Settings.
   Every take is then copied after you save it. Nothing is copied while a take
   is recording. This setting needs a cloud folder, and it turns off if you
@@ -735,14 +759,17 @@ the right of its tile, and a track on **MIDI** has a tile of its own. A port
 that is not connected gives the tile an amber edge, and says so where the
 tile is wide enough.
 
-In the player, a track's notes are a lane of their own: under the audio on
-**Both**, its plate the lower half of the same card, and in its own place in
-the band on **MIDI**. The plate says "Saved as .mid, not played here", and
-has no **M**, **S** or fader, as there is nothing to hear. A kit is drawn in
-six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick; anything else, by
+In the player, a track's notes are a lane of their own. On **Both** they
+are the next lane under the track's audio, and share its well, under a thin
+line; on **MIDI** they are in the track's own place among the lanes, on a
+well of their own. The plate says "Saved as .mid, not played here", and
+has no **M**, **S** or fader, as there is nothing to hear. A kit is drawn
+in six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick; anything else, by
 pitch. A track with the drums icon is drawn as a kit, and so is one whose
 notes are all on MIDI channel 10. A track with no notes in a take says "No
-notes in this take".
+notes in this take". Notes that take more than a second to read show a
+spinner until they are there, and notes that cannot be read say "Could not
+read the notes".
 
 ### Where the .mid files are
 
@@ -994,8 +1021,8 @@ delete them.
 
 ![Settings → Marks: the four labels a library starts with, each with its colour and how many marks have it](screenshots/marks.png)
 
-- The order is the order of the buttons when you mark a moment, and a new
-  mark gets the first label.
+- The order is the order of the labels in the switch when you mark a
+  moment, and a new mark gets the first label.
 - Renaming or recolouring a label changes every mark that has it, in every
   rehearsal.
 - Each label says how many marks have it. One with none is deleted at once.

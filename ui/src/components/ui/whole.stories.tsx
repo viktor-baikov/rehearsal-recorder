@@ -43,6 +43,46 @@ export const CutAtTwoLines: Story = {
   args: { text: LONG, className: "w-56 line-clamp-2 text-sm" },
 }
 
+/** A name with nothing else to reach it, as on a lane's plate, has `reach`:
+ *  Tab stops at it while it is cut, with the shared ring, and its tip shows
+ *  at once. Here Tab from the button before it. */
+export const Reach: Story = {
+  args: { text: LONG, reach: true, className: "w-56 truncate text-sm" },
+  render: (args) => (
+    <div className="flex flex-col items-start gap-3">
+      <Button variant="outline" size="row">
+        Before it
+      </Button>
+      <Whole {...args} />
+    </div>
+  ),
+}
+
+// The reached name with focus already on it. It takes its Tab stop once it is
+// measured as cut, a render after the first, so the focus waits a frame.
+function Reached({ text }: { text: string }) {
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const frame = requestAnimationFrame(() =>
+      box.current?.querySelector<HTMLElement>("[tabindex]")?.focus(),
+    )
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  return (
+    <div ref={box}>
+      <Whole text={text} reach className="w-56 truncate text-sm" />
+    </div>
+  )
+}
+
+/** The same with focus already there: the ring and the whole name. */
+export const ReachFocused: Story = { render: () => <Reached text={LONG} /> }
+
+/** A name that fits takes no Tab stop and no ring, `reach` or not. */
+export const ReachFits: Story = {
+  args: { text: "Kalychanka", reach: true, className: "w-56 truncate text-sm" },
+}
+
 // A cut name inside a button, as a song's name is in a list.
 function NameButton({ text, focus }: { text: string; focus?: boolean }) {
   const [ref, cut] = useCut<HTMLSpanElement>()

@@ -95,15 +95,12 @@ export const Sizes: Story = {
           <PlayIcon />
         </Button>
       ))}
-      <Button {...args} size="lane" aria-label="Mute">
-        M
-      </Button>
     </div>
   ),
 }
 
 /** Every variant at every size. Rows are variants, columns are sizes; the
- *  icon sizes and the lane's M and S are on the right. */
+ *  icon sizes are on the right. */
 export const Matrix: Story = {
   parameters: { layout: "padded" },
   render: (args) => (
@@ -120,9 +117,6 @@ export const Matrix: Story = {
               <PlayIcon />
             </Button>
           ))}
-          <Button {...args} variant={variant} size="lane" aria-label="Solo">
-            S
-          </Button>
         </div>
       ))}
     </div>

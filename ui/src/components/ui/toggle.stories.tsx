@@ -94,7 +94,8 @@ export const NothingMoves: Story = {
   ),
 }
 
-/** `row` is 32 px, as Button's; `icon-row` is a 32 px square. */
+/** `row` is 32 px, as Button's; `icon-row` is a 32 px square; `lane` is the
+ *  20 px square of M and S on a track's plate. */
 export const Sizes: Story = {
   render: (args) => (
     <div className="flex items-center gap-4">
@@ -104,6 +105,32 @@ export const Sizes: Story = {
       <Toggle {...args} size="icon-row" variant="outline" aria-label="Microphone">
         <Mic />
       </Toggle>
+      <Toggle {...args} size="lane" variant="outline" aria-label="Mute">
+        M
+      </Toggle>
     </div>
   ),
 }
+
+/** M and S as a track's plate has them: 20 px, 4 px corners, 6 px apart, the
+ *  letter in 12 px semibold. On is the grey fill, never amber or the accent. */
+export const Lane: Story = {
+  render: (args) => (
+    <div className="flex gap-1.5">
+      <Toggle {...args} size="lane" variant="outline" className="font-semibold" aria-label="Mute">
+        M
+      </Toggle>
+      <Toggle
+        {...args}
+        size="lane"
+        variant="outline"
+        className="font-semibold"
+        defaultPressed
+        aria-label="Solo"
+      >
+        S
+      </Toggle>
+    </div>
+  ),
+}
+export const LaneLight: Story = { ...Lane, globals: { theme: "light" } }

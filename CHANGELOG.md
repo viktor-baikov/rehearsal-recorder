@@ -19,8 +19,8 @@ opening.
   than the white panels on it. In the player each track's lane is 56 px high
   where it was over 90, so more tracks fit on a laptop's screen: **M** and
   **S** are smaller, the *Mono* or *Stereo* under a track's name is gone,
-  and a track that records notes too is one card with a plain line between
-  its halves instead of a dashed one. Dialogs, menus and notices come and go
+  and a track that records notes too has a plain line between its audio and
+  its notes instead of a dashed one. Dialogs, menus and notices come and go
   more smoothly, and with the system's Reduce motion on, or while a take
   records, they simply appear and a spinner stands still. While a take
   records nothing moves but the meters and the clock: the red dot beside
@@ -83,6 +83,42 @@ opening.
   title is as it was, and so is "Take 7" for a take nobody named. On the
   review screen the song's takes tonight are named with it, "Viasna 2".
   reha.stream and the user guide say take too.
+- **The rehearsal screen and the player in groups, where nothing jumps.**
+  The evening's songs are one group: **Send starred** and **Clear false
+  starts** at its head, beside the evening's marks counted by label, and
+  each song's takes under a line. The evening's figures are no longer over
+  the songs as well: the top of the window has them. **Next take** is one
+  group beside the songs in every window: the field at its head, where a
+  long name wraps, then the set and the other songs, each under a line. A
+  long rehearsal name wraps instead of being cut, and the figures beside it,
+  *Length*, *Takes*, *In the cloud* and *On disk*, give way to it one whole
+  figure at a time, the size on disk first; pointing at them then shows them
+  all. Nothing moves as a take plays, a mark nears, a crop runs or an error
+  shows: a take's length keeps room for the time played beside it, so its
+  bar keeps its width; **Finish** and **Record take** keep their width with
+  a take in hand and at take 10; **Mark** is as wide as **Open mark**; an
+  error in the footer is said over its buttons; and the player keeps one
+  line between its buttons and the map for a crop, a take that did not
+  load, or a warning about the output the sound is sent to. In the player
+  **M** and **S** are on the fader's row, after the fader, so a track's name
+  has its plate's whole width; a name still too long is cut, and shows whole
+  on hover and when Tab reaches it. The tracks are one group, with no lines
+  between them: each track's waveform, or its notes, sits on a darker well
+  of its own, and a track on **Both** has its audio and its notes on one
+  well, split by a thin line. **Master** is a group of its own under them,
+  held at the bottom of the window in a band as wide as the lanes, so no
+  part of a lane shows beside it. In History, with no take open, the
+  evening's figures have moved from over the songs into the rehearsal's own
+  head: they sit beside its name, give way when the name needs the room, and
+  pointing at them shows them all. The name wraps there too instead of being
+  cut, and the day, the set and the folder run across the head under them.
+  Smaller things: the player's **Play**, the share dialog and a lane of
+  notes being read show a spinner only after a second, and a lane whose
+  notes cannot be read says so; the row names in a lane of notes are 12 px,
+  up from 9, and the lane is taller to hold them; **Repeat**, **M** and
+  **S** are grey when on; the marker's labels are one switch that the arrow
+  keys move along; on the map the part on screen is grey; and an empty set
+  under **Next take** says how to fill it.
 
 ## 0.11.1
 

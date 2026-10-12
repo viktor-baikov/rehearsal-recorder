@@ -1,23 +1,25 @@
-import { callCount, calls, expect, openApp, recordTake, startRehearsal, test } from "./app.ts"
+import {
+  callCount,
+  calls,
+  expect,
+  GIG,
+  openApp,
+  recordTake,
+  settled,
+  startRehearsal,
+  test,
+  withSets,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // ↑ and ↓ on the rehearsal screen pick the next take's song through the rows
 // beside the Next take field: the set's, then the other songs (issue #12
 // step 8, K1–K5).
 
-type SetSeed = { id: number; name: string; songs: string[] }
-
 /** A page script: the library has this set, Start plays by it, and two more
  *  songs, so the other songs fold after five. */
-function withSet(songs: string[]) {
-  const set: SetSeed = { id: 1, name: "Gig on the 25th", songs }
-  return (
-    `window.__SETS__ = ${JSON.stringify([set])};` +
-    `window.__MORE_SONGS__ = ["Opus", "Kupalle"];` +
-    `localStorage.setItem("mock-python-config", JSON.stringify(` +
-    `{theme: "dark", ui_scale: 1, next_set: 1}));`
-  )
-}
+const withSet = (songs: string[]) =>
+  withSets([{ ...GIG, songs }], GIG.id, `window.__MORE_SONGS__ = ["Opus", "Kupalle"];`)
 
 const field = (page: Page) => page.getByRole("textbox", { name: "Next take" })
 const rows = (page: Page) => page.locator("[data-song-list] [data-song-row]")
@@ -175,7 +177,7 @@ test("the arrow keys hint sits beside the label and is hidden while a take is op
   const group = page.getByRole("group", { name: "Next take" })
   const hint = group.locator("[data-song-keys]")
   await expect(hint).toBeVisible()
-  await expect(hint).toHaveAttribute("title", "↑ ↓ the song before or after")
+  await expect(hint).not.toHaveAttribute("title")
   await expect(hint.locator("kbd")).toHaveText(["↑", "↓"])
   const label = (await group.locator("label").boundingBox())!
   const at = (await hint.boundingBox())!
@@ -184,6 +186,8 @@ test("the arrow keys hint sits beside the label and is hidden while a take is op
 
   await recordTake(page, 1)
   await page.getByRole("button", { name: /Save take/ }).click()
+  // The panel rises in again with the screen, and a box is measured after.
+  await settled(page)
   const fieldAt = (await field(page).boundingBox())!
   await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1']").click()
   await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()

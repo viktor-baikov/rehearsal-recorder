@@ -78,7 +78,9 @@ test("the tiles show the app's own pieces", async ({ page }) => {
   await expect(tiles.getByText("New songs")).toBeVisible()
   await expect(tiles.getByText("Soundcheck")).toBeVisible()
   await expect(tiles.getByText("Pałyn").first()).toBeVisible()
-  await expect(tiles.getByRole("img", { name: /in the cloud/ }).getByText("1 of 1")).toBeVisible()
+  // The take kept in the cloud carries its row's cloud mark. The overview no
+  // longer says the evening's figures: in the app, the header has them.
+  await expect(tiles.getByRole("img", { name: /in the cloud/ }).locator("[data-in-cloud]")).toBeVisible()
   // Palyn typed in the Next take field: it is Pałyn now, the one song
   // under it, lit; as on the rehearsal screen, a list and no pills.
   const names = tiles.getByRole("img", { name: /Palyn is Pałyn now/ })
@@ -96,7 +98,7 @@ test("the sets tile shows a rehearsal mid-set", async ({ page }) => {
     has: page.getByRole("heading", { name: "Rehearse the set, in order." }),
   })
   const piece = tile.getByRole("img", { name: /Gig on the 25th/ })
-  await expect(piece.locator("input")).toHaveValue("Viasna")
+  await expect(piece.locator("textarea")).toHaveValue("Viasna")
   const card = piece.locator("[data-set-card]")
   await expect(card.locator("h2")).toHaveText("Gig on the 25th — 1 of 6 played")
   await expect(card.locator("[data-set-song]")).toHaveText([
@@ -108,6 +110,18 @@ test("the sets tile shows a rehearsal mid-set", async ({ page }) => {
     /^6Ptuška$/,
   ])
   await expect(card.locator("[data-set-song='Viasna']")).toHaveAttribute("aria-current", "true")
+})
+
+test("the Next take tiles draw the panel's line between the field and what is under it", async ({
+  page,
+}) => {
+  await page.goto("/")
+  const tiles = page.locator("#features")
+  // The part a group sits in is the box the line is drawn on, as in the app.
+  const part = (label: RegExp, group: string) =>
+    tiles.getByRole("img", { name: label }).locator(group).locator("xpath=..")
+  await expect(part(/Gig on the 25th/, "[data-set-card]")).toHaveCSS("border-top-width", "1px")
+  await expect(part(/Palyn is Pałyn now/, "[data-song-list]")).toHaveCSS("border-top-width", "1px")
 })
 
 /** The MIDI tile, found by its heading. */

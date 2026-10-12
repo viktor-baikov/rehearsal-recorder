@@ -16,8 +16,8 @@ import { Slot } from "radix-ui"
 
   Sizes are named for their place, not their height: the footer's big
   button, the aside next to it, a list row's, a row's icon. Every size is a
-  control and takes the control radius (8 px) except the lane's M and S,
-  which are small things (4 px).
+  control and takes the control radius (8 px). M and S on a lane are
+  Toggle's `lane`.
 
   A key chip (Kbd) on a button sits a little further from the label than an
   icon does, so the key reads as a note on the button, not as part of its name.
@@ -54,8 +54,6 @@ const buttonVariants = cva(
         "icon-tiny": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
         // The player's transport.
         player: "size-10 rounded-md",
-        // M and S on a track's lane: a small thing, so 4 px.
-        lane: "size-5 rounded-sm text-xs",
       },
     },
     defaultVariants: {

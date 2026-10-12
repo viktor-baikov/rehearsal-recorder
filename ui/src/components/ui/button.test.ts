@@ -64,15 +64,7 @@ describe("Button variants", () => {
 })
 
 describe("Button sizes", () => {
-  it("makes the lane's M and S 20 px with a 4 px corner", () => {
-    const lane = looks({ size: "lane" })
-    expect(lane).toContain("size-5")
-    expect(lane).toContain("rounded-sm")
-    expect(lane).not.toContain("rounded-md")
-    expect(lane).toContain("text-xs")
-  })
-
-  it("rounds every other size as a control, 8 px", () => {
+  it("rounds every size as a control, 8 px", () => {
     const sizes = [
       "default",
       "row",

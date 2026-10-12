@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { CircleAlert, Info, TriangleAlert } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "./alert"
+import { WholeTip, useCut } from "./whole"
 
 const meta = {
   title: "UI/Alert",
@@ -88,4 +89,53 @@ export const Long: Story = {
       </AlertDescription>
     </Alert>
   ),
+}
+
+/** The line size, for a place that keeps one line for what it has to say
+ *  (the player’s): no box and no wash, the icon in the variant’s colour,
+ *  24 px tall whatever it says. */
+export const Line: Story = {
+  render: (args) => (
+    <div className="flex flex-col">
+      <Alert {...args} size="line" variant="warning">
+        <TriangleAlert />
+        <AlertDescription>That playback device is gone — using the system output.</AlertDescription>
+      </Alert>
+      <Alert {...args} size="line" variant="destructive">
+        <CircleAlert />
+        <AlertDescription>Track file not found</AlertDescription>
+      </Alert>
+      <Alert {...args} size="line">
+        <Info />
+        <AlertDescription>Press Check signal to see each input’s level.</AlertDescription>
+      </Alert>
+    </div>
+  ),
+}
+
+const CUT_WORDS =
+  "Playback stopped: nothing has gone out through “Interface” for 3 seconds — it was " +
+  "unplugged, switched off or stopped answering. Press play to try it again."
+
+function CutLine(args: React.ComponentProps<typeof Alert>) {
+  const [ref, cut] = useCut<HTMLSpanElement>()
+  return (
+    <Alert {...args} size="line" variant="warning">
+      <TriangleAlert />
+      <AlertDescription>
+        <WholeTip cut={cut} text={CUT_WORDS}>
+          <span ref={ref} className="block truncate">
+            {CUT_WORDS}
+          </span>
+        </WholeTip>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+/** Past its room a line is cut with an ellipsis, and shows whole on hover
+ *  through the shared WholeTip, which its place puts round the words inside
+ *  the description. */
+export const LineCut: Story = {
+  render: (args) => <CutLine {...args} />,
 }

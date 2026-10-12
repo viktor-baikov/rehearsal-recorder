@@ -194,7 +194,7 @@ test.describe("the review screen", () => {
     await secondTake(page)
     await page.getByRole("button", { name: "Add marker" }).click()
     await expect(page.getByText("Marker at")).toBeVisible()
-    await page.getByRole("button", { name: "Keep this" }).click()
+    await page.getByRole("radio", { name: "Keep this" }).click()
     await page.fill("input[aria-label='Marker note']", "this one is the take")
     await page.getByRole("button", { name: "Save", exact: true }).click()
     await expect(page.getByText("this one is the take")).toHaveCount(1)
@@ -215,7 +215,7 @@ async function savedTake(page: Page) {
   await page.getByRole("button", { name: /Save take/ }).click()
   await recordTake(page, 2)
   await page.getByRole("button", { name: "Add marker" }).click()
-  await page.getByRole("button", { name: "Keep this" }).click()
+  await page.getByRole("radio", { name: "Keep this" }).click()
   await page.fill("input[aria-label='Marker note']", "this one is the take")
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await page.getByRole("button", { name: /Save take/ }).click()
@@ -260,7 +260,7 @@ test.describe("a saved take", () => {
     // The thought about what just went wrong does not survive a hunt through
     // the interface.
     await expect(page.getByText("Marker at")).toBeVisible()
-    await page.getByRole("button", { name: "Went wrong" }).click()
+    await page.getByRole("radio", { name: "Went wrong" }).click()
     await page.fill("input[aria-label='Marker note']", "guitar drifts here")
     await page.getByRole("button", { name: "Save", exact: true }).click()
     await expect
@@ -464,8 +464,18 @@ test.describe("the region", () => {
     await page.mouse.up()
     await expect.poll(async () => (await lastLoop(page))?.[1] as number).toBeCloseTo(TAKE_SECONDS * 0.5, 0)
     expect(Math.abs(((await lastLoop(page))![0] as number) - TAKE_SECONDS * 0.25)).toBeLessThan(0.05)
-    // A six-second take across this width gets one-second steps on the ruler.
-    await expect(page.getByRole("group", { name: "Timeline clock" })).toContainText("0:05")
+    // The ruler keeps its scale through all of that. Its step is the first
+    // of the clock's 1, 2, 5 and 10 seconds that keeps the ticks 80 px apart
+    // across the axis (lib/timeline.ts), so which it is follows from the
+    // axis' width, read here as the timeline reads it: a six-second take gets
+    // a second or two, whatever a few pixels of layout do to that width.
+    const axis = await timeline(page).evaluate((e) => e.clientWidth)
+    const step = [1, 2, 5, 10].find((s) => (s / TAKE_SECONDS) * axis >= 80)
+    expect(step, `the step across ${axis} px`).toBeLessThanOrEqual(2)
+    const want: string[] = []
+    for (let t = 0; t < TAKE_SECONDS; t += step!) want.push(`0:${String(t).padStart(2, "0")}`)
+    const ruler = page.getByRole("group", { name: "Timeline clock" })
+    await expect(ruler.locator("span.tnum")).toHaveText(want)
   })
 })
 
@@ -556,7 +566,8 @@ test.describe("the mix", () => {
     await expect(master).toHaveValue(level)
 
     // Reached with the keyboard, the fader is what the arrows are aimed at.
-    await page.focus("input[aria-label='Vocals volume']")
+    // It is the stop after the last track's S, which is after its fader.
+    await page.focus("button[aria-label='Solo Vocals']")
     await page.keyboard.press("Tab")
     expect(await page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toBe(
       "Master volume"
@@ -914,7 +925,12 @@ test.describe("cropping a saved take", () => {
     await expect(page.getByText("that is the whole take")).toHaveCount(1)
     // A slip of the mouse is the opposite mistake, and the advice for one is
     // no use for the other.
-    await dragRegion(page, 0.4, 0.45)
+    // From just past the region's tag, whose buttons and reason take the
+    // pointer from the tracks under them, so that no tag can be under it.
+    const tag = (await page.locator("[data-region-span]").locator("xpath=../..").boundingBox())!
+    const track = (await timeline(page).boundingBox())!
+    const from = (tag.x + tag.width + 12 - track.x) / track.width
+    await dragRegion(page, from, from + 0.05)
     await expect(page.getByRole("button", { name: "Crop to the region" })).toBeDisabled()
     await expect(page.getByText("at least a second to crop")).toHaveCount(1)
   })

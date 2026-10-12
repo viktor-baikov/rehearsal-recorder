@@ -1,6 +1,9 @@
 import { useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react"
 import { X } from "lucide-react"
 import { SongPills } from "@/components/SongPills"
+import { Button } from "@/components/ui/button"
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
+import { Whole } from "@/components/ui/whole"
 import type { SongChoices } from "@/lib/api"
 import { goFor, songFor, songNamed } from "@/lib/goes"
 import { forgetSongName } from "@/lib/songNames"
@@ -17,6 +20,9 @@ function without(choices: SongChoices | null, name: string): SongChoices | null 
   })
   return { here: choices.here.map(strip), other: choices.other.map(strip) }
 }
+
+/** A line break, with the spaces round it: one space in a name. */
+const LINE_BREAKS = /\s*[\r\n]+\s*/g
 
 /** What a list drawn beside the field, not under it (the rehearsal
  *  screen's songs), names the take through: as a pill would. */
@@ -58,11 +64,16 @@ export type TakeNameFieldHandle = { put: (name: string) => void }
  *
  * `songs` "none" draws no pills and no All songs…: the rehearsal screen
  * lists the songs as rows beside it instead (NextTakeSongs), which name the
- * take through `ref`'s `put`, as a pill does. The old name's line stays.
- * There, while typing, ↑ and ↓ go to `onArrow`, and Enter names the take
- * after the row they are on (`highlighted`) and leaves the field; with
- * `selectOnClick` the first click into the field selects the name whole,
- * so typing replaces it, and a second places the caret.
+ * take through `ref`'s `put`, as a pill does. The old name's line stays, in
+ * a popover under the field that takes no focus. There, while typing, ↑ and
+ * ↓ go to `onArrow`, and Enter names the take after the row they are on
+ * (`highlighted`) and leaves the field; with `selectOnClick` the first click
+ * into the field selects the name whole, so typing replaces it, and a second
+ * places the caret.
+ *
+ * The big size is a textarea, so a name longer than the field wraps and the
+ * take's number follows its last line. It is one line all the same: a line
+ * break typed or pasted in is a space, and Enter never adds one.
  */
 export function TakeNameField({
   id,
@@ -133,7 +144,7 @@ export function TakeNameField({
   // focus so narrowing to nothing and back does not move anything beside it
   // (and while an old name is in it, below).
   const [held, setHeld] = useState<number | null>(null)
-  const input = useRef<HTMLInputElement>(null)
+  const input = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
   // A click that focused the field, to select the name whole once it is over.
   const wholeOnClick = useRef(false)
   const songsArea = useRef<HTMLDivElement>(null)
@@ -188,160 +199,203 @@ export function TakeNameField({
 
   useImperativeHandle(ref, () => ({ put }))
 
-  const oldLine = old && offerNewSong && (
-    // On one line when it fits, else two, each cut with the whole on hover:
-    // floating over the set card, it covers no more than the set's name.
-    <p
-      data-old-name
-      className={cn(
-        "flex flex-wrap gap-x-1 text-xs text-muted-foreground",
-        songs === "pills" && "mt-2"
-      )}
-    >
-      <span title={`${old.name} is ${old.song} now.`} className="max-w-full truncate">
-        {old.name} is {old.song} now.
-      </span>{" "}
-      <button
-        title={`Make ${old.name} a new song`}
-        type="button"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={async () => {
-          // What was typed, less a number after it: the go is the app's.
-          const text = songNamed(shown, known)
-            ? shown.trim()
-            : shown.trim().replace(/\s+\d+$/, "")
-          const from = choices
-          if (!(await forgetSongName(old.name))) return
-          setForgot({ name: old.name, from })
-          put(text)
-        }}
-        className="max-w-full truncate font-medium text-foreground underline underline-offset-2 hover:text-primary"
+  const oldLine =
+    old && offerNewSong ? (
+      // On one line when it fits, else two, each cut with the whole on hover:
+      // hung under the field in a popover, it covers no more than the set's
+      // name.
+      <p
+        data-old-name
+        className={cn(
+          "flex flex-wrap gap-x-1 text-xs text-muted-foreground",
+          songs === "pills" && "mt-2"
+        )}
       >
-        Make {old.name} a new song
-      </button>
-    </p>
-  )
+        <Whole text={`${old.name} is ${old.song} now.`} className="max-w-full truncate" />{" "}
+        <Button
+          variant="link"
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={async () => {
+            // What was typed, less a number after it: the go is the app's.
+            const text = songNamed(shown, known)
+              ? shown.trim()
+              : shown.trim().replace(/\s+\d+$/, "")
+            const from = choices
+            if (!(await forgetSongName(old.name))) return
+            setForgot({ name: old.name, from })
+            put(text)
+          }}
+          className="inline h-auto max-w-full truncate p-0 text-xs"
+        >
+          Make {old.name} a new song
+        </Button>
+      </p>
+    ) : null
+
+  // The field's own props, the same in a textarea and an input.
+  const props = {
+    id,
+    "aria-describedby": `${id}-go`,
+    ref: input,
+    value: shown,
+    autoFocus,
+    autoComplete: "off",
+    spellCheck: false,
+    onMouseDown: () => {
+      // The first click selects the name whole; once in it, a click
+      // places the caret, as anywhere. Selected once the click is
+      // over: Chrome puts back the caret it had before otherwise.
+      wholeOnClick.current = selectOnClick && document.activeElement !== input.current
+    },
+    onClick: () => {
+      if (wholeOnClick.current) input.current?.select()
+      wholeOnClick.current = false
+    },
+    onFocus: () => {
+      edit(value)
+      setStartedAs(value)
+      setHeld(songsArea.current?.offsetHeight ?? null)
+    },
+    onBlur: () => {
+      const left = typed.current
+      edit(null)
+      setStartedAs(null)
+      if (left !== null) commit(named(left))
+    },
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (onArrow && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        e.preventDefault()
+        onArrow(e.key === "ArrowDown" ? 1 : -1)
+        return
+      }
+      if (e.key !== "Enter") return
+      e.preventDefault()
+      const row = highlighted?.()
+      if (row) put(row)
+      else if (onEnter) onEnter(named(shown))
+      else input.current?.blur()
+    },
+  }
+  const change = (text: string) => {
+    // Before this key is drawn, the area still has its full height.
+    if (held === null) setHeld(songsArea.current?.offsetHeight ?? null)
+    edit(text)
+  }
 
   return (
     <div role="group" aria-label={label} className="relative flex min-w-0 flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <label
-          htmlFor={id}
-          className={cn(
-            "font-semibold text-muted-foreground",
-            size === "big" ? "text-[11px] tracking-wider uppercase" : "text-xs"
-          )}
-        >
+        <label htmlFor={id} className="text-xs font-semibold text-muted-foreground">
           {label}
         </label>
         {labelAside}
       </div>
-      <div
-        className={cn(
-          "relative w-full max-w-md rounded-lg border border-input",
-          onPanel ? "bg-card" : "bg-muted/45",
-          "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50"
-        )}
-      >
-        {/* The go this name will be, after the text: drawn over the field,
-            behind an invisible copy of the text, so it sits where the text
-            ends. It is never part of the name, so it cannot be selected or
-            typed over (songs in the store, D2). */}
-        <div
-          aria-hidden
+      {/* With the songs listed beside the field, the old name's line hangs
+          from the field in a popover, so nothing under the field moves as it
+          comes and goes. It is not modal and takes no focus: the field keeps
+          the keys. Not a dialog, either (role="note"): Escape in the field
+          leaves it, as anywhere (hooks/useSpacebar.ts, LAYERS). */}
+      <Popover open={songs === "none" && oldLine !== null} modal={false}>
+        <PopoverAnchor
           className={cn(
-            "pointer-events-none absolute inset-0 flex items-center overflow-hidden pr-11 pl-3.5 font-semibold whitespace-pre",
-            size === "big" ? "text-[1.75rem] leading-9" : "text-base"
+            "relative w-full max-w-md rounded-lg border border-input",
+            size === "big" && "grid",
+            onPanel ? "bg-card" : "bg-muted/45",
+            "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50"
           )}
         >
-          <span className="invisible">{shown}</span>
-          {old ? (
-            <span data-take-go className="tnum text-muted-foreground">
-              {" → "}
-              {old.song}
-              {go !== null && ` ${go}`}
-            </span>
-          ) : (
-            go !== null && (
+          {/* The go this name will be, after the text: drawn over the field,
+              behind an invisible copy of the text, so it sits where the text
+              ends — on the last line of a name that wraps. It is never part
+              of the name, so it cannot be selected or typed over (songs in
+              the store, D2). In the big size this copy is also what the
+              field takes its height from. */}
+          <div
+            aria-hidden
+            className={cn(
+              "pointer-events-none pr-11 pl-3.5 font-semibold",
+              size === "big"
+                ? "col-start-1 row-start-1 py-1.5 text-2xl leading-8 break-words whitespace-pre-wrap"
+                : "absolute inset-0 flex items-center overflow-hidden text-base whitespace-pre"
+            )}
+          >
+            <span className="invisible">{shown}</span>
+            {old ? (
               <span data-take-go className="tnum text-muted-foreground">
-                {" "}
-                {go}
+                {" → "}
+                {old.song}
+                {go !== null && ` ${go}`}
               </span>
-            )
+            ) : (
+              go !== null && (
+                <span data-take-go className="tnum text-muted-foreground">
+                  {" "}
+                  {go}
+                </span>
+              )
+            )}
+          </div>
+          <span id={`${id}-go`} className="sr-only">
+            {old
+              ? `${old.song}${go !== null ? ` ${go}` : ""}`
+              : go !== null
+                ? `${via?.choice.song ?? shown.trim()} ${go}`
+                : ""}
+          </span>
+          {size === "big" ? (
+            // One line all the same: a line break pasted in is a space.
+            <textarea
+              {...props}
+              rows={1}
+              onChange={(e) => {
+                const field = e.target
+                const typed = field.value
+                const text = typed.replace(LINE_BREAKS, " ")
+                // Rewritten, the value puts the caret at its end: it goes back
+                // to where the paste ended, once the field is drawn.
+                const caret = typed.slice(0, field.selectionStart).replace(LINE_BREAKS, " ").length
+                change(text)
+                if (text !== typed) queueMicrotask(() => field.setSelectionRange(caret, caret))
+              }}
+              className="col-start-1 row-start-1 block size-full resize-none overflow-hidden bg-transparent py-1.5 pr-11 pl-3.5 text-2xl leading-8 font-semibold break-words whitespace-pre-wrap outline-none"
+            />
+          ) : (
+            <input
+              {...props}
+              onChange={(e) => change(e.target.value)}
+              className="h-9 w-full bg-transparent pr-11 pl-3.5 text-base font-semibold outline-none"
+            />
           )}
-        </div>
-        <span id={`${id}-go`} className="sr-only">
-          {old
-            ? `${old.song}${go !== null ? ` ${go}` : ""}`
-            : go !== null
-              ? `${via?.choice.song ?? shown.trim()} ${go}`
-              : ""}
-        </span>
-        <input
-          id={id}
-          aria-describedby={`${id}-go`}
-          ref={input}
-          value={shown}
-          autoFocus={autoFocus}
-          autoComplete="off"
-          spellCheck={false}
-          onMouseDown={() => {
-            // The first click selects the name whole; once in it, a click
-            // places the caret, as anywhere. Selected once the click is
-            // over: Chrome puts back the caret it had before otherwise.
-            wholeOnClick.current = selectOnClick && document.activeElement !== input.current
-          }}
-          onClick={() => {
-            if (wholeOnClick.current) input.current?.select()
-            wholeOnClick.current = false
-          }}
-          onFocus={() => {
-            edit(value)
-            setStartedAs(value)
-            setHeld(songsArea.current?.offsetHeight ?? null)
-          }}
-          onChange={(e) => {
-            // Before this key is drawn, the area still has its full height.
-            if (held === null) setHeld(songsArea.current?.offsetHeight ?? null)
-            edit(e.target.value)
-          }}
-          onBlur={() => {
-            const left = typed.current
-            edit(null)
-            setStartedAs(null)
-            if (left !== null) commit(named(left))
-          }}
-          onKeyDown={(e) => {
-            if (onArrow && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-              e.preventDefault()
-              onArrow(e.key === "ArrowDown" ? 1 : -1)
-              return
-            }
-            if (e.key !== "Enter") return
-            e.preventDefault()
-            const row = highlighted?.()
-            if (row) put(row)
-            else if (onEnter) onEnter(named(shown))
-            else input.current?.blur()
-          }}
-          className={cn(
-            "w-full bg-transparent pr-11 pl-3.5 font-semibold outline-none",
-            size === "big" ? "py-1.5 text-[1.75rem] leading-9" : "h-9 text-base"
-          )}
-        />
-        <button
-          type="button"
-          aria-label={`Put back “${fallback}”`}
-          // Takes no focus of its own, as the songs take none: `put` says
-          // whether the field keeps it.
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => put(fallback)}
-          className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-      {songs === "pills" ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-row"
+            aria-label={`Put back “${fallback}”`}
+            // Takes no focus of its own, as the songs take none: `put` says
+            // whether the field keeps it.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => put(fallback)}
+            className={cn(
+              "absolute right-1.5 rounded-full text-muted-foreground hover:text-foreground",
+              size === "big" ? "top-2" : "top-1/2 size-7 -translate-y-1/2"
+            )}
+          >
+            <X className="size-4" />
+          </Button>
+        </PopoverAnchor>
+        {songs === "none" && oldLine && (
+          <PopoverContent
+            role="note"
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            className="w-(--radix-popover-trigger-width) px-3 py-2"
+          >
+            {oldLine}
+          </PopoverContent>
+        )}
+      </Popover>
+      {songs === "pills" && (
         <div ref={songsArea} style={{ minHeight: (holding && held) || undefined }}>
           <SongPills
             choices={known}
@@ -352,14 +406,6 @@ export function TakeNameField({
           />
           {oldLine}
         </div>
-      ) : (
-        // With the songs listed beside the field, the line floats over them
-        // under it, so nothing under the field moves as it comes and goes.
-        oldLine && (
-          <div className="absolute top-full right-0 left-0 z-10 mt-1.5 max-w-md rounded-lg border bg-popover px-3 py-2 shadow-md">
-            {oldLine}
-          </div>
-        )
       )}
     </div>
   )

@@ -29,6 +29,7 @@ export function TakeMap({
   closest,
   gutterPx,
   gapPx,
+  endPx = 0,
   controls,
   onMove,
   onWhole,
@@ -47,6 +48,9 @@ export function TakeMap({
    *  the map lines up with the take it is a map of. */
   gutterPx: number
   gapPx: number
+  /** The room right of the lanes' pictures, which the map keeps too, so it
+   *  ends where they do. */
+  endPx?: number
   /** The id of the timeline the map moves. */
   controls: string
   onMove: (from: number, to: number) => void
@@ -93,7 +97,7 @@ export function TakeMap({
   return (
     <div
       className="grid items-center"
-      style={{ gridTemplateColumns: `${gutterPx}px 1fr`, columnGap: gapPx }}
+      style={{ gridTemplateColumns: `${gutterPx}px 1fr`, columnGap: gapPx, paddingRight: endPx }}
     >
       <div className="flex min-h-6 items-center justify-between gap-2 text-xs text-muted-foreground">
         {zoomed ? (
@@ -151,7 +155,7 @@ export function TakeMap({
         {zoomed && (
           <span
             data-view-frame
-            className="absolute inset-y-0 min-w-1.5 cursor-grab rounded-sm bg-primary/30 active:cursor-grabbing"
+            className="absolute inset-y-0 min-w-1.5 cursor-grab rounded-sm bg-foreground/15 active:cursor-grabbing"
             style={{ left: `${pct(from)}%`, width: `${pct(to) - pct(from)}%` }}
           />
         )}
@@ -164,7 +168,7 @@ export function TakeMap({
             it goes. Without a word saying so that reads as the zoom having
             broken. */}
         {zoomed && closest && (
-          <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-[10px] text-muted-foreground">
+          <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-xs text-muted-foreground">
             closest zoom
           </span>
         )}

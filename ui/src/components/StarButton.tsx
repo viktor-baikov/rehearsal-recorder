@@ -1,5 +1,6 @@
 import { Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { Take } from "@/lib/api"
 
@@ -7,7 +8,7 @@ import type { Take } from "@/lib/api"
  * ★ on a take: one click puts it on, another takes it off, without asking,
  * since it is as easy to take off as to put on. Filled on a starred take.
  * Where it sits decides when an empty one shows; the overview shows it under
- * the mouse, as it shows Rename and Delete.
+ * the mouse, as it shows Rename and Delete. What it does is said in a tip.
  *
  * It says what it will ask for, not "toggle": the click sends the opposite
  * of what this take says now, so two quick clicks on a stale row ask for
@@ -24,21 +25,25 @@ export function StarButton({
 }) {
   const starred = take.starred ?? false
   return (
-    <Button
-      variant="ghost"
-      size="icon-row"
-      aria-label={`Star ${take.name}`}
-      aria-pressed={starred}
-      title={starred ? "Starred. Click to take the star off" : "Star this take"}
-      onClick={() => onStar(take, !starred)}
-      className={cn(
-        starred
-          ? "text-signal hover:text-signal"
-          : "text-muted-foreground hover:text-foreground",
-        className
-      )}
-    >
-      <Star className={cn(starred && "fill-current")} />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-row"
+          aria-label={`Star ${take.name}`}
+          aria-pressed={starred}
+          onClick={() => onStar(take, !starred)}
+          className={cn(
+            starred
+              ? "text-signal hover:text-signal"
+              : "text-muted-foreground hover:text-foreground",
+            className
+          )}
+        >
+          <Star className={cn(starred && "fill-current")} />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{starred ? "Starred. Click to take the star off" : "Star this take"}</TooltipContent>
+    </Tooltip>
   )
 }

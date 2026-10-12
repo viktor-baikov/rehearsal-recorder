@@ -4,48 +4,23 @@ import {
   expect,
   notices,
   openApp,
+  openBandApp,
+  openEvening,
   openHistory,
+  settled,
   startRehearsal,
+  style,
   test,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Sorting the evening on the rehearsal screen: false starts drawn as such,
 // song pills under the takes nobody named, Send starred and Clear false
-// starts over the takes. Tonight is ten takes, the rehearsal started with
-// them already in it:
-//   1 Pałyn 3:20 ★          2 Pałyn 0:12 ★         3 Viasna 0:12, a mark
-//   4 Pałyn 0:12            5 Viasna 3:00 ★ mix    6 Take 6 2:30
-//   7 Viasna 3:10           8 Pałyn 3:30           9 Sonca 2:50 ★ tracks
-//  10 Take 10 0:08
-// So with the 30 s default 4 and 10 are false starts, and 1 and 2 are the
-// ★ takes with nothing in the cloud folder.
-const TONIGHT = [
-  { name: "Pałyn", duration_sec: 200, starred: true },
-  { name: "Pałyn", duration_sec: 12, starred: true },
-  { name: "Viasna", duration_sec: 12, markers: [{ at: 4, note: "", label_id: 1 }] },
-  { name: "Pałyn", duration_sec: 12 },
-  { name: "Viasna", duration_sec: 180, starred: true, cloud: { mix: "/cloud/Viasna 2.mp3" } },
-  { name: "Take 6", duration_sec: 150 },
-  { name: "Viasna", duration_sec: 190 },
-  { name: "Pałyn", duration_sec: 210 },
-  { name: "Sonca", duration_sec: 170, starred: true, cloud: { tracks: "/cloud/Sonca 1" } },
-  { name: "Take 10", duration_sec: 8 },
-]
+// starts at the head of the songs. Its takes are TONIGHT, in app.ts.
+
 /** The rehearsal's folder, as the fake made it from the name it was given. */
 async function folderOf(page: Page) {
   return `/rec/${(await calls(page, "start_rehearsal"))[0].args[0]}`
-}
-
-async function openEvening(page: Page, before = "", tonight: object[] = TONIGHT) {
-  await openApp(page, {
-    before: `window.__TONIGHT__ = ${JSON.stringify(tonight)};
-             window.__CLOUD_DIR__ = '/cloud'; ${before}`,
-  })
-  await startRehearsal(page, tonight.length + 1)
-  const overview = page.locator("[aria-label='Rehearsal overview']")
-  await expect(overview).toBeVisible()
-  return overview
 }
 
 const row = (overview: ReturnType<Page["locator"]>, n: number) =>
@@ -109,14 +84,14 @@ test("Send starred sends the starred takes not in the cloud", async ({ page }) =
   expect((await calls(page, "send_starred"))[0].args).toEqual([await folderOf(page)])
   await expect(send).toHaveText(/^\s*Send starred\s*$/)
   await expect(send).toBeDisabled()
-  await expect(send).toHaveAttribute("title", "Every ★ take is in the cloud folder")
+  await expect(send).toHaveAccessibleDescription("Every ★ take is in the cloud folder")
 })
 
 test("Send starred says why it is off when nothing has a star", async ({ page }) => {
   const overview = await openEvening(page, "", [{ name: "Pałyn", duration_sec: 200 }])
   const send = overview.getByRole("button", { name: /Send starred/ })
   await expect(send).toBeDisabled()
-  await expect(send).toHaveAttribute("title", "No take has ★")
+  await expect(send).toHaveAccessibleDescription("No take has ★")
   await send.click({ force: true })
   expect(await callCount(page, "send_starred")).toBe(0)
 })
@@ -125,7 +100,7 @@ test("Send starred is off with no cloud folder, and says where to choose one", a
   const overview = await openEvening(page, "window.__CLOUD_DIR__ = null;")
   const send = overview.getByRole("button", { name: /Send starred/ })
   await expect(send).toBeDisabled()
-  await expect(send).toHaveAttribute("title", "Choose a cloud folder in Settings")
+  await expect(send).toHaveAccessibleDescription("Choose a cloud folder in Settings")
 })
 
 test("a cloud folder chosen from a take's cloud button turns Send starred on", async ({ page }) => {
@@ -207,13 +182,48 @@ test("Not named goes once its last take is cleared", async ({ page }) => {
   await expect(overview.getByRole("group", { name: "Pałyn" })).toBeVisible()
 })
 
-test("the buttons sit on their own line in a 960 px window", async ({ page }) => {
+test("the buttons and the legend share the songs group's head in a 960 px window", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 680 })
   const overview = await openEvening(page)
-  const played = await overview.getByText("played", { exact: true }).boundingBox()
-  const send = await overview.getByRole("button", { name: /Send starred/ }).boundingBox()
-  expect(send!.y).toBeGreaterThan(played!.y + played!.height)
+  await settled(page)
+  const head = (await overview.locator("[data-overview-head]").boundingBox())!
+  const send = (await overview.getByRole("button", { name: /Send starred/ }).boundingBox())!
+  const clear = (await overview.getByRole("button", { name: /Clear false starts/ }).boundingBox())!
+  // Tonight has one mark, so the legend is one entry: "1 Note".
+  const legend = (await overview.locator("[data-overview-head]").getByText("1 Note").boundingBox())!
+  for (const [what, at] of [["Send starred", send], ["Clear false starts", clear], ["the legend", legend]] as const) {
+    expect(at.x, `${what} inside the head, left`).toBeGreaterThanOrEqual(head.x)
+    expect(at.x + at.width, `${what} inside the head, right`).toBeLessThanOrEqual(head.x + head.width)
+    expect(at.y, `${what} inside the head, top`).toBeGreaterThanOrEqual(head.y)
+    expect(at.y + at.height, `${what} inside the head, bottom`).toBeLessThanOrEqual(head.y + head.height)
+  }
+  // The legend on the left, on the row of the buttons, which are on the right.
+  const middle = legend.y + legend.height / 2
+  expect(middle, "the legend on the buttons' row").toBeGreaterThan(send.y)
+  expect(middle, "the legend on the buttons' row").toBeLessThan(send.y + send.height)
+  expect(legend.x + legend.width, "the legend before the buttons").toBeLessThanOrEqual(send.x)
   expect(await overview.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+})
+
+test("with the stress band the buttons go under the legend and stay on the right", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 680 })
+  await openBandApp(page, { stress: "rehearsal" })
+  await startRehearsal(page, 33)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await expect(overview).toBeVisible()
+  await settled(page)
+  const head = overview.locator("[data-overview-head]")
+  const box = (await head.boundingBox())!
+  const pad = parseFloat((await style(head, "padding-right"))["padding-right"])
+  expect(pad).toBe(24)
+  const send = (await overview.getByRole("button", { name: /Send starred/ }).boundingBox())!
+  const clear = (await overview.getByRole("button", { name: /Clear false starts/ }).boundingBox())!
+  const legend = (await head.locator("> div").first().boundingBox())!
+  // The legend takes the head's first line; the buttons have one of their
+  // own under it, at its right end, where they are when the two share one.
+  expect(send.y, "Send starred under the legend").toBeGreaterThanOrEqual(legend.y + legend.height)
+  expect(clear.y, "Clear false starts under the legend").toBeGreaterThanOrEqual(legend.y + legend.height)
+  expect(Math.abs(clear.x + clear.width - (box.x + box.width - pad))).toBeLessThan(0.5)
 })
 
 test("clearing a false start playing in the overview lets the player go", async ({ page }) => {
@@ -240,8 +250,7 @@ async function openPast(page: Page, name: string, before = "") {
 test("in History a rehearsal has its false starts and both buttons", async ({ page }) => {
   const overview = await openPast(page, "Tuesday jam")
   await expect(row(overview, 1)).toHaveAttribute("data-false-start")
-  await expect(overview.getByRole("button", { name: /Send starred/ })).toHaveAttribute(
-    "title",
+  await expect(overview.getByRole("button", { name: /Send starred/ })).toHaveAccessibleDescription(
     "No take has ★"
   )
   await overview.getByRole("button", { name: /Clear false starts/ }).click()
@@ -273,7 +282,7 @@ test("in History a starred take on its way says so, in its row and in the toolti
   // It asks after the copy at once, not at the next look in two seconds.
   await expect.poll(polls, { timeout: 400 }).toBeGreaterThan(before)
   await expect(row(overview, 1)).toContainText("Waiting for the cloud")
-  await expect(send).toHaveAttribute("title", "Every ★ take is in the cloud folder or on its way")
+  await expect(send).toHaveAccessibleDescription("Every ★ take is in the cloud folder or on its way")
 })
 
 test("in History a pill under an unnamed take names it there", async ({ page }) => {

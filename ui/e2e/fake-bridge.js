@@ -1084,9 +1084,12 @@ window.__MAKE_API__ = () => ({
   // The notes of a take's tracks, a kit pattern for the drums and a keyboard
   // line for the rest, as long as the take (api.take_notes). Each answer, an
   // error too, carries the band's icon for its name, as take_media's does.
-  take_notes: track('take_notes', async (files) => (files || []).map(({name, file}) => withIcon(file
-    ? notesOfFile(name, fileDurations[file] ?? (P ? P.duration : TAKE))
-    : {name, error:'Notes file not found'}))),
+  take_notes: track('take_notes', async (files) => {
+    await held('take_notes');
+    return (files || []).map(({name, file}) => withIcon(file
+      ? notesOfFile(name, fileDurations[file] ?? (P ? P.duration : TAKE))
+      : {name, error:'Notes file not found'}));
+  }),
 
   // Long work, scripted by the test through window.__ACTIVITY__. Counted, so
   // a test can wait for the screen to have looked again.
@@ -1850,6 +1853,7 @@ window.__MAKE_API__ = () => ({
     return {ok:true, queued, failed};
   }),
   unshare_take: track('unshare_take', async (folder, n) => {
+    await held('unshare_take');
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     if (take) take.cloud = {};
     return JSON.parse(JSON.stringify({ok:true, removed:[], trashed:true}));

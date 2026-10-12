@@ -5,7 +5,7 @@ import { Fragment, type ReactNode } from "react"
 import { HealthLine } from "@/components/HealthLine"
 import { NotesLane } from "@/components/midi/NotesLane"
 import { NotesPlate } from "@/components/midi/NotesPlate"
-import { SetCard, SongRows } from "@/components/NextTakeSongs"
+import { PanelParts, SetCard, SongRows } from "@/components/NextTakeSongs"
 import { RehearsalList } from "@/components/RehearsalList"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { SongKeys } from "@/components/SongKeys"
@@ -100,10 +100,14 @@ const MID_SET = new Map([["Pałyn", 4]])
 
 /**
  * The rehearsal screen's Next take panel, the field over the songs under
- * it, as the screen lays them out.
+ * it, as the screen lays them out: one group, each part under a line.
  */
 function Panel({ children }: { children: ReactNode }) {
-  return <div className="flex w-[23rem] max-w-full flex-col gap-5">{children}</div>
+  return (
+    <div className="w-[23rem] max-w-full">
+      <PanelParts>{children}</PanelParts>
+    </div>
+  )
 }
 
 /**
@@ -118,7 +122,11 @@ function Notes({ notes }: { notes: SiteNotes }) {
       <div className="grid grid-cols-1 grid-rows-[auto_7.5rem_auto_7.5rem] gap-2 @md:grid-cols-[11rem_minmax(0,1fr)] @md:grid-rows-[7.5rem_7.5rem]">
         {notes.lanes.map(({ port, notes: read }) => (
           <Fragment key={read.name}>
-            <NotesPlate name={read.name} icon={read.icon} port={port} />
+            {/* In the player the plate is on its lanes group's fill; here,
+                with no group round it, it has a card of its own. */}
+            <div className="rounded-lg bg-card">
+              <NotesPlate name={read.name} icon={read.icon} port={port} />
+            </div>
             <NotesLane
               name={read.name}
               data={read}

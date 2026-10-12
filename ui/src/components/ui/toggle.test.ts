@@ -1,7 +1,7 @@
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
-import { toggleVariants } from "@/components/ui/toggle"
+import { Toggle, toggleVariants } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 describe("Toggle", () => {
@@ -24,6 +24,25 @@ describe("Toggle", () => {
   it("is as tall as Button's row, and a square of it for an icon", () => {
     expect(toggleVariants({ size: "row" })).toContain("h-8")
     expect(toggleVariants({ size: "icon-row" })).toContain("size-8")
+  })
+
+  it("has a lane size, 20 px with a 4 px corner, for M and S on a plate", () => {
+    const css = toggleVariants({ size: "lane" })
+    expect(css).toContain("size-5")
+    expect(css).toContain("rounded-sm")
+    expect(css).toContain("text-xs")
+    // The plate's 20 px is the whole of it: nothing pads the letter.
+    expect(css).not.toMatch(/(^| )p[xy]?-\d/)
+  })
+
+  it("draws a lane toggle at 20 px, 4 px corners and 12 px text, whatever the base says", () => {
+    const html = renderToStaticMarkup(createElement(Toggle, { size: "lane", variant: "outline" }, "M"))
+    const css = html.match(/class="([^"]*)"/)![1].split(" ")
+    expect(css).toContain("size-5")
+    expect(css).toContain("rounded-sm")
+    expect(css).not.toContain("rounded-md")
+    expect(css).toContain("text-xs")
+    expect(css).not.toContain("text-sm")
   })
 })
 

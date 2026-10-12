@@ -10,10 +10,9 @@ export function SongKeys({ hidden = false }: { hidden?: boolean }) {
   return (
     <span
       data-song-keys
-      title="↑ ↓ the song before or after"
       aria-hidden
       className={cn(
-        "flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground",
+        "flex shrink-0 items-center gap-1 text-xs text-muted-foreground",
         hidden && "invisible"
       )}
     >

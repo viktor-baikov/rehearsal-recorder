@@ -10,10 +10,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { LabelDot } from "@/components/ui/mark"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { formatMMSS } from "@/lib/format"
 import { useHeld } from "@/lib/held"
-import { labelLook, labelOf, useLabels } from "@/lib/labels"
+import { labelOf, useLabels } from "@/lib/labels"
 import type { Marker } from "@/lib/api"
 
 /**
@@ -69,21 +70,27 @@ export function MarkerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap gap-2">
+        {/* One kind is always chosen: pressing the chosen one again says "",
+            which is not a kind. */}
+        <ToggleGroup
+          type="single"
+          variant="switch"
+          aria-label="Kind of marker"
+          value={String(chosen)}
+          onValueChange={(id) => id && setLabelId(Number(id))}
+          className="w-full flex-wrap"
+        >
           {labels.map((l) => (
-            <Button
+            <ToggleGroupItem
               key={l.id}
-              variant={chosen === l.id ? "default" : "outline"}
-              size="row"
-              aria-pressed={chosen === l.id}
-              aria-label={l.name}
-              onClick={() => setLabelId(l.id)}
+              value={String(l.id)}
+              className="flex items-center justify-center gap-2"
             >
-              <span className={cn("size-2 rounded-full", labelLook(l.colour).dot)} />
+              <LabelDot colour={l.colour} />
               {l.name}
-            </Button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
 
         <Input
           autoFocus

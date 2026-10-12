@@ -17,21 +17,23 @@ shows the app as it is; the site keeps its own big headings and layout
 ## Where things stand
 
 The foundation is in: the theme values, the shared components, Undo, the
-showcase and the check. The start screen is redone on it: its pieces are the
-shared ones, all but the song list in New set, which it shares with
-Settings' Sets and which is redone with Settings, and its files are off the
-check's [allow-list](#the-check). The other screens follow, one pull request
-each, in this order: the rehearsal screen, recording, Review, History,
-Drafts, and Settings. Until its turn a screen is on the allow-list and may
-still break the rules it is listed for. Where a rule below says "as each
-screen is redone", the screens' pull requests carry it out, and so far only
-the start screen's has. On reha.stream the pieces of the app are the real
-components and follow the theme already, but the page itself takes only the
-accent from it so far (`--page-accent: var(--primary)` in
-`site/src/page/page.css`). After the last screen, reha.stream's own
-background, text colours and font (Instrument Sans) take the shared ones,
-and the release comes when the allow-list is empty: the new look goes out in
-that one release.
+showcase and the check. The start screen is redone on it, and so are the
+rehearsal screen and the big player, which Review and History open takes in
+too: their pieces are the shared ones, and their files are off the check's
+[allow-list](#the-check). The one piece the start screen still builds on
+its own is the song list in New set, which it shares with Settings' Sets
+and which is redone with Settings. The other screens follow, one pull
+request each, in this order: recording, Review, History, Drafts, and
+Settings. Until its turn a screen is on the allow-list and may still break
+the rules it is listed for. Where a rule below says "as each screen is
+redone", the screens' pull requests carry it out, and so far the start
+screen's and the rehearsal screen's have. On reha.stream the pieces of the
+app are the real components and follow the theme already, but the page
+itself takes only the accent from it so far
+(`--page-accent: var(--primary)` in `site/src/page/page.css`). After the
+last screen, reha.stream's own background, text colours and font
+(Instrument Sans) take the shared ones, and the release comes when the
+allow-list is empty: the new look goes out in that one release.
 
 ## The foundation
 
@@ -176,8 +178,8 @@ piece of its own moves onto the shared one when it is redone.
   cannot be brought back; full red in the dark theme too, where 60% read as
   switched off), `outline`, `ghost`, and `link` (the text's colour with a
   thin underline). Sizes say where it goes: `default`,
-  `row`, `footer`, `footer-aside`, `icon`, `icon-row`, `icon-tiny`, `player`
-  and `lane`. Every variant has the same weight and the same 1 px border, so
+  `row`, `footer`, `footer-aside`, `icon`, `icon-row`, `icon-tiny` and
+  `player`. Every variant has the same weight and the same 1 px border, so
   a toggle that swaps variants never changes width and never moves what is
   beside it; all but `link`, which has no frame: it is bare words, never
   swapped with a filled button, and a clear frame set them 1 px in from what
@@ -233,16 +235,29 @@ piece of its own moves onto the shared one when it is redone.
 - **C6. Track lane.** A rehearsal lane is 56 px, 3.5 rem so it grows with
   the Appearance scale (`LANE_REM` in `components/Timeline.tsx`). At 96,
   five tracks took a laptop's whole screen. The Mono or Stereo line under a
-  track's name is gone. M and S are `Button size="lane"`: 20 px, 12 px text
-  and 4 px corners, 6 px apart, which keeps their 24 px touch areas apart
-  (WCAG 2.5.8). `LanePlate` is the plate beside a lane, the same for audio,
-  notes and the master. A track that records both is one card of two halves
-  split by a 1 px line, `laneHalf()` in `lib/laneHalf.ts`. A notes lane is
-  as tall as its plate needs.
+  track's name is gone. The name has the plate's whole width, and a name cut
+  at its end shows whole on hover and on keyboard focus (`Whole reach`).
+  Under it is the fader, with M and S after it. M and S are
+  `Toggle size="lane"`: 20 px, 12 px text and 4 px corners, 6 px apart,
+  which keeps their 24 px touch areas apart (WCAG 2.5.8), and grey when on.
+  The lanes are one group on the card's fill, with no lines between tracks:
+  each lane's picture, a waveform or a lane of notes, sits on a well of its
+  own (`--background`, 8 px corners, 3 px of the group's fill above and below
+  it), and a Both track's audio and notes share one well split by a 1 px
+  line. That split is two class strings, said once in `Timeline.tsx`.
+  `LanePlate` is the plate beside a lane, the same for audio, notes and the
+  master; `LanePlate grouped` is a plate in the group, with no fill or
+  corners of its own. A notes lane is as tall as its plate needs. Master is
+  its own group, a plate with the card's fill, sticky at the bottom in a
+  band as wide as the lanes, so that no part of a lane shows beside it.
 - **C7. Group**, `Card`: a panel set apart by its fill (F4), with 12 px
   corners, 16 px inside, and no border or shadow. A screen gives it more air
   with `className`. It takes the place of about 21 hand-made bordered boxes
-  as each screen is redone.
+  as each screen is redone. A group of rows, such as the start screen's
+  tracks or the evening's songs on the rehearsal screen, splits them with
+  1 px lines and lets each row keep its own padding. Where each row holds a
+  picture of its own, as the player's lanes do, the pictures' wells split
+  the rows instead, and there are no lines.
 - **C8. Everything else that is built more than once.** About thirty kinds
   of piece are built two to sixteen times each, and each copy drifts from
   the others. Each becomes one shared piece, taken from shadcn/ui where it
@@ -282,7 +297,9 @@ The other shared components, each with its stories:
   closes on Esc or a click outside, for a few controls that need no screen
   of their own: a track's icon grid, the playback volume in the header, the
   background work list, a label's colours, and *All songs…* under the take's
-  name.
+  name. `PopoverAnchor` hangs one from something that is not its button,
+  with the focus left where it is: the line under the Next take field that
+  says an old name is a song's now, as wide as the field.
 - **DropdownMenu**, `dropdown-menu.tsx`: a menu of things to pick or do,
   with a check on the chosen one. The set picker beside **Start rehearsal**
   is its one use so far.
@@ -314,12 +331,14 @@ The other shared components, each with its stories:
   that opened it. For the start screen's left part in a narrow window, the
   narrow form of C8's side panel.
 - **Toggle**, `toggle.tsx`: a button that stays pressed (`aria-pressed`), in
-  `default` and `outline`, sized as Button's `row` (32 px) and `icon-row`.
-  On is the grey `selected` fill, never the accent (F2), and it has the same
-  weight and 1 px frame on or off, so pressing it moves nothing. C8's on/off
-  buttons: Stereo. Check signal says what pressing it does ("Check signal",
-  "Stop checking"), and a toggle's name must not change with it, so it is a
-  Button, grey while the check runs.
+  `default` and `outline`, sized as Button's `row` (32 px) and `icon-row`,
+  and `lane`, the 20 px square of M and S on a track's plate (C6), with 12 px
+  text and 4 px corners. On is the grey `selected` fill, never the accent
+  (F2), and it has the same weight and 1 px frame on or off, so pressing it
+  moves nothing. C8's on/off buttons: Stereo, the strip's Songs, the
+  player's Repeat, and M and S. Check signal says what pressing it does
+  ("Check signal", "Stop checking"), and a toggle's name must not change
+  with it, so it is a Button, grey while the check runs.
 - **ToggleGroup**, `toggle-group.tsx`: pick one or several, with the arrow
   keys moving along the group and Tab leaving it. `default` and `outline` are
   Toggles joined into a bar; `switch` is History's switch, a grey track with
@@ -327,12 +346,19 @@ The other shared components, each with its stories:
   makes it (`size` does nothing for it). With `type="single"`, pressing the
   chosen item again empties the group (`onValueChange("")`), so a pick-one
   that must always have one chosen ignores the "", as Audio · Both · MIDI
-  does (`ModeSwitch`). C8's three identical segmented switches and its
-  pick-one groups.
+  does (`ModeSwitch`), and so does the kind of a marker. In a dialog a
+  pick-one group is one Tab stop too (`useDialogFocusKeys`). C8's three
+  identical segmented switches and its pick-one groups.
 - **Alert**, `alert.tsx`: a box for a line the screen has to say, with an
   icon, a title and a text, all optional. `warning` is the theme's `warn`
   colour on the icon and the edge with a faint wash behind; `destructive` is
-  a failure; `default` is neutral. C8's warnings and errors.
+  a failure; `default` is neutral. C8's warnings and errors. Its `size` is
+  `box`, the default, or `line`: the icon in the variant's colour, and one
+  line of 12 px words, red for `destructive` and in the text's colour
+  otherwise. It is 24 px tall whatever it says, with no box or wash, and
+  cut with "…" where the room ends, whole in the shared tip. `line` is for a
+  place that keeps one line for whatever it has to say, as the player does
+  (B4).
 - **Spinner**, `spinner.tsx`: lucide's `Loader2Icon`, turning, `role="status"`
   and named Loading. It is there from the start but invisible for the first
   second (`SPINNER_AFTER_MS`, or its `after` in ms), so a quick answer does
@@ -359,7 +385,10 @@ The other shared components, each with its stories:
   reader, unless given a `label`, and then a `meter` at its largest side.
 - **Whole**, `whole.tsx`: B6's pieces for a long name. `Whole` is a plain
   text that shows whole in a tip on hover when it is cut; the keys do not
-  reach a plain text, so it has no keyboard focus to show on. `useCut` and
+  reach a plain text, so it has no keyboard focus to show on. With `reach`
+  it is a Tab stop while it is cut, with the shared focus ring, and its tip
+  shows on keyboard focus too; one that fits is no stop. A name on a track's
+  plate, and a notes plate's name and port, are `Whole reach`. `useCut` and
   `WholeTip` do the same round a button, a link or anything with a
   `tabindex`, the tip also showing on keyboard focus and staying while focus
   is there, even when focusing scrolled the panel. The tip is for the eyes:
@@ -379,8 +408,12 @@ The other shared components, each with its stories:
 - **Mark**, `mark.tsx`: a mark's pieces (C8). `LabelDot` is the one label
   dot, 8 px and round, in the label's colour; `MarkLine` is the one note
   line: the dot, the time, the take where the line is away from it, then the
-  label and what was written, cut at the end of the room. Last time uses
-  both; the other dots and note lines move onto them as their screens are
+  label and what was written, cut at the end of the room. `MarkTick` is one
+  mark on a take's bar: a 3 px tick in the label's colour where the mark
+  fell, as tall as its caller makes it. On the bars of an evening's takes,
+  on the rehearsal screen and in History, it passes under the take's number
+  and name. Last time, the rehearsal screen and the player use them; the
+  other dots, note lines and ticks move onto them as their screens are
   redone.
 
 ## Writing components
@@ -397,8 +430,8 @@ These hold after the rollout too, for every new screen and feature.
   nothing like it, as with `PlayButton` and `LanePlate`.
 - **U2. A different look is a variant, not a copy.** A copy drifts: a fix or
   a restyle reaches one and not the other, which is how the app came to have
-  four dialog frames and four key chips. A smaller button is a new size in
-  `Button`, as `lane` is; a component is never copied to change it. A shadcn
+  four dialog frames and four key chips. A smaller toggle is a new size in
+  `Toggle`, as `lane` is; a component is never copied to change it. A shadcn
   component, once added, is our code, and is changed in its own file to
   follow the theme.
 - **U3. Shared, or the screen's own.** A piece used on two screens or more
@@ -475,25 +508,35 @@ as the `cn` import.
   error appearing moves nothing, and a list keeps its place while it loads:
   a layout that jumps is a bug. On the start screen the Check signal button,
   a track's port line and Start's unseen Space chip hold their room, as the
-  song rows do, and are the model; the rest as each screen is redone.
+  song rows do. On the rehearsal screen Finish and Record keep their key
+  chips, unseen, while a take is in hand, and Record keeps room for a number
+  of two digits; an error in the footer is said over its buttons, in room
+  the footer has already; Mark is as wide as Open mark; and the player keeps
+  one line between the transport and the map for what it has to say, one
+  thing at a time (a load error, then Cropping, then the output's warning),
+  so the timeline never moves when it fills. These are the model; the rest
+  as each screen is redone.
 - **B5. Loading.** Under 1 s nothing shows, so a quick answer does not
   flash; from 1 s a spinner takes the place of what is loading; past 10 s it
   says what it is doing. `PlayButton` already waits its second
-  (`SPINNER_AFTER_MS`); the rest as each screen is redone, on shadcn's
-  Spinner.
+  (`SPINNER_AFTER_MS`), and so do the player's Play, the share dialog's
+  options and its Remove, and a lane of notes being read, which says so in
+  its place if they cannot be read; the rest as each screen is redone, on
+  shadcn's Spinner.
 - **B6. Long names.** A name never gives way to a secondary figure: the name
   is what tells one thing from another. The figure wraps, goes first, or
   hides and shows on hover, as the MIDI tile's count does; a cut name shows
   whole on hover, and on keyboard focus when it is a button, a link or has a
   `tabindex` (`useCut` and `WholeTip` round it; `Whole` is a plain text and
-  shows on hover only); where a name has room for a second line, it wraps;
-  the figures beside it are `Figures`, which drop whole, least needed first.
-  As each screen is redone.
+  shows on hover only, unless it has `reach`, which makes it a Tab stop
+  while it is cut, as a track's name on its plate is); where a name has room
+  for a second line, it wraps; the figures beside it are `Figures`, which
+  drop whole, least needed first. As each screen is redone.
 - **B7. Empty states.** An empty list that only says it is empty leaves the
-  person to guess what to do next: "This set has no songs." under Next take
-  does not say how a song gets there. So an empty list says, in its own
-  place, what will appear there and how it gets there. On shadcn's Empty, as
-  each screen is redone.
+  person to guess what to do next. So an empty list says, in its own place,
+  what will appear there and how it gets there: an empty set under Next take
+  says "This set has no songs yet. Add them in Settings › Sets." On shadcn's
+  Empty, as each screen is redone.
 - **B8. Wording.** A name in a title is in quotes (*Delete “Fix”?*). A
   sentence said in two places comes from one place. Each kind of figure is
   written one way, through `lib/format.ts`, and a screen shows a figure
@@ -548,7 +591,7 @@ npm run design-check
 
 It reads every `.tsx` and `.ts` under `ui/src/`, stories included and
 tests left out (class strings live in `.ts` files too, such as
-`lib/laneHalf.ts`), prints each problem as `path:line rule text`, and then
+`lib/labels.ts`), prints each problem as `path:line rule text`, and then
 says what each broken rule is for. The rules are in
 `ui/scripts/design-rules.mjs`, and their tests, which Vitest runs, in
 `ui/scripts/design-rules.test.mjs`.

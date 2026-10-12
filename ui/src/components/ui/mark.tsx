@@ -5,13 +5,14 @@ import { labelLook, markText } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 
 /*
-  A mark's pieces (C8): its label's colour as a dot, and its note line. The
-  dot is drawn in five sizes in eleven places today and the note line three
-  ways (Last time, a rehearsal's overview, a song's page); each place moves
-  onto these as its screen is redone.
+  A mark's pieces (C8): its label's colour as a dot, its note line, and its
+  tick on a take's bar. The dot is drawn in five sizes in eleven places today
+  and the note line three ways (Last time, a rehearsal's overview, a song's
+  page); each place moves onto these as its screen is redone.
 
-  The dot is a picture of the label, which the line says in words, so a
-  screen reader skips it. 8 px, a step of the spacing scale, round.
+  The dot and the tick are pictures of the label, which the line says in
+  words, so a screen reader skips them. The dot is 8 px, a step of the
+  spacing scale, round; the tick is 3 px wide, with the small corner.
 */
 
 function LabelDot({ colour, className }: { colour: LabelColour; className?: string }) {
@@ -58,4 +59,33 @@ function MarkLine({
   )
 }
 
-export { LabelDot, MarkLine }
+/**
+ * A mark on a take's bar: one tick, 3 px wide, where in the take it fell.
+ * `at` is that place as a percent of the bar, which the bar works out (it
+ * keeps a mark off the very ends). The bar is its positioned parent; how far
+ * the tick runs up and down is the caller's, in `className`.
+ *
+ * It is drawn in the label's colour and says which in `data-mark-colour`.
+ */
+function MarkTick({
+  colour,
+  at,
+  className,
+}: {
+  colour: LabelColour
+  /** Where along the bar, as a percent of its width. */
+  at: number
+  className?: string
+}) {
+  return (
+    <span
+      aria-hidden
+      data-slot="mark-tick"
+      data-mark-colour={colour}
+      className={cn("absolute w-[3px] rounded-sm", labelLook(colour).dot, className)}
+      style={{ left: `${at}%` }}
+    />
+  )
+}
+
+export { LabelDot, MarkLine, MarkTick }

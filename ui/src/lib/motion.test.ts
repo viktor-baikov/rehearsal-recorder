@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { motionOff, scrollBehavior } from "@/lib/motion"
+import { motionOff, rise, scrollBehavior } from "@/lib/motion"
 
 /** A page as far as motionOff() looks at it: whether Reduce motion is on,
  *  and whether <html> says a take is being recorded. */
@@ -46,5 +46,12 @@ describe("scrollBehavior", () => {
     expect(scrollBehavior()).toBe("auto")
     page({})
     expect(scrollBehavior()).toBe("smooth")
+  })
+})
+
+describe("rise", () => {
+  it("gives a group its place in the entrance as --i, which animate-rise reads as a delay", () => {
+    expect(rise(0)).toEqual({ "--i": 0 })
+    expect(rise(2)).toEqual({ "--i": 2 })
   })
 })

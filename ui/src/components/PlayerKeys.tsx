@@ -10,6 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useKey } from "@/hooks/useSpacebar"
 import { useSystem, words } from "@/lib/platform"
 
@@ -44,17 +45,21 @@ export function PlayerKeys({ spaceKey, goKeys }: { spaceKey: boolean; goKeys?: b
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-row"
-          aria-label="Player keys"
-          aria-keyshortcuts="?"
-          title="Keys (?)"
-        >
-          <Keyboard />
-        </Button>
-      </DialogTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-row"
+              aria-label="Player keys"
+              aria-keyshortcuts="?"
+            >
+              <Keyboard />
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Keys (?)</TooltipContent>
+      </Tooltip>
       <DialogContent size="narrow">
         <DialogHeader>
           <DialogTitle>Keys in the player</DialogTitle>

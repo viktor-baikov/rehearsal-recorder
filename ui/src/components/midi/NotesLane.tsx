@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from "react"
+import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import type { TakeNotes } from "@/lib/api"
 
 /** Room left above the top row and below the bottom one, so a bar there is
  *  not drawn against the lane's edge. */
 const PAD_PX = 3
-/** A label needs this much height to be read: the 9 px text and its chip. */
-const LABEL_MIN_PX = 11
+/** A label needs this much height to be read: the 12 px text and its chip. It
+ *  is rem, as the text is, so a larger Appearance scale asks for more. */
+const LABEL_MIN_REM = 0.875
+/** The lane's height is read in whole pixels, so a row that has exactly the
+ *  room it needs can come out this far short: at 130 % a Both track's notes
+ *  plate is 119.2 px, its lane the 116.2 over the well's 3 px and 115.2 under
+ *  its line, read as 115, and six rows of 18.2 px would lose their names. */
+const SLACK_PX = 0.5
 /** The narrowest a note is drawn. A drum hit lasts a tenth of a second, which
  *  is under a pixel on a long take zoomed out, and a note struck as a file's
  *  very last event is 0 long: either would not be drawn at all. */
@@ -23,6 +30,9 @@ const MIN_NOTE_PX = 2
  *
  * Row names show only when the rows are tall enough to read them: the
  * drums' each, and for pitches the octave each C names.
+ *
+ * While the notes are being read (`data` is null) the lane holds its place,
+ * and a spinner turns in it from the second on (B5).
  *
  * Nothing here is heard. The lane only draws what take_notes read back from
  * the .mid, all of it at once, so zooming asks Python for nothing.
@@ -48,20 +58,26 @@ export function NotesLane({
   /** The track's port was not there the whole take: no .mid to draw. */
   missing?: boolean
   /** The lane's height comes from here, as a waveform's does. Nothing
-   *  inside it has a height of its own, so beside a plate it is as tall as
-   *  the plate. */
+   *  inside it has a height of its own, so it is as tall as the room it is
+   *  given: in the player, its plate's height less the well round it, 3 px
+   *  under a Both track's audio and 6 for a track on MIDI only. */
   className?: string
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [size, setSize] = useState({ width: 0, height: 0 })
+  const [size, setSize] = useState({ width: 0, height: 0, rem: 16 })
   const from = view?.from ?? 0
   const to = view?.to ?? duration
 
   useEffect(() => {
     const box = boxRef.current
     if (!box) return
-    const measure = () => setSize({ width: box.clientWidth, height: box.clientHeight })
+    const measure = () =>
+      setSize({
+        width: box.clientWidth,
+        height: box.clientHeight,
+        rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+      })
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(box)
@@ -139,7 +155,10 @@ export function NotesLane({
         ? "No notes in this take"
         : null
   // A drum row each, or for pitches the octave above each C.
-  const labelled = notes !== null && notes.notes.length > 0 && rowPx * (notes.drums ? 1 : 12) >= LABEL_MIN_PX
+  const labelled =
+    notes !== null &&
+    notes.notes.length > 0 &&
+    rowPx * (notes.drums ? 1 : 12) + SLACK_PX >= LABEL_MIN_REM * size.rem
 
   return (
     <div
@@ -157,6 +176,13 @@ export function NotesLane({
       {/* Out of the flow: a canvas is as tall as it was last drawn, and in
           the flow it would hold the lane at that height. */}
       <canvas ref={canvasRef} className="absolute inset-0 block size-full" />
+      {/* Reading: the lane keeps its height, so the spinner (which waits a
+          second before it shows) is all that comes and goes. */}
+      {data === null && !missing && (
+        <span className="absolute inset-0 grid place-items-center">
+          <Spinner className="text-muted-foreground" />
+        </span>
+      )}
       {message && (
         <span className="absolute inset-0 grid place-items-center px-2 text-center text-xs text-muted-foreground">
           {message}
@@ -169,7 +195,7 @@ export function NotesLane({
         >
           {notes.rows.map((row) => (
             <span key={row} className="flex flex-1 items-center">
-              <span className="rounded-sm bg-background/85 px-0.5 text-[9px] leading-none text-muted-foreground">
+              <span className="rounded-sm bg-background/85 px-0.5 text-xs leading-none text-muted-foreground">
                 {row}
               </span>
             </span>
@@ -183,7 +209,7 @@ export function NotesLane({
             .map((p) => (
               <span
                 key={p}
-                className="absolute -translate-y-full rounded-sm bg-background/85 px-0.5 text-[9px] leading-none whitespace-nowrap text-muted-foreground"
+                className="absolute -translate-y-full rounded-sm bg-background/85 px-0.5 text-xs leading-none whitespace-nowrap text-muted-foreground"
                 style={{ top: `${((notes.high - p + 1) / (notes.high - notes.low + 1)) * 100}%` }}
               >
                 C{p / 12 - 1}

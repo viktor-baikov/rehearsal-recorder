@@ -340,7 +340,7 @@ export function Review({
           onRemoveMarker={removeMarker}
           onCrop={(from, to) => void cropDraft(from, to)}
           canCrop={!busy}
-          status={<RunningLine entry={cropping} label="Cropping" />}
+          status={cropping && <RunningLine entry={cropping} label="Cropping" />}
         />
       </div>
 

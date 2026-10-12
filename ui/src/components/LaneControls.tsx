@@ -1,7 +1,8 @@
 import { Volume1, Volume2, VolumeX } from "lucide-react"
 import { InstrumentIcon } from "@/components/InstrumentIcon"
-import { Button } from "@/components/ui/button"
 import { LanePlate } from "@/components/ui/lane-plate"
+import { Toggle } from "@/components/ui/toggle"
+import { Whole } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
 
 /** At or above this the track is at full scale where the playhead stands. */
@@ -93,10 +94,10 @@ function MeteredFader({
           "absolute inset-0 w-full cursor-pointer appearance-none bg-transparent",
           "focus-visible:outline-none",
           "[&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none",
-          "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary",
+          "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground",
           "[&::-webkit-slider-thumb]:ring-2 [&::-webkit-slider-thumb]:ring-card",
           "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:border-0",
-          "[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary"
+          "[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-foreground"
         )}
       />
     </div>
@@ -104,8 +105,10 @@ function MeteredFader({
 }
 
 /**
- * One track's controls, beside its lane: its icon and name, mute and solo, a
- * fader, and under it how loud that track is coming out.
+ * One track's controls, beside its lane: its icon and name on a row of their
+ * own, then the fader, with how loud that track is coming out in it, and mute
+ * and solo after the fader. The name has the plate's whole width, and is cut
+ * past it, whole in the shared tip on hover and, with Tab, on keyboard focus.
  *
  * Nothing says whether the file is one channel or two: a lane at 56 px has no
  * room for the line, and the meter shows it, in two bars for a stereo file.
@@ -125,8 +128,9 @@ function MeteredFader({
  *
  * It reads zero when nothing is playing, which is what a meter at rest does.
  *
- * A track that records its notes too is one card of two halves: these
- * controls above, and its notes' plate (midi/NotesPlate) below, under a line.
+ * The plate is a row of the player's lanes group (Timeline), on the group's
+ * fill, with no box of its own. A track that records its notes too has its
+ * notes' plate (midi/NotesPlate) on the row under it.
  */
 export function LaneControls({
   name,
@@ -146,7 +150,7 @@ export function LaneControls({
   name: string
   /** The band's icon for this name; none draws the neutral one. */
   icon?: string
-  /** The upper half of the track's card: its notes' plate is under it. */
+  /** The track records its notes too: its notes' row is under this one. */
   paired?: boolean
   /** In the file: 1, 2, or 0 when it could not be read. */
   channels: number
@@ -163,49 +167,55 @@ export function LaneControls({
   onVolumeCommit: () => void
 }) {
   return (
-    <LanePlate data-plate={name} half={paired ? "top" : undefined} className="gap-1">
-      <div className="flex items-center gap-2">
+    <LanePlate data-plate={name} data-paired={paired || undefined} grouped className="gap-1">
+      <div className="flex h-4 items-center gap-2">
         <InstrumentIcon icon={icon} className="size-4 shrink-0 text-muted-foreground" />
-        <span
-          className={cn("min-w-0 flex-1 truncate text-sm", dimmed && "text-muted-foreground")}
-        >
-          {name}
-        </span>
+        <Whole
+          text={name}
+          reach
+          data-plate-name={name}
+          className={cn("min-w-0 flex-1 truncate text-sm leading-4", dimmed && "text-muted-foreground")}
+        />
+      </div>
+      {/* 16 and 20 px, 4 apart: the plate's 56. On is grey, and the dimmed
+          lane is what says the track is silent. */}
+      <div className="flex h-5 items-center gap-2">
+        <div className="min-w-0 flex-1">
+          {/* A track's level cannot overtake its thumb: what comes out is the
+              source's peak times the fader, and a peak cannot exceed full
+              scale. */}
+          <MeteredFader
+            name={name}
+            volume={volume}
+            levels={levels}
+            channels={channels}
+            onVolume={onVolume}
+            onVolumeCommit={onVolumeCommit}
+          />
+        </div>
         <span className="flex shrink-0 gap-1.5">
-          <Button
-            variant={muted ? "default" : "outline"}
+          <Toggle
+            variant="outline"
             size="lane"
-            aria-pressed={muted}
+            pressed={muted}
+            onPressedChange={onToggleMute}
             aria-label={`Mute ${name}`}
-            onClick={onToggleMute}
-            className={cn("font-semibold", muted && "bg-warn text-warn-foreground hover:bg-warn/90")}
+            className="font-semibold"
           >
             M
-          </Button>
-          <Button
-            variant={soloed ? "default" : "outline"}
+          </Toggle>
+          <Toggle
+            variant="outline"
             size="lane"
-            aria-pressed={soloed}
+            pressed={soloed}
+            onPressedChange={onToggleSolo}
             aria-label={`Solo ${name}`}
-            onClick={onToggleSolo}
             className="font-semibold"
           >
             S
-          </Button>
+          </Toggle>
         </span>
       </div>
-
-      {/* A track's level cannot overtake its thumb: what comes out is the
-          source's peak times the fader, and a peak cannot exceed full
-          scale. */}
-      <MeteredFader
-        name={name}
-        volume={volume}
-        levels={levels}
-        channels={channels}
-        onVolume={onVolume}
-        onVolumeCommit={onVolumeCommit}
-      />
     </LanePlate>
   )
 }
@@ -219,7 +229,9 @@ export function VolumeIcon({ volume, className }: { volume: number; className?: 
 
 /**
  * The whole mix, under the tracks, the way a desk ends in its master strip:
- * how loud the take plays, and how loud all of it is coming out.
+ * how loud the take plays, and how loud all of it is coming out. In the
+ * player its plate is a group of its own, under the lanes group, and keeps
+ * the plate's box.
  *
  * For listening only. The faders above are the band's balance, and the copy
  * sent to the cloud is mixed from them; turning all of them down to make the
@@ -245,21 +257,32 @@ export function MasterControls({
   className?: string
 }) {
   return (
-    <LanePlate className={cn("gap-1", className)}>
-      <div className="flex items-center gap-2 text-sm">
+    <LanePlate data-master-plate className={cn("gap-1", className)}>
+      <div className="flex h-4 items-center gap-2 text-sm">
         <VolumeIcon volume={volume} className="size-4 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate">Master</span>
-        <span className="tnum text-xs text-muted-foreground">
-          {Math.round(volume * 100)}%
+        <Whole
+          text="Master"
+          reach
+          data-plate-name="Master"
+          className="min-w-0 flex-1 truncate leading-4"
+        />
+      </div>
+      <div className="flex h-5 items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <MeteredFader
+            name="Master"
+            volume={volume}
+            levels={[level]}
+            onVolume={onVolume}
+            onVolumeCommit={onVolumeCommit}
+          />
+        </div>
+        {/* Where a track has M and S (20 + 6 + 20 px), so every fader in the
+            column is as long as the others and ends in the same place. */}
+        <span className="flex w-[2.875rem] shrink-0 justify-end">
+          <span className="tnum text-xs text-muted-foreground">{Math.round(volume * 100)}%</span>
         </span>
       </div>
-      <MeteredFader
-        name="Master"
-        volume={volume}
-        levels={[level]}
-        onVolume={onVolume}
-        onVolumeCommit={onVolumeCommit}
-      />
     </LanePlate>
   )
 }

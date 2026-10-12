@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CloudUpload, FolderOpen, Loader2, Layers, Music4 } from "lucide-react"
+import { CloudOff, CloudUpload, FolderOpen, Layers, Music4 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -9,11 +9,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Item } from "@/components/ui/item"
+import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import { api, type ShareWhat, type Take } from "@/lib/api"
 import { pollSoon } from "@/lib/activity"
 import { reloadEveningSettings } from "@/hooks/useEveningSettings"
+import { useAfter } from "@/hooks/useAfter"
 import { useHeld } from "@/lib/held"
+import { SPINNER_AFTER_MS } from "@/lib/playLook"
 
 /**
  * Putting one take into the cloud folder.
@@ -37,6 +41,8 @@ export function ShareDialog({
   const [cloudDir, setCloudDir] = useState<string | null>(null)
   const [busy, setBusy] = useState<ShareWhat | "remove" | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Remove keeps its icon for the first second of a removal (B5).
+  const removing = useAfter(busy === "remove", SPINNER_AFTER_MS)
 
   // The take the dialog names, until it has faded out.
   const shown = useHeld<Take | null>(take, null)
@@ -167,7 +173,9 @@ export function ShareDialog({
                 onClick={() => void remove()}
                 className="text-muted-foreground hover:text-destructive"
               >
-                {busy === "remove" && <Loader2 className="animate-spin" />}
+                {/* Its icon turns into the spinner after the second (B5), in
+                    the icon's room: the button and its words never move. */}
+                {removing ? <Spinner after={0} /> : <CloudOff />}
                 Remove from the cloud
               </Button>
             )
@@ -195,31 +203,34 @@ function ShareOption({
   disabled: boolean
   onClick: () => void
 }) {
+  // The icon stays for the first second of a copy (B5).
+  const slow = useAfter(busy, SPINNER_AFTER_MS)
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={title}
-      className={cn(
-        "flex items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors",
-        "hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-        "disabled:pointer-events-none disabled:opacity-50",
-        done && "border-signal/40 bg-signal/5"
-      )}
+    <Item
+      asChild
+      variant="outline"
+      size="sm"
+      className={cn("flex-nowrap items-start", done && "border-signal/40 bg-signal/5")}
     >
-      <span className="mt-0.5 shrink-0 text-muted-foreground [&>svg]:size-4">
-        {busy ? <Loader2 className="size-4 animate-spin" /> : icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2 text-sm font-medium">
-          {title}
-          {done && <span className="text-xs text-signal">already there</span>}
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={title}
+        className="h-auto w-full justify-start text-left whitespace-normal"
+      >
+        <span className="mt-0.5 shrink-0 text-muted-foreground [&>svg]:size-4">
+          {slow ? <Spinner after={0} /> : icon}
         </span>
-        <span className="mt-0.5 block text-xs text-muted-foreground">
-          {hint}
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            {title}
+            {done && <span className="text-xs font-normal text-signal">already there</span>}
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">{hint}</span>
         </span>
-      </span>
-    </button>
+      </Button>
+    </Item>
   )
 }

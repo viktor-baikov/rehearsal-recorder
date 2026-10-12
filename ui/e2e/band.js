@@ -201,7 +201,9 @@ api.recording_health = async () => ({recording: true, error: null, active: true,
 // dB and a song at full scale would stand every tile at the top.
 const song = () => SECTION('chorus') + (performance.now() / 1000) % 12;
 const AS_SET = 10 ** (-18 / 20);
-const meters = () => Object.fromEntries(PARTS.map(p =>
+// Only the parts that take sound have a meter, as Python's meters name them: a
+// track on MIDI alone has none.
+const meters = () => Object.fromEntries(PARTS.filter(p => p.mode !== 'midi').map(p =>
   [p.name, [AS_SET * VOICE[p.name](song(), {seed: 9, end: SONG_END})]]));
 api.monitor_levels = async () => meters();
 api.get_levels = async () => meters();
