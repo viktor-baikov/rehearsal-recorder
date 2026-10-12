@@ -214,11 +214,11 @@ laptop.
   The take's number is up top, beside the red RECORDING.
 - **The clock** shows how long the take has been running.
 - **The bar under it** shows up when this is another take of a song you have
-  already played in this rehearsal: "Took 2:21 last time". The evening's first
-  take of a song played before is measured against the take ▶ plays
+  already played in this rehearsal: "Took 2:21 last time". The evening's
+  first take of a song played before is measured against the take ▶ plays
   for it in Last time: its newest ★ take, or the last take of the last
-  rehearsal that played it, "Took 3:20 on 22 Sep". It fills as you
-  play, so you can see how far into the song you are.
+  rehearsal that played it, "Took 3:20 on 22 Sep". It fills as you play, so
+  you can see how far into the song you are.
 - **Each track has a tile** that fills from the bottom with its level. The
   fill is in dB, like the meters on a mixer: −60 dB at the bottom, full
   scale at the top. If the gain is set so that the loudest hit reaches about
@@ -250,12 +250,13 @@ during a take. Press **Stop**, or Space, when the song is over.
 
 After you stop, the take opens straight away so you can listen to it. The
 bottom left says what was recorded: the song with its number, "Viasna 2",
-and under it how long the take ran against the last take of the song tonight,
-"2:31 · 10 s longer than take 1". With no take of it tonight it is measured
-against the take before tonight, with the day: "8 s longer than on 22 Sep".
-Left of the title is a bar for each of the song's takes tonight, the last
-ten of them, as tall as it ran: this one in the colour of the text, the ★
-takes green, the others grey. A take nobody named says "Take 7", grey, and how long it ran.
+and under it how long the take ran against the song's last take tonight,
+"2:31 · 10 s longer than Viasna 1". With no take of the song tonight it is
+measured against the take before tonight, with the day: "8 s longer than on
+22 Sep". Left of the title is a bar for each of the song's takes tonight,
+the last ten of them, as tall as it ran: this one in the colour of the text,
+the starred ones (★) green, the others grey. A take nobody named says
+"Take 7", grey, and how long it ran.
 
 The name is filled in for you: after a take called "Pałyn", the next one is
 "Pałyn 2". Check it, then press **Save take** (Space) or **Discard**. A
@@ -283,11 +284,11 @@ markers are saved with the take.
 
 The strip at the top has a tab for each song of the evening, in the order
 they were first played, and one for each take with no song. Under a song's
-name is the number of its open take, or on another tab of the take a click
-on it opens: the song's last take that evening. **Songs** at the start of the strip, or the
-open take's number, opens the tabs out into a column of takes each. Click a
-take in a column to open it. All a take's tracks play together on one timeline,
-so they always stay in sync.
+name is its take that is open, or on another tab the take a click on it
+opens: the song's last take that evening. **Songs** at the start of the
+strip, or the open take's number, opens the tabs out into a column of
+takes each. Click a take in a column to open it. All a take's tracks play
+together on one timeline, so they always stay in sync.
 
 Another take of the same song opens at the same place: the same second, the
 same selection, Repeat on or off, the same zoom, and playing if the last
@@ -388,10 +389,11 @@ stops following until the playhead comes back into view.
 ## Names and songs
 
 Each take belongs to a song. You name it with the song's title, and the app
-counts the song's takes: the number beside the name, "Pałyn 1", "Pałyn 2", goes on
-from one rehearsal to the next, so "Pałyn 17" is one take wherever it was
-played. Deleting a take does not free its number. A new take is of the same song as the one before it, so you only name a
-take when the band moves on to another song.
+counts the song's takes: the number beside the name, "Pałyn 1", "Pałyn 2",
+goes on from one rehearsal to the next, so "Pałyn 17" is one take wherever
+it was played. Deleting a take does not free its number. A new take is of
+the same song as the one before it, so you only name a take when the band
+moves on to another song.
 
 Type the title only; the number is the app's. Typing "Pałyn 5" names the
 take Pałyn, at whatever number is next. A song is spelled one way everywhere:
@@ -499,14 +501,14 @@ or merges it into another (see [Names and songs](#names-and-songs)); what is
 playing stops first. Its ★ takes come next, then the marks left on it
 the last time it was played; a mark opens its take at that spot. Then every
 take of the song, one line a rehearsal, newest first: the rehearsal's day and
-name, and its takes as bars side by side, all drawn to the song's longest take.
-A take that ran long or stopped short shows without reading a number; a ★ take is
-green, and a mark is a tick in its label's colour.
+name, and its takes as bars side by side, all drawn to the song's longest
+take. A take that ran long or stopped short shows without reading a number;
+a ★ take is green, and a mark is a tick in its label's colour.
 
 Click a line to open it to its takes, and again to close it. The newest
 rehearsal is open to begin with, and the lines you open stay open while
-History is. The takes in an open line play, open in the player, take a star,
-are renamed or deleted, as they are anywhere else, and **Open … in
+History is. The takes in an open line play, open in the player, are
+starred, renamed or deleted, as they are anywhere else, and **Open … in
 Rehearsals** under them shows the whole evening. Esc from the player comes
 back to the song, scrolled where you were.
 

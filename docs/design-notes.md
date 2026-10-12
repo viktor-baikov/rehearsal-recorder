@@ -297,8 +297,9 @@ word at first ("4 goes", "Every go at Pałyn"), but a musician calls an attempt
 at a song a take, so the interface now says take everywhere: "4 takes",
 "Every take of Pałyn", the number beside the title as before. The code and
 the database keep `go` for that number, so nothing was migrated. A take with
-no song is still called by its number in the evening, "Take 7", which can sit
-beside "Pałyn, take 3" in the strip; the song's name tells the two apart.
+no song is still called by its number in the evening, "Take 7". So a song's
+take is always said with the song: "Pałyn 3", or "Pałyn, take 3" where a
+screen reader names a tab in the strip, never a bare "take 3".
 
 **Names are put right in the background.** A take's folder and cloud copy
 are named after it, so when its name changes without them — migration 0002

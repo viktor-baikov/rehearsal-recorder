@@ -80,7 +80,9 @@ opening.
 - **A song's attempts are called takes.** Where the app said *go* for each
   attempt at a song, "4 goes" or *Every go at Pałyn*, it now says *take*, as
   musicians do: "4 takes", *Every take of Pałyn*. The number beside a song's
-  title is as it was, and so is "Take 7" for a take nobody named.
+  title is as it was, and so is "Take 7" for a take nobody named. On the
+  review screen the song's takes tonight are named with it, "Viasna 2".
+  reha.stream and the user guide say take too.
 
 ## 0.11.1
 

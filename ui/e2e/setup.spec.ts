@@ -1348,7 +1348,7 @@ test.describe("the left part behind a button in a narrow window", () => {
       inert: document.querySelector("[inert]") !== null,
     }))
 
-  /** Last time's button for Pałyn 2, the last go at Pałyn, in `where`. */
+  /** Last time's button for Pałyn 2, the last take of Pałyn, in `where`. */
   const palyn = (where: Locator, does: "Play" | "Pause") =>
     where.getByRole("button", { name: `${does} Pałyn 2, the last take of Pałyn` })
 

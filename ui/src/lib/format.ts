@@ -6,9 +6,9 @@ export function formatMMSS(totalSec: number): string {
 }
 
 /**
- * How a go's length `now` compares with another's, `then`, named by `what`:
- * "12 s shorter than go 2", "1:05 longer than on 22 Sep" from a minute, and
- * "as long as go 2" under two seconds either way, which nobody hears.
+ * How a take's length `now` compares with another's, `then`, named by `what`:
+ * "12 s shorter than Viasna 2", "1:05 longer than on 22 Sep" from a minute,
+ * and "as long as Viasna 2" under two seconds either way, which nobody hears.
  */
 export function against(now: number, then: number, what: string): string {
   if (Math.abs(now - then) < 2) return `as long as ${what}`

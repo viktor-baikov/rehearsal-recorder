@@ -94,11 +94,15 @@ export function TakeSummary({
   const told = before && before.song === song ? before : null
 
   const compare = last
-    ? against(durationSec, last.duration_sec, `take ${last.go ?? last.take_number}`)
+    ? against(
+        durationSec,
+        last.duration_sec,
+        last.go != null ? `${song} ${last.go}` : `Take ${last.take_number}`
+      )
     : told?.go
       ? against(durationSec, told.go.sec, `on ${told.go.day}`)
       : told
-        ? "the first take of it tonight"
+        ? "the song's first take tonight"
         : null
 
   const goes: (Go & { here?: boolean })[] = [
@@ -114,7 +118,7 @@ export function TakeSummary({
         <div
           role="img"
           aria-label={`Takes of ${song} tonight`}
-          title={goes.map((g) => `Take ${g.go ?? "?"}: ${formatMMSS(g.duration_sec)}`).join(", ")}
+          title={goes.map((g) => `${song} ${g.go ?? "?"}: ${formatMMSS(g.duration_sec)}`).join(", ")}
           className="flex shrink-0 items-end gap-1"
         >
           {goes.map((g) => (
