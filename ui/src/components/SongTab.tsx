@@ -64,6 +64,7 @@ function GoLine({
             size="icon-tiny"
             aria-label={`Every take of ${toggle.song}`}
             aria-expanded={toggle.expanded}
+            aria-keyshortcuts="ArrowUp ArrowDown"
             onClick={(e) => {
               toggle.onToggle()
               // Space would press it again rather than play.
@@ -80,7 +81,11 @@ function GoLine({
             {take.go}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{`Every take of ${toggle.song} (↑ ↓)`}</TooltipContent>
+        {/* The button's name and its keys, which it says as its own: for
+            the eyes, not read out twice. */}
+        <TooltipContent>
+          <span aria-hidden>{`Every take of ${toggle.song} (↑ ↓)`}</span>
+        </TooltipContent>
       </Tooltip>
     ) : (
       <span className={NUMBER}>{take.go}</span>

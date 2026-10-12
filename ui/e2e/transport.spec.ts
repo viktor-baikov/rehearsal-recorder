@@ -532,7 +532,9 @@ test.describe("the share dialog", () => {
     await expect(dialog).toHaveCount(0)
   })
 
-  test("Remove from the cloud shows a spinner only after one second", async ({ page }) => {
+  test("Remove from the cloud shows a spinner only after one second, and does not move", async ({
+    page,
+  }) => {
     await openEvening(page)
     // Take 5 has its mix in the cloud already.
     await page.getByRole("button", { name: "Cloud copies of Viasna 2" }).click()
@@ -540,6 +542,18 @@ test.describe("the share dialog", () => {
     const remove = dialog.getByRole("button", { name: "Remove from the cloud" })
     await expect(remove).toBeEnabled()
     await settled(page)
+    // The dialog has grown into its place.
+    await dialog.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)))
+    // The button's box, and where its words start.
+    const look = () =>
+      remove.evaluate((el) => {
+        const words = [...el.childNodes].find((n) => n.nodeType === Node.TEXT_NODE)!
+        const range = document.createRange()
+        range.selectNodeContents(words)
+        const b = el.getBoundingClientRect()
+        return { x: b.x, y: b.y, width: b.width, height: b.height, words: range.getBoundingClientRect().x }
+      })
+    const before = await look()
 
     await hold(page, "unshare_take")
     const since = Date.now()
@@ -547,11 +561,13 @@ test.describe("the share dialog", () => {
     await remove.click()
     await at(500)
     expect(await shows(remove.locator(".animate-spin")), "a spinner at 0.5 s").toBe(false)
+    expect(await look(), "the button at 0.5 s").toEqual(before)
     await at(900)
     expect(await shows(remove.locator(".animate-spin")), "a spinner at 0.9 s").toBe(false)
     await expect(remove.getByRole("status", { name: "Loading" }), "a spinner by 2 s").toBeVisible({
       timeout: 2000,
     })
+    expect(await look(), "the button with its spinner").toEqual(before)
     await letGo(page, "unshare_take")
     await expect(dialog).toHaveCount(0)
   })
@@ -647,6 +663,18 @@ test.describe("the marks and the region", () => {
     await expect(loop).toHaveAttribute("aria-pressed", "true")
     await page.mouse.move(0, 0, { steps: 6 })
     await says(loop, "Stop repeating it (R)")
+  })
+
+  test("To start's tip is for the eyes, not read again as the button's description", async ({
+    page,
+  }) => {
+    await openTonight(page, "Take 3 Viasna 1")
+    const start = transport(page).getByRole("button", { name: "To start" })
+    await transport(page).getByRole("button", { name: /^Back \d+ seconds$/ }).focus()
+    await page.keyboard.press("Shift+Tab")
+    await expect(start).toBeFocused()
+    await expect(page.getByRole("tooltip")).toHaveText("To start")
+    await expect(start).toHaveAccessibleDescription("")
   })
 
   test("the region's tag is on the shared buttons, in the tag's own tints", async ({ page }) => {

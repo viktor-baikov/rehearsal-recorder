@@ -188,6 +188,20 @@ for (const theme of THEMES) {
   })
 }
 
+test("Every take of says its keys to a screen reader once, not again as its tip", async ({ page }) => {
+  await openTake(page, 5)
+  const number = strip(page).getByRole("button", { name: "Every take of Viasna" })
+  // Pałyn's tab is the stop before Viasna's, which is open, and the number
+  // the first stop in it.
+  await strip(page).getByRole("button", { name: /^Pałyn, take / }).focus()
+  await page.keyboard.press("Tab")
+  await expect(number).toBeFocused()
+  await expect(tooltip(page)).toHaveText("Every take of Viasna (↑ ↓)")
+  await expect(number).toHaveAccessibleDescription("")
+  // The keys the tip shows, said as the button's own.
+  await expect(number).toHaveAttribute("aria-keyshortcuts", "ArrowUp ArrowDown")
+})
+
 test("the marks on a tab are shared dots with no title, and a count at 12 px", async ({ page }) => {
   // Take 3 is Viasna 1, with a mark.
   await openTake(page, 3)

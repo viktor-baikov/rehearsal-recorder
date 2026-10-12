@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CloudUpload, FolderOpen, Layers, Music4 } from "lucide-react"
+import { CloudOff, CloudUpload, FolderOpen, Layers, Music4 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -41,6 +41,8 @@ export function ShareDialog({
   const [cloudDir, setCloudDir] = useState<string | null>(null)
   const [busy, setBusy] = useState<ShareWhat | "remove" | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Remove keeps its icon for the first second of a removal (B5).
+  const removing = useAfter(busy === "remove", SPINNER_AFTER_MS)
 
   // The take the dialog names, until it has faded out.
   const shown = useHeld<Take | null>(take, null)
@@ -171,8 +173,9 @@ export function ShareDialog({
                 onClick={() => void remove()}
                 className="text-muted-foreground hover:text-destructive"
               >
-                {/* Waits its second unseen, and keeps its room meanwhile. */}
-                {busy === "remove" && <Spinner />}
+                {/* Its icon turns into the spinner after the second (B5), in
+                    the icon's room: the button and its words never move. */}
+                {removing ? <Spinner after={0} /> : <CloudOff />}
                 Remove from the cloud
               </Button>
             )

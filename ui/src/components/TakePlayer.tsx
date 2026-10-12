@@ -390,7 +390,10 @@ function Transport({
             <SkipBack />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>To start</TooltipContent>
+        {/* Only the button's own name again: for the eyes, not read out twice. */}
+        <TooltipContent>
+          <span aria-hidden>To start</span>
+        </TooltipContent>
       </Tooltip>
       <Button
         variant="ghost"
