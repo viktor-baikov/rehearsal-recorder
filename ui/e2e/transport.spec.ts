@@ -318,10 +318,10 @@ test.describe("the player's line", () => {
     // The shared focus ring, round the line: the words are cut at their own
     // box, which would clip a ring drawn round them.
     expect((await style(alert, "box-shadow"))["box-shadow"]).not.toBe("none")
-    // And the next Tab goes on, out of the line.
+    // And the next Tab goes on, out of the line, to the first lane's fader.
     await page.keyboard.press("Tab")
     await expect(alert).not.toBeFocused()
-    expect(await line(page).locator(":focus").count()).toBe(0)
+    await expect(page.getByRole("slider", { name: "Guitar volume" })).toBeFocused()
   })
 
   test("a line that fits is no stop for Tab", async ({ page }) => {
@@ -333,9 +333,10 @@ test.describe("the player's line", () => {
     const cut = await words.evaluate((el) => el.scrollWidth > el.clientWidth + 1)
     expect(cut, "the warning fits the line").toBe(false)
     await expect(alert).not.toHaveAttribute("tabindex")
+    // Tab goes by the line, from the keys button to the first lane's fader.
     await page.getByRole("button", { name: "Player keys" }).focus()
     await page.keyboard.press("Tab")
-    expect(await line(page).locator(":focus").count(), "Tab skips the line").toBe(0)
+    await expect(page.getByRole("slider", { name: "Guitar volume" })).toBeFocused()
   })
 })
 

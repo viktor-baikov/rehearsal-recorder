@@ -290,7 +290,17 @@ test.describe("the footer", () => {
   test("Finish and Record keep their boxes with a take in hand", async ({ page }) => {
     const overview = await openEvening(page)
     await settled(page)
-    const was = { finish: await box(finish(page)), record: await box(record(page)) }
+    const row = overview.locator('[data-take="1"]')
+    // The take's bar, and the Next take field beside the takes: nothing
+    // round the footer moves either.
+    const bar = row.getByRole("button", { name: /^Take 1 / })
+    const field = page.locator("#next-take-name")
+    const was = {
+      finish: await box(finish(page)),
+      record: await box(record(page)),
+      bar: await box(bar),
+      field: await box(field),
+    }
     const chips = page.locator("footer kbd")
     const hidden = async () =>
       chips.evaluateAll((all) => all.map((k) => getComputedStyle(k).visibility))
@@ -298,13 +308,15 @@ test.describe("the footer", () => {
 
     // A take playing where it is: both keys are the take's now, and the
     // buttons keep the room the chips take.
-    const row = overview.locator('[data-take="1"]')
     await row.getByRole("button", { name: /^Play / }).click()
     await expect(row.getByRole("button", { name: /^Pause / })).toBeVisible()
     await settled(page)
     expect(await hidden()).toEqual(["hidden", "hidden"])
     expectSame(await box(finish(page)), was.finish, "Finish while it plays")
     expectSame(await box(record(page)), was.record, "Record while it plays")
+    expectSame(await box(field), was.field, "the Next take field while it plays")
+    const playing = await box(bar)
+    expect(Math.abs(playing.width - was.bar.width), "the bar's width while it plays").toBeLessThan(0.25)
 
     // Opened in the player, it plays on: nothing toggles it again.
     const toggles = await callCount(page, "player_toggle")
@@ -315,6 +327,7 @@ test.describe("the footer", () => {
     expect(await hidden()).toEqual(["hidden", "hidden"])
     expectSame(await box(finish(page)), was.finish, "Finish with the take open")
     expectSame(await box(record(page)), was.record, "Record with the take open")
+    expectSame(await box(field), was.field, "the Next take field with the take open")
 
     // Space is the take's: it plays or pauses, and records nothing.
     await page.keyboard.press("Space")
@@ -328,6 +341,8 @@ test.describe("the footer", () => {
     expect(await hidden()).toEqual(["visible", "visible"])
     expectSame(await box(finish(page)), was.finish, "Finish after Escape")
     expectSame(await box(record(page)), was.record, "Record after Escape")
+    expectSame(await box(field), was.field, "the Next take field after Escape")
+    expect(Math.abs((await box(bar)).width - was.bar.width), "the bar's width after Escape").toBeLessThan(0.25)
   })
 
   test("Record keeps its width from take 9 to take 10", async ({ page }) => {
