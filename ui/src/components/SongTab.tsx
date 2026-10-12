@@ -199,9 +199,19 @@ export function SongTab({
   // never wider than 14rem. A shut tab is a button, so its tip is on the
   // whole tab, where the keys reach it. The open one is not, and has the
   // number's button in it, which has a tip of its own: so its tip is on the
-  // name alone.
+  // name alone, and a name that was cut is a stop for the Tab key, with the
+  // shared focus ring, so the keys reach its tip too (as PortNote's does).
+  // A name that fits is no stop.
   const label = (
-    <span ref={text} data-tab-name className="truncate">
+    <span
+      ref={text}
+      data-tab-name
+      tabIndex={open && cut ? 0 : undefined}
+      className={cn(
+        "truncate",
+        open && "rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      )}
+    >
       {title}
     </span>
   )

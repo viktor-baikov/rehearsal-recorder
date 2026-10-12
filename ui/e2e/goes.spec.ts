@@ -9,7 +9,9 @@ import {
   openApp,
   openHistory,
   recordTake,
+  settled,
   startRehearsal,
+  style,
   test,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
@@ -661,6 +663,7 @@ test("a long song name is cut to 224 px and shown whole on hover and on focus", 
   const long = strip(page).locator(`[data-tab='song:${LONG}']`)
   const name = long.locator("[data-tab-name]")
   await expect(name).toHaveText(LONG)
+  await settled(page)
   expect((await name.boundingBox())!.width).toBeLessThanOrEqual(224)
   // The tip is the shared one: no native title is left in the strip. (The ★
   // is StarButton's, which the take row shares.)
@@ -701,6 +704,42 @@ test("a long song name is cut to 224 px and shown whole on hover and on focus", 
   await openTab(strip(page)).locator("[data-tab-name]").hover()
   await expect(tip).toHaveText(LONG)
   await expect(titled).toHaveCount(0)
+})
+
+test("a long open song's name takes Tab and says itself whole, a short one is no stop", async ({
+  page,
+}) => {
+  // Take 2 is the long one, open: its tab is not a button, so the name has
+  // to be a stop of its own for the keys to reach its tip.
+  await openOf(page, ["Pałyn", LONG], 2)
+  const tab = openTab(strip(page))
+  await expect(tab).toHaveAttribute("data-tab", `song:${LONG}`)
+  const name = tab.locator("[data-tab-name]")
+  const tip = page.locator("[data-whole][data-state$='open']")
+  await settled(page)
+  // Pałyn's tab, a button, is the first stop after Songs; the name is next.
+  await songs(page).focus()
+  await page.keyboard.press("Tab")
+  await expect(strip(page).getByRole("button", { name: /^Pałyn, take 1/ })).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(name).toBeFocused()
+  await expect(tip).toHaveText(LONG)
+  // With the shared focus ring (3 px, as a button's).
+  expect((await style(name, "box-shadow"))["box-shadow"]).toMatch(/0px 0px 0px 3px/)
+  await page.keyboard.press("Tab")
+  await expect(name).not.toBeFocused()
+  await expect(tip).toHaveCount(0)
+
+  // Pałyn open instead: its name fits, so Tab goes by it to the next tab.
+  await strip(page).getByRole("button", { name: /^Pałyn, take 1/ }).click()
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "song:Pałyn")
+  await expect(openTab(strip(page)).locator("[data-tab-name]")).not.toHaveAttribute("tabindex")
+  await songs(page).focus()
+  await page.keyboard.press("Tab")
+  const next = strip(page)
+    .locator(`[data-tab='song:${LONG}']`)
+    .getByRole("button", { name: new RegExp(`^${LONG}`) })
+  await expect(next).toBeFocused()
 })
 
 const TWENTY = ["Pałyn", "Viasna", "Ahoń", "Sonca", "Dym", "Ptuška", "Daroha", "Rečka",

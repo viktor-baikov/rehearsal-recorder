@@ -28,9 +28,18 @@ const tooltip = (page: Page) => page.getByRole("tooltip")
  *  tip closes on the pointer leaving, not on its being somewhere else. */
 const away = (page: Page) => page.mouse.move(0, 0, { steps: 8 })
 
+const THEMES = ["dark", "light"] as const
+type Theme = (typeof THEMES)[number]
+/** The theme Settings stores, set before the fake reads it. */
+const themed = (theme: Theme) =>
+  `window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'${theme}', ui_scale:1}));`
+
 /** Tonight's rehearsal with take `n` open in the player, under its strip. */
-async function openTake(page: Page, n: number) {
-  const overview = await openEvening(page)
+async function openTake(page: Page, n: number, theme: Theme = "dark") {
+  const overview = await openEvening(page, themed(theme))
+  expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
+    theme === "dark"
+  )
   await overview.getByRole("button", { name: new RegExp(`^Take ${n} `) }).click()
   await expect(timeline(page)).toBeVisible()
   await expect(strip(page)).toBeVisible()
@@ -48,53 +57,59 @@ const bordered = (el: Locator) =>
     )
   })
 
-test("Songs is a toggle without capitals, grey when open", async ({ page }) => {
-  await openTake(page, 5)
-  const button = songs(page)
-  await expect(button).toHaveAttribute("data-slot", "toggle")
-  await expect(button).toHaveAttribute("aria-pressed", "false")
-  await expect(button).toHaveAttribute("aria-expanded", "false")
-  await expect(button).not.toHaveAttribute("title")
-  expect((await style(button, "text-transform"))["text-transform"]).toBe("none")
+for (const theme of THEMES) {
+  test(`Songs is a toggle without capitals, grey when open, in the ${theme} theme`, async ({
+    page,
+  }) => {
+    await openTake(page, 5, theme)
+    const button = songs(page)
+    await expect(button).toHaveAttribute("data-slot", "toggle")
+    await expect(button).toHaveAttribute("aria-pressed", "false")
+    await expect(button).toHaveAttribute("aria-expanded", "false")
+    await expect(button).not.toHaveAttribute("title")
+    expect((await style(button, "text-transform"))["text-transform"]).toBe("none")
 
-  await button.click()
-  await expect(button).toHaveAttribute("aria-pressed", "true")
-  await expect(button).toHaveAttribute("aria-expanded", "true")
-  // The grey of what is on, not the accent; and the pointer still over it
-  // does not change that.
-  await expect(button).toHaveCSS("background-color", await colour(page, "--selected"))
-  await expect(button).toHaveCSS("color", await colour(page, "--foreground"))
-  await expect(strip(page).locator("[data-column]")).not.toHaveCount(0)
+    await button.click()
+    await expect(button).toHaveAttribute("aria-pressed", "true")
+    await expect(button).toHaveAttribute("aria-expanded", "true")
+    // The grey of what is on, not the accent; and the pointer still over it
+    // does not change that.
+    await expect(button).toHaveCSS("background-color", await colour(page, "--selected"))
+    await expect(button).toHaveCSS("color", await colour(page, "--foreground"))
+    await expect(strip(page).locator("[data-column]")).not.toHaveCount(0)
 
-  await button.click()
-  await expect(button).toHaveAttribute("aria-pressed", "false")
-  await expect(button).toHaveAttribute("aria-expanded", "false")
-  await expect(strip(page).locator("[data-column]")).toHaveCount(0)
-})
-
-test("the open tab's bar is grey", async ({ page }) => {
-  await openTake(page, 5)
-  const bar = openTab(strip(page)).locator("[data-tab-bar]")
-  await expect(bar).toHaveCount(1)
-  const grey = await colour(page, "--muted-foreground")
-  await expect(bar).toHaveCSS("background-color", grey)
-  expect(grey).not.toBe(await colour(page, "--primary"))
-  // Its top corners are the small radius (4 px), its foot is flat.
-  expect(
-    await style(
-      bar,
-      "border-top-left-radius",
-      "border-top-right-radius",
-      "border-bottom-left-radius",
-      "border-bottom-right-radius"
-    )
-  ).toEqual({
-    "border-top-left-radius": "4px",
-    "border-top-right-radius": "4px",
-    "border-bottom-left-radius": "0px",
-    "border-bottom-right-radius": "0px",
+    await button.click()
+    await expect(button).toHaveAttribute("aria-pressed", "false")
+    await expect(button).toHaveAttribute("aria-expanded", "false")
+    await expect(strip(page).locator("[data-column]")).toHaveCount(0)
   })
-})
+}
+
+for (const theme of THEMES) {
+  test(`the open tab's bar is grey, in the ${theme} theme`, async ({ page }) => {
+    await openTake(page, 5, theme)
+    const bar = openTab(strip(page)).locator("[data-tab-bar]")
+    await expect(bar).toHaveCount(1)
+    const grey = await colour(page, "--muted-foreground")
+    await expect(bar).toHaveCSS("background-color", grey)
+    expect(grey).not.toBe(await colour(page, "--primary"))
+    // Its top corners are the small radius (4 px), its foot is flat.
+    expect(
+      await style(
+        bar,
+        "border-top-left-radius",
+        "border-top-right-radius",
+        "border-bottom-left-radius",
+        "border-bottom-right-radius"
+      )
+    ).toEqual({
+      "border-top-left-radius": "4px",
+      "border-top-right-radius": "4px",
+      "border-bottom-left-radius": "0px",
+      "border-bottom-right-radius": "0px",
+    })
+  })
+}
 
 test("the strip's toolbar is star, rename, cloud, delete, as on a take row", async ({ page }) => {
   await openTake(page, 5)
@@ -157,19 +172,23 @@ test("a tab's take number is in even figures, not a mono box", async ({ page }) 
   expect(rowLook["font-family"]).not.toMatch(/mono/i)
 })
 
-test("Every take of is a shared button with its words in a tip", async ({ page }) => {
-  await openTake(page, 5)
-  const number = strip(page).getByRole("button", { name: "Every take of Viasna" })
-  await expect(number).toHaveAttribute("data-variant", "ghost")
-  await expect(number).toHaveAttribute("data-size", "icon-tiny")
-  await expect(number).not.toHaveAttribute("title")
-  await number.hover()
-  await expect(tooltip(page)).toHaveText("Every take of Viasna (↑ ↓)")
-  await number.click()
-  await expect(number).toHaveAttribute("aria-expanded", "true")
-  await expect(number).toHaveCSS("background-color", await colour(page, "--selected"))
-  await expect(strip(page).locator("[data-column]")).not.toHaveCount(0)
-})
+for (const theme of THEMES) {
+  test(`Every take of is a shared button with its words in a tip, in the ${theme} theme`, async ({
+    page,
+  }) => {
+    await openTake(page, 5, theme)
+    const number = strip(page).getByRole("button", { name: "Every take of Viasna" })
+    await expect(number).toHaveAttribute("data-variant", "ghost")
+    await expect(number).toHaveAttribute("data-size", "icon-tiny")
+    await expect(number).not.toHaveAttribute("title")
+    await number.hover()
+    await expect(tooltip(page)).toHaveText("Every take of Viasna (↑ ↓)")
+    await number.click()
+    await expect(number).toHaveAttribute("aria-expanded", "true")
+    await expect(number).toHaveCSS("background-color", await colour(page, "--selected"))
+    await expect(strip(page).locator("[data-column]")).not.toHaveCount(0)
+  })
+}
 
 test("the marks on a tab are shared dots with no title, and a count at 12 px", async ({ page }) => {
   // Take 3 is Viasna 1, with a mark.
@@ -207,13 +226,15 @@ test("the edge buttons are the shared ones with their name in a tip", async ({ p
   await later.hover()
   await expect(tooltip(page)).toHaveText("Later songs")
 
-  // Paged to the end, the earlier edge has the same words.
+  // › pages the row along, smoothly: wait for the row to move, not for a
+  // time. Then to its end, where › is gone and ‹ has the same words.
   await away(page)
   await expect(tooltip(page)).toHaveCount(0)
-  for (let i = 0; i < 12 && (await later.count()); i++) {
-    await later.click()
-    await page.waitForTimeout(400)
-  }
+  const row = strip(page).locator("[data-tab]").first().locator("..")
+  await later.click()
+  await expect.poll(() => row.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0)
+  await row.evaluate((el) => el.scrollTo({ left: el.scrollWidth, behavior: "instant" }))
+  await expect(later).toHaveCount(0)
   const earlier = strip(page).getByRole("button", { name: "Earlier songs" })
   await expect(earlier).toBeVisible()
   await expect(earlier).toHaveAttribute("data-variant", "outline")
@@ -223,25 +244,29 @@ test("the edge buttons are the shared ones with their name in a tip", async ({ p
   await expect(tooltip(page)).toHaveText("Earlier songs")
 })
 
-test("the open go's row in a column is the grey selected one on a button", async ({ page }) => {
-  await openTake(page, 5)
-  await songs(page).click()
-  const open = strip(page).locator("[data-column='song:Viasna'] [data-go-row][aria-current='true']")
-  await expect(open).toHaveCount(1)
-  await expect(open).toHaveAttribute("data-slot", "button")
-  const selected = await colour(page, "--selected")
-  await expect(open).toHaveCSS("background-color", selected)
-  expect((await style(open, "border-top-left-radius"))["border-top-left-radius"]).toBe("8px")
-  // It keeps its fill under the pointer.
-  await open.hover()
-  await expect(open).toHaveCSS("background-color", selected)
-  // The others are clear until the pointer is over them.
-  const other = strip(page)
-    .locator("[data-column='song:Viasna'] [data-go-row]:not([aria-current])")
-    .first()
-  await away(page)
-  await expect(other).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
-})
+for (const theme of THEMES) {
+  test(`the open go's row in a column is the grey selected one on a button, in the ${theme} theme`, async ({
+    page,
+  }) => {
+    await openTake(page, 5, theme)
+    await songs(page).click()
+    const open = strip(page).locator("[data-column='song:Viasna'] [data-go-row][aria-current='true']")
+    await expect(open).toHaveCount(1)
+    await expect(open).toHaveAttribute("data-slot", "button")
+    const selected = await colour(page, "--selected")
+    await expect(open).toHaveCSS("background-color", selected)
+    expect((await style(open, "border-top-left-radius"))["border-top-left-radius"]).toBe("8px")
+    // It keeps its fill under the pointer.
+    await open.hover()
+    await expect(open).toHaveCSS("background-color", selected)
+    // The others are clear until the pointer is over them.
+    const other = strip(page)
+      .locator("[data-column='song:Viasna'] [data-go-row]:not([aria-current])")
+      .first()
+    await away(page)
+    await expect(other).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+  })
+}
 
 test("a tab list's day headings have no capitals", async ({ page }) => {
   // Pałyn 1 of Tuesday jam, opened from Pałyn's page, so that its column has
