@@ -1165,14 +1165,19 @@ export function HistoryScreen({
               className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
             >
               {summary && (
-                <div className="flex items-start gap-2">
-                  {/* With the facts beside it the name keeps its width and they
-                      give way to it, as in the rehearsal screen's header. */}
-                  <div className={cn("min-w-0", facts ? "flex-[0_1_auto]" : "flex-1")}>
-                    {/* The name wraps when it is longer than its row, through a
-                        word if need be, and is never cut (B6); the pencil stays
-                        beside its first line. */}
-                    <div className="flex items-start gap-1">
+                <div>
+                  <div className="flex items-start gap-2">
+                    {/* With the facts beside it the name keeps its width and
+                        they give way to it, as in the rehearsal screen's
+                        header. The name wraps when it is longer than its row,
+                        through a word if need be, and is never cut (B6); the
+                        pencil stays beside its first line. */}
+                    <div
+                      className={cn(
+                        "flex min-w-0 items-start gap-1",
+                        facts ? "flex-[0_1_auto]" : "flex-1"
+                      )}
+                    >
                       <h2 className="min-w-0 pt-1 text-xl leading-tight font-semibold wrap-anywhere">
                         {summary.name}
                       </h2>
@@ -1188,47 +1193,43 @@ export function HistoryScreen({
                         </Button>
                       )}
                     </div>
-                    <div
-                      data-rehearsal-head
-                      className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
-                    >
-                      <span className="shrink-0">
-                        {formatDay(summary.created_at).split(" ")[0]}{" "}
-                        {formatDateHuman(summary.created_at)}
-                      </span>
-                      {/* The set and the folder are cut to what the name leaves
-                          and ask for no room of their own: a path of 60 letters
-                          would set the name's width, and the facts have what
-                          the name does not need. With under 5rem they are not
-                          drawn at all, rather than a dot and the edge of an
-                          icon. */}
-                      <div className="@container min-w-0 flex-1 overflow-hidden">
-                        <div className="hidden items-center gap-2 @min-[5rem]:flex">
-                          <span aria-hidden>·</span>
-                          {summary.set_name && (
-                            <>
-                              <SetName name={summary.set_name} className="max-w-1/2 shrink-0" />
-                              <span aria-hidden>·</span>
-                            </>
-                          )}
-                          <FolderOpen className="size-3.5 shrink-0" />
-                          <span className="truncate font-mono">{summary.folder}</span>
-                        </div>
-                      </div>
-                    </div>
+                    {facts}
+                    {!summary.missing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Delete rehearsal ${summary.name}`}
+                        onClick={() => void deleteRehearsal(summary)}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 />
+                      </Button>
+                    )}
                   </div>
-                  {facts}
-                  {!summary.missing && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Delete rehearsal ${summary.name}`}
-                      onClick={() => void deleteRehearsal(summary)}
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 />
-                    </Button>
-                  )}
+                  {/* Under the name, the facts and Delete, across the whole
+                      head: under the name alone, a short name made it as narrow
+                      as the name. The date is whole; the folder has what the
+                      date and the set leave, and is cut at the head's edge;
+                      the set is cut only when there is no room for it whole,
+                      and to half the line at most. */}
+                  <div
+                    data-rehearsal-head
+                    className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
+                  >
+                    <span className="shrink-0">
+                      {formatDay(summary.created_at).split(" ")[0]}{" "}
+                      {formatDateHuman(summary.created_at)}
+                    </span>
+                    <span aria-hidden>·</span>
+                    {summary.set_name && (
+                      <>
+                        <SetName name={summary.set_name} className="max-w-1/2" />
+                        <span aria-hidden>·</span>
+                      </>
+                    )}
+                    <FolderOpen className="size-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate font-mono">{summary.folder}</span>
+                  </div>
                 </div>
               )}
   
