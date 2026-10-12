@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { LabelDot } from "@/components/ui/mark"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { WholeTip, useCut } from "@/components/ui/whole"
+import { Whole, WholeTip, useCut } from "@/components/ui/whole"
 import { labelOf, useLabels } from "@/lib/labels"
 import { formatMMSS } from "@/lib/format"
 import type { Take } from "@/lib/api"
@@ -166,6 +166,8 @@ export function SongTab({
 
   // A long name is cut short so it does not take half the strip; the whole
   // of it is in the shared tip, on the names that were cut and only on those.
+  // This is the shut tab's name, which the button's tip is for; the open
+  // one's is Whole's own.
   const [text, cut] = useCut<HTMLSpanElement>()
 
   const statusOf = (go: TabGo) =>
@@ -198,23 +200,10 @@ export function SongTab({
   // The name as wide as it is in the open tab's weight, open or not, and
   // never wider than 14rem. A shut tab is a button, so its tip is on the
   // whole tab, where the keys reach it. The open one is not, and has the
-  // number's button in it, which has a tip of its own: so its tip is on the
-  // name alone, and a name that was cut is a stop for the Tab key, with the
-  // shared focus ring, so the keys reach its tip too (as PortNote's does).
-  // A name that fits is no stop.
-  const label = (
-    <span
-      ref={text}
-      data-tab-name
-      tabIndex={open && cut ? 0 : undefined}
-      className={cn(
-        "truncate",
-        open && "rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      )}
-    >
-      {title}
-    </span>
-  )
+  // number's button in it, which has a tip of its own: so its name is the
+  // shared Whole with reach, whose tip is on the name alone, and a name that
+  // was cut is a stop for the Tab key, with the shared focus ring, so the
+  // keys reach its tip too. A name that fits is no stop.
   const name = (
     <span
       data-text={title}
@@ -224,11 +213,11 @@ export function SongTab({
       )}
     >
       {open ? (
-        <WholeTip cut={cut} text={title}>
-          {label}
-        </WholeTip>
+        <Whole reach text={title} data-tab-name className="truncate" />
       ) : (
-        label
+        <span ref={text} data-tab-name className="truncate">
+          {title}
+        </span>
       )}
     </span>
   )
