@@ -1,23 +1,25 @@
-import { callCount, calls, expect, openApp, recordTake, settled, startRehearsal, test } from "./app.ts"
+import {
+  callCount,
+  calls,
+  expect,
+  GIG,
+  openApp,
+  recordTake,
+  settled,
+  startRehearsal,
+  test,
+  withSets,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // ↑ and ↓ on the rehearsal screen pick the next take's song through the rows
 // beside the Next take field: the set's, then the other songs (issue #12
 // step 8, K1–K5).
 
-type SetSeed = { id: number; name: string; songs: string[] }
-
 /** A page script: the library has this set, Start plays by it, and two more
  *  songs, so the other songs fold after five. */
-function withSet(songs: string[]) {
-  const set: SetSeed = { id: 1, name: "Gig on the 25th", songs }
-  return (
-    `window.__SETS__ = ${JSON.stringify([set])};` +
-    `window.__MORE_SONGS__ = ["Opus", "Kupalle"];` +
-    `localStorage.setItem("mock-python-config", JSON.stringify(` +
-    `{theme: "dark", ui_scale: 1, next_set: 1}));`
-  )
-}
+const withSet = (songs: string[]) =>
+  withSets([{ ...GIG, songs }], GIG.id, `window.__MORE_SONGS__ = ["Opus", "Kupalle"];`)
 
 const field = (page: Page) => page.getByRole("textbox", { name: "Next take" })
 const rows = (page: Page) => page.locator("[data-song-list] [data-song-row]")

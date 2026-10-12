@@ -484,6 +484,30 @@ test.describe("the marker's kind", () => {
     await page.keyboard.press("Shift+Tab")
     await expect(kinds.nth(2)).toBeFocused()
   })
+
+  test("Tab goes on past the kinds from a kind that is not the group's stop", async ({ page }) => {
+    await openApp(page, {
+      before:
+        "window.__LABELS__ = [{id:7, name:'Solo', colour:'violet'}, {id:1, name:'Note', colour:'grey'}, {id:3, name:'Went wrong', colour:'red'}];",
+    })
+    await startRehearsal(page)
+    await recordTake(page)
+    await page.getByRole("button", { name: "Add marker" }).click()
+    const dialog = page.getByRole("dialog")
+    const kinds = dialog.getByRole("radio")
+    const note = dialog.getByRole("textbox", { name: "Marker note" })
+    await expect(note).toBeFocused()
+
+    // Radix makes a focused kind its group's stop. Left on Solo while Went
+    // wrong has the focus, the stop still stands for the whole group.
+    await kinds.nth(2).focus()
+    await kinds.evaluateAll((els) => {
+      ;(els[0] as HTMLElement).tabIndex = 0
+      ;(els[2] as HTMLElement).tabIndex = -1
+    })
+    await page.keyboard.press("Tab")
+    await expect(note).toBeFocused()
+  })
 })
 
 test.describe("the map", () => {
