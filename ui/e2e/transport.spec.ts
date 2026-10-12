@@ -77,12 +77,15 @@ async function croppingTake(page: Page, fraction = 0.4) {
 }
 
 /** The playback device going quiet while a take plays, as Python says it. */
-async function goQuiet(page: Page) {
+async function goQuiet(page: Page, what = QUIET) {
   await play(page).click()
   await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
-  await setFake(page, "__OUTPUT_QUIET__", QUIET)
+  await setFake(page, "__OUTPUT_QUIET__", what)
   await expect(line(page).getByRole("alert")).toContainText("Playback stopped")
 }
+
+/** What the player's line says, in the one span the tip and the cut are on. */
+const lineWords = (page: Page) => line(page).locator("[data-slot='alert-description'] > span")
 
 const shows = (locator: Locator) => locator.isVisible()
 
@@ -301,6 +304,39 @@ test.describe("the player's line", () => {
     await words.hover()
     await expect(page.locator("[data-whole]")).toHaveText(QUIET)
   })
+
+  test("a line that is cut takes Tab and shows whole in the tip", async ({ page }) => {
+    await openTonight(page, "Take 1 Pałyn 1")
+    await goQuiet(page)
+    const alert = line(page).getByRole("alert")
+    await expect(alert).toHaveAttribute("tabindex", "0")
+    // The keys button ends the transport, and the line is the next stop.
+    await page.getByRole("button", { name: "Player keys" }).focus()
+    await page.keyboard.press("Tab")
+    await expect(alert).toBeFocused()
+    await expect(page.locator("[data-whole]")).toHaveText(QUIET)
+    // The shared focus ring, round the line: the words are cut at their own
+    // box, which would clip a ring drawn round them.
+    expect((await style(alert, "box-shadow"))["box-shadow"]).not.toBe("none")
+    // And the next Tab goes on, out of the line.
+    await page.keyboard.press("Tab")
+    await expect(alert).not.toBeFocused()
+    expect(await line(page).locator(":focus").count()).toBe(0)
+  })
+
+  test("a line that fits is no stop for Tab", async ({ page }) => {
+    await openTonight(page, "Take 1 Pałyn 1")
+    await goQuiet(page, "Playback stopped.")
+    const alert = line(page).getByRole("alert")
+    const words = lineWords(page)
+    await expect(words).toHaveText("Playback stopped.")
+    const cut = await words.evaluate((el) => el.scrollWidth > el.clientWidth + 1)
+    expect(cut, "the warning fits the line").toBe(false)
+    await expect(alert).not.toHaveAttribute("tabindex")
+    await page.getByRole("button", { name: "Player keys" }).focus()
+    await page.keyboard.press("Tab")
+    expect(await line(page).locator(":focus").count(), "Tab skips the line").toBe(0)
+  })
 })
 
 test.describe("the marker's kind", () => {
@@ -334,14 +370,15 @@ test.describe("the marker's kind", () => {
     await expect(kinds.nth(1)).toBeFocused()
     // Tab leaves the group for the next control, and Shift+Tab for the
     // one before; the group's own box is no stop to be handed back from.
-    const group = dialog.getByRole("radiogroup")
     await page.keyboard.press("Tab")
     await expect(dialog.getByRole("textbox", { name: "Marker note" })).toBeFocused()
     // Back to the radio the group last had, which is where its tab stop is.
     await page.keyboard.press("Shift+Tab")
     await expect(kinds.nth(1)).toBeFocused()
+    // Past the group's first stop, the way round to the last control of the
+    // dialog, which is Save.
     await page.keyboard.press("Shift+Tab")
-    await expect(group.locator(":focus")).toHaveCount(0)
+    await expect(dialog.getByRole("button", { name: "Save" })).toBeFocused()
 
     // One is always chosen: the chosen one pressed again stays chosen.
     await kinds.nth(0).click()
@@ -351,6 +388,65 @@ test.describe("the marker's kind", () => {
     await expect(kinds.nth(0)).toHaveAttribute("aria-checked", "false")
     await kinds.nth(2).click()
     await expect(kinds.nth(2)).toHaveAttribute("aria-checked", "true")
+  })
+
+  test("the kind picker is one Tab stop from a fresh open", async ({ page }) => {
+    await openApp(page, {
+      before:
+        "window.__LABELS__ = [{id:7, name:'Solo', colour:'violet'}, {id:1, name:'Note', colour:'grey'}, {id:3, name:'Went wrong', colour:'red'}];",
+    })
+    await startRehearsal(page)
+    await recordTake(page)
+    await page.getByRole("button", { name: "Add marker" }).click()
+    const dialog = page.getByRole("dialog")
+    const kinds = dialog.getByRole("radio")
+    const note = dialog.getByRole("textbox", { name: "Marker note" })
+    const save = dialog.getByRole("button", { name: "Save" })
+    await expect(kinds).toHaveCount(3)
+
+    // Nothing is focused by hand: the note has the focus, as it opens, and
+    // no kind has had it yet, so none is a stop of its own as far as the
+    // group knows.
+    await expect(note).toBeFocused()
+    expect(await kinds.evaluateAll((els) => els.map((el) => (el as HTMLElement).tabIndex))).toEqual([
+      -1, -1, -1,
+    ])
+    // Back from the note is the chosen kind.
+    await page.keyboard.press("Shift+Tab")
+    await expect(kinds.nth(0)).toBeFocused()
+    // Back again leaves the group, the way round to the dialog's last control.
+    await page.keyboard.press("Shift+Tab")
+    await expect(save).toBeFocused()
+    // And forward from there comes to the chosen kind and on to the note.
+    await page.keyboard.press("Tab")
+    await expect(kinds.nth(0)).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(note).toBeFocused()
+  })
+
+  test("a kind other than the first, chosen, is the one the Tab key comes to", async ({ page }) => {
+    await openApp(page, {
+      before:
+        "window.__LABELS__ = [{id:7, name:'Solo', colour:'violet'}, {id:1, name:'Note', colour:'grey'}, {id:3, name:'Went wrong', colour:'red'}];",
+    })
+    await startRehearsal(page)
+    await recordTake(page)
+    await page.getByRole("button", { name: "Add marker" }).click()
+    await page.getByRole("radio", { name: "Went wrong" }).click()
+    await page.getByRole("dialog").getByRole("button", { name: "Save" }).click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+
+    // The marker opened again is a fresh dialog, with Went wrong chosen.
+    await page.getByRole("button", { name: /^Edit marker at/ }).click()
+    const dialog = page.getByRole("dialog")
+    const kinds = dialog.getByRole("radio")
+    await expect(kinds.nth(2)).toHaveAttribute("aria-checked", "true")
+    expect(await kinds.evaluateAll((els) => els.map((el) => (el as HTMLElement).tabIndex))).toEqual([
+      -1, -1, -1,
+    ])
+    await expect(dialog.getByRole("textbox", { name: "Marker note" })).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(kinds.nth(2)).toBeFocused()
   })
 })
 
@@ -447,6 +543,24 @@ test.describe("the marks and the region", () => {
     await page.keyboard.press("Tab")
     expect(await focused(words), "the words follow the time").toBe(true)
     expect(await ring(words), "the words' focus ring").not.toBe("none")
+  })
+
+  test("a mark chip is 30 px high, and the marks are 24 px under the master", async ({
+    page,
+  }) => {
+    // The page is settled by openTonight: a box read while the groups rise is
+    // up to 12 px off.
+    await openTonight(page, "Take 3 Viasna 1")
+    await settled(page)
+    const chip = page.getByRole("button", { name: "0:04", exact: true }).locator("xpath=..")
+    const row = chip.locator("xpath=..")
+    await expect(row).toContainText("Markers")
+    expect((await chip.boundingBox())!.height).toBeCloseTo(30, 0)
+    // One group, 24 px apart inside it (Q1): the row of marks starts 24 px
+    // under the master, which is the last of the timeline.
+    const master = (await page.getByText("Master", { exact: true }).locator("xpath=../..").boundingBox())!
+    const marks = (await row.boundingBox())!
+    expect(marks.y - (master.y + master.height)).toBeCloseTo(24, 0)
   })
 
   test("a mark chip's cut words show whole in the shared tip", async ({ page }) => {

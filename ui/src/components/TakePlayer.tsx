@@ -197,22 +197,30 @@ export function TakePlayer({
 }
 
 /** One thing said in the line, whole in a tip when it is cut. The tip is on
- *  a span inside the description: a tip's trigger takes over the data-slot
- *  of what it is put on, and the line's cut is the description's. */
+ *  the line itself, and cut, the line is a Tab stop too, so the keyboard
+ *  reaches the whole of it as the pointer does. The ring is round the line
+ *  and not the words: the words are cut at their own box, which would clip a
+ *  ring drawn outside them. A tip's trigger takes over the data-slot of what
+ *  it is put on, which the Alert's own look does not use. */
 function Said({ variant, text }: { variant: "warning" | "destructive"; text: string }) {
   const [ref, cut] = useCut<HTMLSpanElement>()
   const Icon = variant === "destructive" ? CircleAlert : TriangleAlert
   return (
-    <Alert size="line" variant={variant}>
-      <Icon />
-      <AlertDescription>
-        <WholeTip cut={cut} text={text}>
+    <WholeTip cut={cut} text={text}>
+      <Alert
+        size="line"
+        variant={variant}
+        tabIndex={cut ? 0 : undefined}
+        className="rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <Icon />
+        <AlertDescription>
           <span ref={ref} className="block truncate">
             {text}
           </span>
-        </WholeTip>
-      </AlertDescription>
-    </Alert>
+        </AlertDescription>
+      </Alert>
+    </WholeTip>
   )
 }
 
@@ -223,7 +231,7 @@ function Said({ variant, text }: { variant: "warning" | "destructive"; text: str
  * quiet. One thing at a time: a take that did not load, since its lanes
  * never come; else how far a crop is; else the output's warning.
  */
-function PlayerLine({
+export function PlayerLine({
   error,
   status,
   warning,
@@ -288,7 +296,7 @@ function MarkChip({
           variant="ghost"
           size="icon-tiny"
           onClick={() => onEdit?.(marker)}
-          className="w-auto min-w-0 shrink truncate px-1 text-xs text-muted-foreground hover:text-foreground"
+          className="w-auto min-w-0 shrink px-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <span ref={wordsRef} className="truncate">
             {words}
