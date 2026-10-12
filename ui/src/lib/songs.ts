@@ -1,5 +1,5 @@
 import type { Marker, NotNamedSummary, SongGo, SongIndex, SongSummary, Take } from "@/lib/api"
-import { formatDate, formatDayIn, goesLabel, takesLabel } from "@/lib/format"
+import { formatDate, formatDayIn, goesLabel, rehearsalsLabel, takesLabel } from "@/lib/format"
 
 /** Song titles in the order a person looks for them: alphabetical, any
  *  script, capitals or not. The All songs panel and History's Songs view
@@ -118,8 +118,6 @@ export function fromLastTime(goes: SongGo[]): { go: SongGo; marker: Marker }[] {
       [...(g.take.markers ?? [])].sort((a, b) => a.at - b.at).map((marker) => ({ go: g, marker }))
     )
 }
-
-export const rehearsalsLabel = (n: number) => (n === 1 ? "1 rehearsal" : `${n} rehearsals`)
 
 /** "7 goes · 4 rehearsals · last 28 Sep", under a song in the list. */
 export function songLine(s: SongSummary, now: Date = new Date()): string {

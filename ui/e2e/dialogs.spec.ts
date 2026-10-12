@@ -2,6 +2,8 @@ import {
   callCount,
   calls,
   expect,
+  hold,
+  letGo,
   nameTake,
   openApp,
   openHistory,
@@ -158,10 +160,7 @@ test("a dialog opened with its Enter button disabled still has the keyboard insi
   const dialog = page.getByRole("dialog")
   await dialog.getByText("Choose").click()
   // A copy that does not finish, and the dialog closed on it...
-  await page.evaluate(() => {
-    const w = window as unknown as { __HOLD__: Record<string, Promise<void>>; __LET_GO__: () => void }
-    w.__HOLD__ = { share_take: new Promise<void>((r) => (w.__LET_GO__ = r)) }
-  })
+  await hold(page, "share_take")
   await dialog.getByRole("button", { name: "The mix", exact: true }).click()
   await expect.poll(() => callCount(page, "share_take")).toBe(1)
   await page.keyboard.press("Escape")
@@ -174,7 +173,7 @@ test("a dialog opened with its Enter button disabled still has the keyboard insi
   await expect
     .poll(() => dialog.evaluate((d) => d.contains(document.activeElement)))
     .toBe(true)
-  await page.evaluate(() => (window as unknown as { __LET_GO__: () => void }).__LET_GO__())
+  await letGo(page, "share_take")
 })
 
 test("the title and the text stay while the dialog closes", async ({ page }) => {

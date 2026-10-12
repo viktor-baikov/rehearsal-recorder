@@ -1,0 +1,52 @@
+import { createElement } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, it } from "vitest"
+import { toggleVariants } from "@/components/ui/toggle"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+
+describe("Toggle", () => {
+  it("is a grey fill when on, never the accent (F2)", () => {
+    for (const variant of ["default", "outline"] as const) {
+      const css = toggleVariants({ variant })
+      expect(css, variant).toContain("data-[state=on]:bg-selected")
+      expect(css, variant).not.toMatch(/data-\[state=on\]:bg-(primary|accent)/)
+    }
+  })
+
+  it("has the same frame and weight in every look, so turning it on moves nothing (C1)", () => {
+    for (const variant of ["default", "outline"] as const) {
+      const css = toggleVariants({ variant })
+      expect(css, variant).toMatch(/(^| )border( |$)/)
+      expect(css, variant).toContain("font-normal")
+    }
+  })
+
+  it("is as tall as Button's row, and a square of it for an icon", () => {
+    expect(toggleVariants({ size: "row" })).toContain("h-8")
+    expect(toggleVariants({ size: "icon-row" })).toContain("size-8")
+  })
+})
+
+describe("ToggleGroup", () => {
+  const group = (variant: "default" | "outline" | "switch") =>
+    renderToStaticMarkup(
+      createElement(
+        ToggleGroup,
+        { type: "single", variant },
+        createElement(ToggleGroupItem, { value: "a" }, "A"),
+      ),
+    )
+
+  it("as a switch is History's look: a grey track, the chosen item a plate with a light shadow", () => {
+    const html = group("switch")
+    expect(html).toContain("bg-muted")
+    expect(html).toContain("data-[state=on]:bg-background")
+    expect(html).toContain("data-[state=on]:shadow-sm")
+  })
+
+  it("otherwise says what is on with the grey fill", () => {
+    for (const variant of ["default", "outline"] as const) {
+      expect(group(variant), variant).toContain("data-[state=on]:bg-selected")
+    }
+  })
+})

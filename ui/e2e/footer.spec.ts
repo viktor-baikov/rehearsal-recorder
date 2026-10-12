@@ -1,4 +1,12 @@
-import { expect, openApp, recordTake, startButton, startRehearsal, test } from "./app.ts"
+import {
+  expect,
+  lastTimeButton,
+  openApp,
+  recordTake,
+  startButton,
+  startRehearsal,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Every footer is one row: what the screen has to say on the left, its
@@ -105,13 +113,16 @@ test.describe("the setup screen with a rehearsal before", () => {
     const start = (await startButton(page).boundingBox())!
     expect(last.x + last.width).toBeLessThanOrEqual(setup.x)
     expect(setup.x + setup.width).toBeGreaterThan(start.x)
+    expect(setup.y + setup.height).toBeLessThanOrEqual(start.y)
   })
 
-  test("narrow, the new rehearsal comes first and Last time under it", async ({ page }) => {
+  test("narrow, the new rehearsal over Start and Last time behind its button", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
-    await expect(lastTime(page)).toBeAttached()
-    const last = (await lastTime(page).boundingBox())!
+    await expect(lastTimeButton(page)).toBeVisible()
+    await expect(lastTime(page)).toHaveCount(0)
     const setup = (await setupBox(page).boundingBox())!
-    expect(last.y).toBeGreaterThan(setup.y + setup.height)
+    const start = (await startButton(page).boundingBox())!
+    expect(setup.x + setup.width).toBeGreaterThan(start.x)
+    expect(setup.y + setup.height).toBeLessThanOrEqual(start.y)
   })
 })

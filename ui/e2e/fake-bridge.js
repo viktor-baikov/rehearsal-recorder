@@ -966,6 +966,7 @@ window.__MAKE_API__ = () => ({
     {index:0, name:'Universal Audio Thunderbolt', host_api:'Core Audio',
      max_input_channels:18, max_output_channels:0, default_samplerate:48000}])),
   rescan_devices: track('rescan_devices', async () => {
+    await held('rescan_devices');
     rescans += 1;
     if (window.__PLUGGED_IN_LATE__ && !pluggedIn && rescans >= 2) {
       pluggedIn = true;
@@ -1052,11 +1053,14 @@ window.__MAKE_API__ = () => ({
   // A check opens the ports of the tracks that take notes, and counts again
   // from nothing (api.start_monitor).
   start_monitor: track('start_monitor', async (_dev, _rate, tracks) => {
+    await held('start_monitor');
     midiCheck = {tracks: (tracks || []).filter(takesNotes), since: clock(), ended: null, read: {}};
     return {ok:true};
   }),
-  monitor_levels: track('monitor_levels', async () =>
-    window.__MONITOR_LEVELS__ || ({'Guitar':[0.62], 'Vocals':[0.0004]})),
+  monitor_levels: track('monitor_levels', async () => {
+    await held('monitor_levels');
+    return window.__MONITOR_LEVELS__ || ({'Guitar':[0.62], 'Vocals':[0.0004]});
+  }),
   monitor_health: async () => ({checking:true, problem: window.__CHECK_QUIET__ || null}),
   // The ports the system lists; a port a track holds open says how many notes
   // it has sent (midi.rig ports()).
@@ -1114,6 +1118,7 @@ window.__MAKE_API__ = () => ({
   // window.__TONIGHT__ = [{name, duration_sec, starred?, markers?, cloud?}, …],
   // numbered from 1 in that order.
   start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, tracksIn, _depth, setId) => {
+    await held('start_rehearsal');
     const folder = '/rec/' + name;
     const tonight = (window.__TONIGHT__ || []).map((t, i) => ({take_number:i + 1, markers:[],
       tracks:[{name:'Guitar', file:`${folder}/t${i + 1}.wav`}], ...t}));

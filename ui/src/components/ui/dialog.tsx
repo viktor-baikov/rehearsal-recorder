@@ -88,7 +88,8 @@ function focusTheEnterButton(event: Event) {
  * and is only still inside its own notice. The region takes no pointer
  * events and holds nothing else, so the notice is what is matched.
  */
-function leaveNoticesAlone(event: Event) {
+// oxlint-disable-next-line react/only-export-components -- sheet.tsx is a dialog too and leaves the notices alone the same way
+export function leaveNoticesAlone(event: Event) {
   if (event.target instanceof Element && event.target.closest("[data-notice]")) {
     event.preventDefault()
   }

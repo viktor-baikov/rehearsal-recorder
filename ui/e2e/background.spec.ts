@@ -2,6 +2,8 @@ import {
   callCount,
   calls,
   expect,
+  hold,
+  letGo,
   nameTake,
   openApp,
   setFake,
@@ -180,25 +182,6 @@ test.describe("the background work button, from any screen", () => {
 })
 
 test.describe("long work shows its progress where it runs", () => {
-  /** Holds a call in the fake where it is until released. */
-  const hold = (page: Page, name: string) =>
-    page.evaluate((n) => {
-      const w = window as unknown as Record<string, unknown> & {
-        __HOLD__?: Record<string, Promise<void>>
-      }
-      w.__HOLD__ = w.__HOLD__ || {}
-      w.__HOLD__[n] = new Promise((r) => {
-        w["__RELEASE_" + n] = r
-      })
-    }, name)
-  const release = (page: Page, name: string) =>
-    page.evaluate((n) => {
-      const w = window as unknown as Record<string, unknown> & {
-        __HOLD__: Record<string, Promise<void>>
-      }
-      ;(w["__RELEASE_" + n] as () => void)()
-      delete w.__HOLD__[n]
-    }, name)
   const running = (page: Page, kind: string, fraction: number, over: Entry = {}) =>
     activity(page, [
       entry({ id: 50, kind, title: kind, folder: null, take_number: null, fraction, step: null, ...over }),
@@ -227,7 +210,7 @@ test.describe("long work shows its progress where it runs", () => {
     await expect.poll(() => polls(page)).toBeGreaterThan(seen)
     await running(page, "stop", 0.45, { folder: "/tmp/draft", take_number: 1 })
     await expect(page.getByText("Saving the take… 45%")).toBeVisible()
-    await release(page, "stop_take")
+    await letGo(page, "stop_take")
     await expect(page.getByRole("button", { name: /Save take/ })).toBeVisible()
 
     await hold(page, "crop_draft")
@@ -235,7 +218,7 @@ test.describe("long work shows its progress where it runs", () => {
     await running(page, "crop", 0.4, { folder: "/tmp/draft" })
     await page.getByRole("button", { name: "Crop to the region" }).click()
     await expect(page.getByText("Cropping… 40%")).toBeVisible()
-    await release(page, "crop_draft")
+    await letGo(page, "crop_draft")
     await activity(page, [])
     await expect(page.getByText("Cropping…")).toHaveCount(0)
 
@@ -251,7 +234,7 @@ test.describe("long work shows its progress where it runs", () => {
     await running(page, "crop", 0.4, { folder: "/rec/" + startedAs, take_number: 1 })
     await page.getByRole("button", { name: "Crop to the region" }).click()
     await expect(page.getByText("Cropping… 40%")).toBeVisible()
-    await release(page, "crop_take")
+    await letGo(page, "crop_take")
   })
 
   test("recovering a take, in its row", async ({ page }) => {
@@ -267,6 +250,6 @@ test.describe("long work shows its progress where it runs", () => {
     await running(page, "recover", 0.3, { folder: "/rec/old/_drafts/take 1" })
     await page.getByRole("button", { name: "Recover" }).click()
     await expect(page.getByText("Recovering… 30%")).toBeVisible()
-    await release(page, "recover_draft")
+    await letGo(page, "recover_draft")
   })
 })

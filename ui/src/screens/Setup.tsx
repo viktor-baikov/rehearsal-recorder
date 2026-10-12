@@ -1,47 +1,58 @@
-import { useEffect, useRef, useState } from "react"
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react"
 import {
   Activity,
+  AudioLines,
   Check,
   HardDrive,
   History,
+  PanelLeftOpen,
   Plus,
   Radio,
   RefreshCw,
   Mic,
   Settings as SettingsIcon,
-  Trash2,
+  TriangleAlert,
 } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
+import { Spinner } from "@/components/ui/spinner"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { FigureLine, Figures, WholeTip, useCut } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
-import { IconPicker } from "@/components/IconPicker"
 import { LastTime } from "@/components/LastTime"
-import { NameField } from "@/components/NameField"
-import { END_COLUMN, ModeSwitch } from "@/components/midi/ModeSwitch"
-import { NotesCheck } from "@/components/midi/NotesCheck"
-import { PortPicker } from "@/components/midi/PortPicker"
 import { NewDot } from "@/components/NewDot"
 import { NewSetDialog, SetPicker } from "@/components/SetPicker"
 import { Shell } from "@/components/Shell"
+import { TrackRow } from "@/components/TrackRow"
+import { useAfter } from "@/hooks/useAfter"
+import { useSteady } from "@/hooks/useSteady"
 import { chosenSet, useSets } from "@/hooks/useSets"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
 import { byFiles, useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { cn } from "@/lib/utils"
+import { dismiss, notify } from "@/lib/notices"
 import { useUpdate } from "@/lib/update"
-import { aboutDuration, notConnected } from "@/lib/format"
-import { QUIET_THRESHOLD, fallBack, meterReach } from "@/lib/levels"
+import { useWide } from "@/lib/wide"
+import { aboutDuration, inputsLabel, notConnected } from "@/lib/format"
+import { QUIET_THRESHOLD, fallBack } from "@/lib/levels"
 import { modeOf, notesProblem, recordsAudio, recordsNotes } from "@/lib/midi"
-import { findPort } from "@/lib/midiPorts"
+import { findPort, portLine, type PortStanding } from "@/lib/midiPorts"
+import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import {
   api,
   type Device,
@@ -61,8 +72,12 @@ const MONITOR_POLL_MS = 80
 // Whether the card is still sending — every couple of seconds, not a hot path.
 const MONITOR_HEALTH_MS = 2000
 /** How often the MIDI ports are read while a track takes notes: a port
- *  plugged in or pulled out shows on the cards by itself (spec P4). */
+ *  plugged in or pulled out shows on the rows by itself (spec P4). */
 const MIDI_PORTS_POLL_MS = 1000
+
+/** The notices' slots this screen says things in, a track taken off in each:
+ *  one of its own per track, so each keeps its Undo (`setup-track:{n}`). */
+const SAID = "setup-track"
 
 /** What a track's band entry keeps across interfaces: what is on screen when
  *  a card found by looking again is laid out. */
@@ -74,14 +89,22 @@ const portName = (t: Track) => (t.midi_port?.name?.trim() ? t.midi_port.name : n
 /** A track's name in a sentence, or what stands for it while it has none. */
 const named = (name: string) => name.trim() || "An unnamed track"
 
-// The notes about a track's port that come by themselves, in the spec's
-// words: its port pulled out (D7), another app holding it (P5), and the same
-// notes from it as from another track's (P8).
-const sayGone = (t: Track) =>
-  `“${portName(t)}” is not connected. ${named(t.name)} records its notes from the moment it is plugged in.`
-const sayBusy = (t: Track) => `“${portName(t)}” is in use by another app.`
-const sayEcho = (name: string, echo: string) =>
-  `${named(name)} gets the same notes as ${named(echo)}. Is it one instrument plugged in twice?`
+/** A group's place in the line the screen brings them in by, 40 ms apart
+ *  (F10: `--i` for `animate-rise`). */
+const rise = (i: number) => ({ "--i": i }) as CSSProperties
+
+/** Something over the tracks that is true for as long as it holds, and so
+ *  stays where it is (C8): not a notice. */
+function Warning({ children }: { children: ReactNode }) {
+  return (
+    <Alert variant="warning" role="status">
+      <TriangleAlert />
+      <AlertDescription>
+        <p>{children}</p>
+      </AlertDescription>
+    </Alert>
+  )
+}
 
 export function Setup({
   onStarted,
@@ -119,11 +142,28 @@ export function Setup({
   // next check, so it is said in place rather than as a notice.
   const [checkProblem, setCheckProblem] = useState<string | null>(null)
   // Where each bar stands, falling back from its peaks as on the recording
-  // screen, and when it was last moved.
+  // screen, and when it was last moved; by the names Python knows the inputs
+  // by.
   const [levels, setLevels] = useState<Record<string, number[]>>({})
   const levelsAt = useRef(0)
   const [seen, setSeen] = useState<Record<string, boolean>>({})
+  // Those names, by each track's place in the band: the names the tracks had
+  // when the check began, null for one that recorded no sound then. A track
+  // named again keeps its meter and its "signal", and one taken off takes
+  // its own with it, so the others keep theirs.
+  const [checkedNames, setCheckedNames] = useState<(string | null)[]>([])
   const checkingRef = useRef(false)
+  // How many checks have begun. A track put back by Undo brings what the
+  // check heard from it only into the check that heard it: one begun since
+  // never opened its input or its port.
+  const checkRun = useRef(0)
+  // Python is opening the inputs for a check: a press meanwhile opens no
+  // second one, nor a second chain of reads. The ref is for the press, read
+  // at once; the state turns the button's icon into a spinner once it has
+  // taken a second (B5), as Start's does while the rehearsal opens.
+  const opening = useRef(false)
+  const [openingCheck, setOpeningCheck] = useState(false)
+  const slowCheck = useAfter(openingCheck, SPINNER_AFTER_MS)
   // What the check hears from each track's port (P5, P8) and where its bar
   // stands, by the names the tracks had when it began, as Python has them;
   // and, by each track's place in the band, that name and what the track
@@ -146,16 +186,35 @@ export function Setup({
   // two takes 2 are told apart by their files.
   const [lastTime, setLastTime] = useState<LastTimeData | null>(null)
   const { cued, playInOverview, uncue, player } = useTakeStripPlayer(byFiles)
+  // In a window too narrow for it beside the setup (lib/wide), Last time is
+  // a panel from the left, opened by its button in the header (Q4). The
+  // player is the screen's, not the panel's: a take plays on as it closes.
+  const wide = useWide()
+  const [pastOpen, setPastOpen] = useState(false)
+  const pastButton = useRef<HTMLButtonElement>(null)
+  // Widened, Last time is beside the setup again, so an open panel closes,
+  // and stays shut when the window narrows once more. Set as this renders,
+  // not after: React renders again at once, before anything is drawn.
+  if (wide && pastOpen) setPastOpen(false)
 
   // The interface that was chosen and is not plugged in. Not the same as
   // none chosen: the desk is often switched on after the laptop.
   const [missing, setMissing] = useState<SettingsData["missing_device"]>(null)
+  // The interface's name, cut past two lines, and whether a figure beside it
+  // has given way to it: Recording with's button then says them whole in its
+  // tip, on hover and on keyboard focus (Q3).
+  const [deviceRef, deviceCut] = useCut<HTMLSpanElement>()
+  const [deviceDropped, setDeviceDropped] = useState(false)
+  const deviceNameId = useId()
+  const deviceFiguresId = useId()
   // The set Start plays by (S1–S2), kept across restarts, and New set…
   // over this screen (S3), with the band's songs to add.
   const sets = useSets()
   const [makingSet, setMakingSet] = useState(false)
   const songChoices = useSongChoices(makingSet, null, null)
   const [rescanning, setRescanning] = useState(false)
+  const slowLook = useAfter(rescanning, SPINNER_AFTER_MS)
+  const slowStart = useAfter(starting, SPINNER_AFTER_MS)
   const [stillMissing, setStillMissing] = useState(false)
 
   /**
@@ -327,7 +386,7 @@ export function Setup({
    * nothing tells apart count as not there. Before the list is first read,
    * nothing is said against a port.
    */
-  const portStanding = (t: Track, i: number): "none" | "ok" | "missing" | "in_use" | null => {
+  const portStanding = (t: Track, i: number): PortStanding => {
     if (!recordsNotes(t)) return null
     if (!t.midi_port || portName(t) === null) return "none"
     const state = heardFrom(t, i)?.state
@@ -348,22 +407,83 @@ export function Setup({
       ? [{ track: t, echo: tracks[other] }]
       : []
   })
-  // The tracks whose port is picked and not to be had: they wait, and Start
-  // goes ahead (D7, P5).
-  const portsAway = tracks.flatMap((t, i) => {
-    const standing = portStanding(t, i)
-    return standing === "missing" || standing === "in_use" ? [{ track: t, standing }] : []
+
+  // The tracks as last drawn, for an Undo that runs later: the place its
+  // track is put back in is worked out from the band as it is then.
+  const tracksNow = useRef(tracks)
+  useLayoutEffect(() => {
+    tracksNow.current = tracks
   })
-  // Every note that could come by itself for this band, with its own names
-  // and ports: the place above the cards is kept as tall as the longest of
-  // them, so none moves a card when it comes alone.
-  const takingNotes = tracks.filter(recordsNotes)
-  const couldSay = [
-    ...takingNotes.filter((t) => portName(t) !== null).flatMap((t) => [sayGone(t), sayBusy(t)]),
-    ...takingNotes.flatMap((t) =>
-      takingNotes.filter((o) => o !== t).map((o) => sayEcho(t.name, o.name))
-    ),
-  ]
+  // The notices this screen has raised, one per track taken off, so that
+  // two taken off one after the other (a double click on a bin) each keep
+  // their Undo, and leaving the screen takes all of them with it.
+  const saidKeys = useRef(new Set<string>())
+  const saidCount = useRef(0)
+  // Each track taken off, with the one that came after it then (null when
+  // it was the last): an Undo follows this chain to find its place.
+  const nextOf = useRef(new WeakMap<Track, Track | null>())
+
+  /**
+   * Takes a track off at once, and says so with an Undo (B1) that puts it
+   * back in its place: before the first track after it that is on screen,
+   * passing those taken off too, or last when none of them is; so Undos
+   * run in any order put each where it was. At its old place when the track
+   * after it has changed or the band was read again. What the check opened
+   * and heard is kept by place: those after it move up with their tracks,
+   * and it comes back with its own.
+   */
+  const removeTrack = (i: number) => {
+    const gone = tracks[i]
+    const next = tracks[i + 1] ?? null
+    nextOf.current.set(gone, next)
+    const port = checkedPorts[i] ?? null
+    const heardAs = checkedNames[i] ?? null
+    const run = checkRun.current
+    setTracks((prev) => prev.filter((_, j) => j !== i))
+    setCheckedPorts((prev) => prev.filter((_, j) => j !== i))
+    setCheckedNames((prev) => prev.filter((_, j) => j !== i))
+    // What the check opened, into place `at`: these lists are padded out to
+    // it, as they are shorter than the band when a track was added since the
+    // check began.
+    const put = <T,>(list: (T | null)[], at: number, v: T | null) => {
+      const out = [...list]
+      while (out.length < at) out.push(null)
+      out.splice(at, 0, v)
+      return out
+    }
+    const key = `${SAID}:${++saidCount.current}`
+    saidKeys.current.add(key)
+    notify({
+      key,
+      kind: "done",
+      text: `${named(gone.name)} was taken off.`,
+      action: {
+        label: "Undo",
+        run: () => {
+          saidKeys.current.delete(key)
+          const band = tracksNow.current
+          // Past each track after it that is taken off too, once each.
+          let after: Track | null = next
+          const passed = new Set<Track>()
+          const off = (t: Track) => !band.includes(t) && nextOf.current.has(t) && !passed.has(t)
+          while (after && off(after)) {
+            passed.add(after)
+            after = nextOf.current.get(after) ?? null
+          }
+          const at =
+            after === null
+              ? band.length
+              : band.includes(after)
+                ? band.indexOf(after)
+                : Math.min(i, band.length)
+          const same = checkRun.current === run
+          setTracks((prev) => [...prev.slice(0, at), gone, ...prev.slice(at)])
+          setCheckedPorts((prev) => put(prev, at, same ? port : null))
+          setCheckedNames((prev) => put(prev, at, same ? heardAs : null))
+        },
+      },
+    })
+  }
 
   const setTrack = (i: number, patch: Partial<Track>) =>
     setTracks((prev) => prev.map((t, j) => (j === i ? { ...t, ...patch } : t)))
@@ -390,6 +510,31 @@ export function Setup({
         const free = Array.from({ length: maxChannels }, (_, c) => c + 1).find((c) => !taken(c))
         const channel = recordsAudio(t) ? t.channel : (free ?? null)
         return { ...t, mode, midi_port: port, channel }
+      })
+    )
+
+  /**
+   * A track in stereo or back to mono. Turning stereo on claims the input
+   * after this one. Where that input is somebody else's, or past the end of
+   * the card, the track is left waiting for one rather than quietly
+   * recording the same signal twice.
+   */
+  const setStereo = (i: number) =>
+    setTracks((prev) =>
+      prev.map((t, j) => {
+        if (j !== i) return t
+        const stereo = !t.stereo
+        const clash =
+          stereo &&
+          t.channel !== null &&
+          (t.channel + 1 > maxChannels ||
+            prev.some(
+              (o, k) =>
+                k !== i &&
+                o.channel !== null &&
+                (o.channel === t.channel! + 1 || (!!o.stereo && o.channel + 1 === t.channel! + 1))
+            ))
+        return { ...t, stereo, channel: clash ? null : t.channel }
       })
     )
 
@@ -451,13 +596,33 @@ export function Setup({
   }
 
   const startCheck = async () => {
-    if (deviceIndex === null || !tracks.length) return
+    if (deviceIndex === null || !tracks.length || opening.current) return
     // Listening to last time and to the inputs at once is one sound too
     // many to tell which track is which.
     uncue()
     setError(null)
     setCheckProblem(null)
-    const res = await api().start_monitor(deviceIndex, samplerate, tracks)
+    // What this check opens, by each track's place, is set down before
+    // Python is asked, from the tracks it is given. A track taken off, added
+    // or put back while it opens then takes its own along, as it does while
+    // the check runs; one put back from before the check has nothing in it.
+    const band = tracks
+    checkRun.current += 1
+    setCheckedNames(band.map((t) => (recordsAudio(t) ? t.name : null)))
+    setCheckedPorts(
+      band.map((t) =>
+        recordsNotes(t) ? { name: t.name, mode: modeOf(t), port: portName(t) } : null
+      )
+    )
+    // Asked before the press is counted as opening: a bridge that is not
+    // there throws here, and leaves the button free for another press.
+    const asked = api().start_monitor(deviceIndex, samplerate, band)
+    opening.current = true
+    setOpeningCheck(true)
+    const res = await asked.finally(() => {
+      opening.current = false
+      setOpeningCheck(false)
+    })
     if (!res.ok) {
       setError(res.error ?? "Could not open the input for checking")
       return
@@ -465,12 +630,7 @@ export function Setup({
     setSeen({})
     setHeard({})
     setNotesShown({})
-    const noted = tracks.filter(recordsNotes)
-    setCheckedPorts(
-      tracks.map((t) =>
-        recordsNotes(t) ? { name: t.name, mode: modeOf(t), port: portName(t) } : null
-      )
-    )
+    const noted = band.filter(recordsNotes)
     setChecking(true)
     checkingRef.current = true
 
@@ -546,11 +706,14 @@ export function Setup({
     window.setTimeout(watch, MONITOR_HEALTH_MS)
   }
 
-  // Turn the check off when leaving the screen
+  // Turn the check off when leaving the screen. A track taken off can be put
+  // back only here: its Undo goes with the screen.
   useEffect(() => {
+    const said = saidKeys.current
     return () => {
       checkingRef.current = false
       void stopMonitorQuietly()
+      for (const key of said) dismiss(key)
     }
   }, [])
 
@@ -589,10 +752,27 @@ export function Setup({
   useSpacebar(inHand ? player.toggle : start, (inHand || canStart) && !makingSet)
   useEscape(uncue, inHand)
 
-  const playLastTime = (take: Take) => {
+  // Last time's handlers keep their identity while the check reads the
+  // levels every 80 ms and this screen is drawn again for each reading:
+  // Last time (memo) is then drawn again only when what plays changes, and
+  // does not measure its two dozen names and figure lines each time.
+  const playLastTime = useSteady((take: Take) => {
     if (checking) void stopCheck()
     playInOverview(take)
-  }
+  })
+  const openRehearsal = useSteady((folder: string) => onOpenRehearsal(folder))
+  const openHistory = useSteady(() => onOpenHistory())
+  const openSong = useSteady((title: string | null) => onOpenSong?.(title))
+  const pastPlayback = useMemo(
+    () =>
+      cued && {
+        take: cued,
+        playing: player.playing,
+        loading: player.loading,
+        position: player.position,
+      },
+    [cued, player.playing, player.loading, player.position]
+  )
 
   const saveTemplate = async () => {
     // device_index says which card this layout is for. It does not change the
@@ -602,567 +782,490 @@ export function Setup({
     window.setTimeout(() => setSaved(false), 2500)
   }
 
+  // Tonight's name, in the footer beside the set and Start (Q1): it is the
+  // last thing filled in before starting.
+  const nameField = (
+    <div className="flex items-center gap-3">
+      <Label htmlFor="rehearsal-name" className="shrink-0">
+        Rehearsal name
+      </Label>
+      <Input
+        id="rehearsal-name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Rehearsal"
+        className="max-w-sm"
+      />
+    </div>
+  )
+
+  const deviceText = device
+    ? device.name
+    : missing
+      ? notConnected(missing, new Set(devices.map((d) => d.host_api)).size > 1)
+      : "No interface chosen"
+  // The figures beside it, which give way to the name, the inputs last (Q3):
+  // a long name keeps its width, and the figures drop whole.
+  const deviceFigures = [
+    ...(device ? [{ text: inputsLabel(device.max_input_channels), keep: 2 }] : []),
+    { text: `${samplerate / 1000} kHz`, keep: 1 },
+    { text: `${bitDepth} bit`, keep: 0 },
+  ]
+
+  // The tracks group's first row: what they are recorded with, which is the
+  // room's, not one rehearsal's. The words under the button line up with it.
+  const recordingWith = (
+    <div
+      data-recording-with
+      className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t px-6 py-4"
+    >
+      <Label>Recording with</Label>
+      <WholeTip
+        cut={deviceCut}
+        text={deviceText}
+        figures={deviceDropped ? <FigureLine parts={deviceFigures} /> : null}
+      >
+        <Button
+          variant="outline"
+          onClick={onOpenSettings}
+          aria-label="Change the interface and quality"
+          // What it is now, read after what it does: its label stands for
+          // what is written on it.
+          aria-describedby={`${deviceNameId} ${deviceFiguresId}`}
+          className="h-auto min-w-0 items-baseline justify-start gap-2 px-3 py-2 text-left whitespace-normal has-[>svg]:px-3"
+        >
+          <Mic className="size-3.5 self-center text-muted-foreground" />
+          <span
+            ref={deviceRef}
+            id={deviceNameId}
+            data-cut={deviceCut || undefined}
+            className="block min-w-0 flex-[0_1_auto] line-clamp-2 break-words"
+          >
+            {deviceText}
+          </span>
+          <Figures
+            parts={deviceFigures}
+            id={deviceFiguresId}
+            onDropped={setDeviceDropped}
+            tip={false}
+            className="tnum text-right text-xs text-muted-foreground"
+          />
+        </Button>
+      </WholeTip>
+      {!device && missing ? (
+        <div className="col-span-2 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              Plug it in and switch it on, then look again.
+            </p>
+            <Button
+              variant="outline"
+              size="row"
+              onClick={() => void lookAgain()}
+              disabled={rescanning}
+              className="shrink-0"
+            >
+              {/* A look that takes a second turns a spinner in its icon's
+                  place (B5). */}
+              {slowLook ? <Spinner after={0} /> : <RefreshCw />}
+              {/* As wide whichever it says, so nothing beside it moves. */}
+              <span className="grid">
+                <span className={cn("col-start-1 row-start-1", rescanning && "invisible")}>
+                  Look again
+                </span>
+                <span className={cn("col-start-1 row-start-1", !rescanning && "invisible")}>
+                  Looking…
+                </span>
+              </span>
+            </Button>
+          </div>
+          {stillMissing && !rescanning && (
+            <Warning>
+              Still not there. Check that it is switched on and its cable is in this computer —
+              some desks take a minute to start.
+            </Warning>
+          )}
+        </div>
+      ) : (
+        <p className="col-start-2 text-xs text-muted-foreground">
+          Changed in Settings — it belongs to the room, not to one rehearsal.
+        </p>
+      )}
+    </div>
+  )
+
+  // What is wrong for the band as a whole, over the rows. What is wrong with
+  // one track's port is said in that track's own line instead, so none of it
+  // keeps a place above the rows or moves one as it comes.
+  const warnings = (
+    <>
+      {checkProblem && <Warning>{checkProblem}</Warning>}
+
+      {needInput.length > 0 && (
+        <Warning>
+          {tooManyTracks ? (
+            <>
+              “{device?.name}” has {inputsLabel(maxChannels)} — not enough for {soundTracks}{" "}
+              tracks. Record fewer at once, or use an interface with more inputs.
+            </>
+          ) : (
+            <>
+              {needInput.map((t) => named(t.name)).join(", ")}
+              {needInput.length === 1 ? " has" : " have"} no input on “{device?.name}” — it
+              has {inputsLabel(maxChannels)}. Pick one below.
+            </>
+          )}
+        </Warning>
+      )}
+
+      {/* Only the note that is about no one track: none of them records
+          sound (A1). */}
+      {notesSay && !tracks.some(recordsAudio) && <Warning>{notesSay}</Warning>}
+    </>
+  )
+
+  // The check's own words take this line's place while it runs, in a place
+  // as tall as the longer of the two, so the rows under it never move.
+  const hint = (
+    <p className="grid text-xs text-muted-foreground">
+      <span className={cn("col-start-1 row-start-1", checking && "invisible")}>
+        One per musician: a track name and the interface input it comes
+        from.
+      </span>
+      <span className={cn("col-start-1 row-start-1", !checking && "invisible")}>
+        Have everyone play in turn — the bar should move next to their own
+        track. If the wrong one moves, change the input number.
+      </span>
+    </p>
+  )
+
+  const tracksHead = (
+    <div className="flex flex-col gap-1 px-6 pt-6 pb-4">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-sm font-semibold">Tracks</h2>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* It says what pressing it does, so it is a button, not a
+              toggle; grey while it runs, as what is on is (F2), under the
+              pointer too. A running check can always be stopped, even with
+              every track taken off. */}
+          <Button
+            variant="outline"
+            size="row"
+            onClick={checking ? stopCheck : startCheck}
+            disabled={!checking && (!tracks.length || deviceIndex === null)}
+            className={cn(
+              checking && "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected"
+            )}
+          >
+            {/* A check that takes a second to open turns a spinner in its
+                icon's place (B5). */}
+            {slowCheck ? <Spinner after={0} /> : <Activity />}
+            {/* As wide whichever it says, so nothing beside it moves. */}
+            <span className="grid">
+              <span className={cn("col-start-1 row-start-1", checking && "invisible")}>
+                Check signal
+              </span>
+              <span className={cn("col-start-1 row-start-1", !checking && "invisible")}>
+                Stop checking
+              </span>
+            </span>
+          </Button>
+          <Button variant="outline" size="row" onClick={saveTemplate}>
+            {/* As wide whichever it says, so Check signal beside it never
+                moves (B4). */}
+            <span className="grid">
+              <span className={cn("col-start-1 row-start-1", saved && "invisible")}>
+                Save as template
+              </span>
+              <span
+                className={cn(
+                  "col-start-1 row-start-1 flex items-center gap-2",
+                  !saved && "invisible"
+                )}
+              >
+                <Check />
+                Template saved
+              </span>
+            </span>
+          </Button>
+        </div>
+      </div>
+      {hint}
+    </div>
+  )
+
+  const trackRows = tracks.map((track, i) => {
+    const standing = portStanding(track, i)
+    const ear = heardFrom(track, i)
+    const listed =
+      track.midi_port && midiPorts ? findPort(track.midi_port, midiPorts.ports).port : null
+    // The name the check hears this track's input by, while it runs.
+    const heardAs = checking ? (checkedNames[i] ?? null) : null
+    // What is the matter with its port, said in its own line beside the
+    // picker, naming any other track as it is called now.
+    const sharing =
+      recordsNotes(track) && portName(track) !== null
+        ? tracks.find((o, j) => j !== i && recordsNotes(o) && portName(o) === portName(track))
+        : undefined
+    const echo = echoes.find((e) => e.track === track)?.echo
+    return (
+      <TrackRow
+        key={i}
+        n={i + 1}
+        track={track}
+        inputs={maxChannels}
+        waiting={waiting(track)}
+        checking={checking}
+        level={(heardAs !== null && levels[heardAs]) || [0]}
+        signal={heardAs !== null && !!seen[heardAs]}
+        ports={midiPorts}
+        portWarn={standing === "none" || standing === "missing" || standing === "in_use"}
+        portNote={portLine(standing, {
+          sharing: sharing && named(sharing.name),
+          echo: echo && named(echo.name),
+        })}
+        notes={
+          checkOpened(track, i)
+            ? {
+                seen: (ear?.notes ?? 0) > 0 || (listed?.notes ?? 0) > 0,
+                vel: ear ? (notesShown[checkedName(track, i)!] ?? 0) : 0,
+              }
+            : null
+        }
+        onChange={(patch) => setTrack(i, patch)}
+        onMode={(mode) => setMode(i, mode)}
+        onStereo={() => setStereo(i)}
+        onRemove={() => removeTrack(i)}
+      />
+    )
+  })
+
+  // A band with nobody in it says what goes here and how (B7): Add track is
+  // under it, in the group's foot.
+  const noTracks = (
+    <div className="border-t px-6 py-8">
+      <Empty className="p-0 md:p-0">
+        <EmptyHeader>
+          <EmptyTitle className="text-sm">No tracks yet</EmptyTitle>
+          <EmptyDescription>
+            Add one per musician, then pick the input they plug into.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    </div>
+  )
+
+  const tracksFoot = (
+    <div className="flex items-center justify-between gap-4 border-t px-6 py-4">
+      <Button
+        variant="outline"
+        // A new track records Audio, on the input after the others'.
+        onClick={() =>
+          setTracks((prev) => [
+            ...prev,
+            {
+              name: "",
+              channel: Math.min(prev.filter(recordsAudio).length + 1, maxChannels),
+            },
+          ])
+        }
+      >
+        <Plus />
+        Add track
+      </Button>
+
+      {/* Always on screen, not just when space runs low — while any track
+          records sound, which is what fills a disk. */}
+      {disk?.ok && disk.minutes !== undefined && channelCount > 0 && (
+        <span
+          className={cn(
+            "flex items-center gap-1 text-xs",
+            disk.low ? "text-destructive" : "text-muted-foreground"
+          )}
+        >
+          <HardDrive className="size-3.5" />
+          {disk.low
+            ? `Low disk space: room for ${aboutDuration(disk.minutes)}`
+            : `Room for ${aboutDuration(disk.minutes)} of recording`}
+        </span>
+      )}
+    </div>
+  )
+
+  // Last time: beside the setup in a wide window, in the panel otherwise.
+  const pastPart = lastTime?.last ? (
+    <LastTime
+      data={lastTime}
+      playback={pastPlayback}
+      problem={cued ? player.loadError : null}
+      onPlay={playLastTime}
+      onOpen={openRehearsal}
+      onAll={openHistory}
+      onOpenSong={onOpenSong ? openSong : undefined}
+    />
+  ) : null
+  const pastPlaying = cued !== null && player.playing
+
   return (
     <Shell
+      air
       playback
       // The one screen that says the app's name, so the logo goes with it —
       // the small drawing, the one that still reads at this size.
       title={
-        <span className="flex items-center gap-2.5">
+        <span className="flex items-center gap-2">
           <img src="./favicon.svg" alt="" className="size-6 shrink-0" />
           РЭХА
         </span>
       }
       headerAction={
         <div className="flex items-center gap-2">
+          {!wide && pastPart && (
+            <Button
+              ref={pastButton}
+              variant="outline"
+              onClick={() => setPastOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={pastOpen}
+              data-playing={pastPlaying || undefined}
+            >
+              {/* While a take from it plays, the icon says so in the accent
+                  (F2), in the same place: the button keeps its width and
+                  nothing in the header moves (B4). */}
+              {pastPlaying ? <AudioLines className="text-primary" /> : <PanelLeftOpen />}
+              Last time
+              {pastPlaying && <span className="sr-only">, playing</span>}
+            </Button>
+          )}
           <Button variant="outline" onClick={onOpenHistory}>
             <History />
             History
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onOpenSettings}
-            aria-label={update.latest ? "Settings, a new version is out" : "Settings"}
-            title={update.latest ? `${update.latest.version} is out` : undefined}
-            className="relative"
-          >
-            <SettingsIcon />
-            {update.latest && <NewDot />}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onOpenSettings}
+                aria-label={update.latest ? "Settings, a new version is out" : "Settings"}
+                className="relative"
+              >
+                <SettingsIcon />
+                {update.latest && <NewDot />}
+              </Button>
+            </TooltipTrigger>
+            {/* "Settings" only repeats the button's name, so it is for the
+                eyes, and not read out again as its description; a new
+                version is news, and is. */}
+            <TooltipContent>
+              {update.latest ? (
+                `${update.latest.version} is out`
+              ) : (
+                <span aria-hidden>Settings</span>
+              )}
+            </TooltipContent>
+          </Tooltip>
         </div>
       }
-      // With last time beside it the screen is two columns, each scrolling
-      // on its own; the Shell's padding moves into them.
-      className={
-        lastTime?.last
-          ? "p-0 min-[1100px]:flex min-[1100px]:overflow-hidden"
-          : undefined
-      }
+      // In a wide window the screen is two columns, each scrolling on its
+      // own; each part pads itself, by the same 32 px as the header and the
+      // footer.
+      className={cn("p-0", wide && "flex overflow-hidden")}
       footer={
-        <FooterRow error={error}>
-          <div className="flex items-center gap-3">
-            <SetPicker
-              sets={sets.sets}
-              chosen={sets.chosen}
-              onChoose={sets.choose}
-              onNew={() => setMakingSet(true)}
+        <div className="animate-rise" style={rise(2)}>
+          <FooterRow error={error} rule left={nameField}>
+            <div className="flex items-center gap-3">
+              <SetPicker
+                sets={sets.sets}
+                chosen={sets.chosen}
+                onChoose={sets.choose}
+                onNew={() => setMakingSet(true)}
+              />
+              <Button
+                size="footer"
+                onClick={start}
+                disabled={!canStart}
+                aria-keyshortcuts={inHand ? undefined : "Space"}
+              >
+                {/* A rehearsal that takes a second to open turns a spinner
+                    in the icon's place (B5): Start keeps its words and its
+                    width. */}
+                {slowStart ? <Spinner after={0} className="size-5" /> : <Radio />}
+                Start rehearsal
+                {/* Kept unseen while Space is the take's, so Start keeps its
+                    width and the set beside it stays where it is (B4). */}
+                <Kbd aria-hidden className={cn(inHand && "invisible")}>
+                  Space
+                </Kbd>
+              </Button>
+            </div>
+            <NewSetDialog
+              open={makingSet}
+              onOpenChange={setMakingSet}
+              choices={songChoices}
+              onCreated={(all, id) => {
+                sets.replace(all)
+                sets.choose(id)
+              }}
             />
-            <Button
-              size="footer"
-              onClick={start}
-              disabled={!canStart}
-              aria-keyshortcuts={inHand ? undefined : "Space"}
-            >
-              <Radio />
-              Start rehearsal
-              {!inHand && <Kbd aria-hidden>Space</Kbd>}
-            </Button>
-          </div>
-          <NewSetDialog
-            open={makingSet}
-            onOpenChange={setMakingSet}
-            choices={songChoices}
-            onCreated={(all, id) => {
-              sets.replace(all)
-              sets.choose(id)
-            }}
-          />
-        </FooterRow>
+          </FooterRow>
+        </div>
       }
     >
       {/* Last time beside the setup when the window is wide enough for both
           — on the left, so that the setup is over Start rehearsal — and
-          under it when it is not. */}
+          behind its button in the header when it is not. */}
       <div
-        className={cn(
-          lastTime?.last &&
-            "px-6 py-6 min-[1100px]:min-w-0 min-[1100px]:flex-1 min-[1100px]:overflow-y-auto"
-        )}
+        data-part="setup"
+        className={cn("px-8 py-8", wide && "min-w-0 flex-1 overflow-y-auto")}
       >
-        <div className="mx-auto flex max-w-3xl min-w-0 flex-col gap-8">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="rehearsal-name">Rehearsal name</Label>
-              <Input
-                id="rehearsal-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Rehearsal"
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label>Recording with</Label>
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                aria-label="Change the interface and quality"
-                className="flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                <Mic className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate">
-                  {device
-                    ? device.name
-                    : missing
-                      ? notConnected(
-                          missing,
-                          new Set(devices.map((d) => d.host_api)).size > 1
-                        )
-                      : "No interface chosen"}
-                </span>
-                <span className="tnum shrink-0 text-xs text-muted-foreground">
-                  {device
-                    ? `${device.max_input_channels} ${
-                        device.max_input_channels === 1 ? "input" : "inputs"
-                      } · `
-                    : ""}
-                  {samplerate / 1000} kHz · {bitDepth} bit
-                </span>
-              </button>
-              {!device && missing ? (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs text-muted-foreground">
-                      Plug it in and switch it on, then look again.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="row"
-                      onClick={() => void lookAgain()}
-                      disabled={rescanning}
-                      className="shrink-0"
-                    >
-                      <RefreshCw className={cn(rescanning && "animate-spin")} />
-                      {rescanning ? "Looking…" : "Look again"}
-                    </Button>
-                  </div>
-                  {stillMissing && !rescanning && (
-                    <p
-                      role="status"
-                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
-                    >
-                      Still not there. Check that it is switched on and its cable
-                      is in this computer — some desks take a minute to start.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Changed in Settings — it belongs to the room, not to one
-                  rehearsal.
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <div className="flex items-end justify-between">
-              <div>
-                <Label>Tracks</Label>
-                {/* The check's own words take this line's place while it
-                    runs, in a place as tall as the longer of the two, so the
-                    cards under it never move. */}
-                <p className="mt-1 grid text-xs text-muted-foreground">
-                  <span className={cn("col-start-1 row-start-1", checking && "invisible")}>
-                    One per musician: a track name and the interface input it comes
-                    from.
-                  </span>
-                  <span className={cn("col-start-1 row-start-1", !checking && "invisible")}>
-                    Have everyone play in turn — the bar should move next to their own
-                    track. If the wrong one moves, change the input number.
-                  </span>
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={checking ? "default" : "outline"}
-                  size="row"
-                  onClick={checking ? stopCheck : startCheck}
-                  disabled={!tracks.length || deviceIndex === null}
-                >
-                  <Activity />
-                  {/* As wide whichever it says, so nothing beside it moves. */}
-                  <span className="grid">
-                    <span className={cn("col-start-1 row-start-1", checking && "invisible")}>
-                      Check signal
-                    </span>
-                    <span className={cn("col-start-1 row-start-1", !checking && "invisible")}>
-                      Stop checking
-                    </span>
-                  </span>
-                </Button>
-                <Button variant="outline" size="row" onClick={saveTemplate}>
-                  {saved ? <Check /> : null}
-                  {saved ? "Template saved" : "Save as template"}
-                </Button>
-              </div>
-            </div>
-
-            {checkProblem && (
-              <p
-                role="status"
-                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
-              >
-                {checkProblem}
-              </p>
-            )}
-
-            {needInput.length > 0 && (
-              <p
-                role="status"
-                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
-              >
-                {tooManyTracks ? (
-                  <>
-                    “{device?.name}” has {maxChannels}{" "}
-                    {maxChannels === 1 ? "input" : "inputs"} — not enough for{" "}
-                    {soundTracks} tracks. Record fewer at once, or use an
-                    interface with more inputs.
-                  </>
-                ) : (
-                  <>
-                    {needInput.map((t) => t.name || "An unnamed track").join(", ")}
-                    {needInput.length === 1 ? " has" : " have"} no input on “
-                    {device?.name}” — it has {maxChannels}{" "}
-                    {maxChannels === 1 ? "input" : "inputs"}. Pick one below.
-                  </>
-                )}
-              </p>
-            )}
-
-            {/* The notes' own notes, in a place kept while any track takes
-                notes, as tall as the longest that could come by itself (a
-                port pulled out, another app taking it, the same notes twice):
-                one line for ordinary names, two for long ones, laid there
-                unseen. None of them moves a card when it comes alone; the
-                place grows only while two are up at once. A band with no MIDI
-                has no place. */}
-            {anyNotes && (
-              <div data-notes-strip className="grid">
-                {["\u00a0", ...couldSay].map((say, k) => (
-                  <p
-                    key={k}
-                    aria-hidden
-                    className="invisible col-start-1 row-start-1 border px-3 py-2 text-xs"
-                  >
-                    {say}
-                  </p>
-                ))}
-                <div className="col-start-1 row-start-1 flex flex-col gap-3">
-                  {notesSay && (
-                    <p
-                      role="status"
-                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
-                    >
-                      {notesSay}
-                    </p>
-                  )}
-
-                  {/* A port picked and not to be had stops nothing: the track
-                      takes its notes from the moment it is (D7, P5). */}
-                  {portsAway.length > 0 && (
-                    <p
-                      role="status"
-                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
-                    >
-                      {portsAway.map(({ track, standing }, k) => (
-                        <span key={k} className="block">
-                          {standing === "in_use" ? sayBusy(track) : sayGone(track)}
-                        </span>
-                      ))}
-                    </p>
-                  )}
-
-                  {/* Above the cards rather than on one: its words name both
-                      tracks, and it comes during the check, while everyone
-                      is looking. */}
-                  {echoes.length > 0 && (
-                    <p
-                      role="status"
-                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
-                    >
-                      {echoes.map(({ track, echo }, k) => (
-                        <span key={k} className="block">
-                          {sayEcho(track.name, echo.name)}
-                        </span>
-                      ))}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2">
-              {tracks.map((track, i) => {
-                const standing = portStanding(track, i)
-                const away = standing === "missing" || standing === "in_use"
-                const ear = heardFrom(track, i)
-                const listed = track.midi_port && midiPorts
-                  ? findPort(track.midi_port, midiPorts.ports).port
-                  : null
-                return (
-                  <div
-                    key={i}
-                    data-track-card
-                    className="flex flex-col gap-2 rounded-xl border bg-card px-4 py-3"
-                  >
-                    {/* Who it is and what it records. A long name goes onto a
-                        second line rather than losing its end (D5). */}
-                    <div className="flex items-start gap-3">
-                      <IconPicker
-                        label={`Track ${i + 1} icon`}
-                        name={track.name || `track ${i + 1}`}
-                        value={track.icon}
-                        onChange={(icon) => setTrack(i, { icon })}
-                      />
-                      <NameField
-                        label={`Track ${i + 1} name`}
-                        placeholder="Track name"
-                        value={track.name}
-                        onChange={(name) => setTrack(i, { name })}
-                      />
-                      <ModeSwitch
-                        label={`Track ${i + 1} records`}
-                        value={modeOf(track)}
-                        onChange={(mode) => setMode(i, mode)}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon-row"
-                        aria-label={`Remove track ${track.name}`}
-                        onClick={() => {
-                          setTracks((prev) => prev.filter((_, j) => j !== i))
-                          // What the check opened goes by place: those after
-                          // this one move up with their tracks.
-                          setCheckedPorts((prev) => prev.filter((_, j) => j !== i))
-                        }}
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-
-                    {/* Under the name, a line for each thing it records, the
-                        check's meter at the end. The meter's place is kept
-                        while nothing is checked, so a check moves nothing. */}
-                    {recordsAudio(track) && (
-                      <div className="flex items-center gap-3 px-11">
-                        <Select
-                          value={waiting(track) ? "" : String(track.channel ?? "")}
-                          onValueChange={(v) => setTrack(i, { channel: Number(v) })}
-                        >
-                          <SelectTrigger
-                            size="sm"
-                            aria-label={`Track ${i + 1} input`}
-                            className={
-                              "w-32" +
-                              (waiting(track)
-                                ? " border-amber-500/60 text-muted-foreground"
-                                : "")
-                            }
-                          >
-                            <SelectValue placeholder="No input" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Array.from({ length: maxChannels }, (_, c) => c + 1)
-                              // A stereo track takes the input after its own, so the
-                              // last input is not somewhere it can start.
-                              .filter((c) => !track.stereo || c < maxChannels)
-                              .map((c) => (
-                                <SelectItem key={c} value={c.toString()}>
-                                  {track.stereo ? `Inputs ${c}–${c + 1}` : `Input ${c}`}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-
-                        <Button
-                          type="button"
-                          size="row"
-                          variant={track.stereo ? "default" : "outline"}
-                          aria-pressed={!!track.stereo}
-                          aria-label={`Track ${i + 1} in stereo`}
-                          title="Two adjacent inputs, written as one stereo file"
-                          onClick={() =>
-                            setTracks((prev) =>
-                              prev.map((t, j) => {
-                                if (j !== i) return t
-                                const stereo = !t.stereo
-                                // Turning stereo on claims the input after this one.
-                                // Where that input is somebody else's, or past the
-                                // end of the card, the track is left waiting for one
-                                // rather than quietly recording the same signal twice.
-                                const clash =
-                                  stereo &&
-                                  t.channel !== null &&
-                                  (t.channel + 1 > maxChannels ||
-                                    prev.some(
-                                      (o, k) =>
-                                        k !== i &&
-                                        o.channel !== null &&
-                                        (o.channel === t.channel! + 1 ||
-                                          (!!o.stereo && o.channel + 1 === t.channel! + 1))
-                                    ))
-                                return { ...t, stereo, channel: clash ? null : t.channel }
-                              })
-                            )
-                          }
-                        >
-                          Stereo
-                        </Button>
-
-                        <div
-                          data-check-slot="signal"
-                          className={cn("ml-auto flex shrink-0", END_COLUMN)}
-                        >
-                          <div
-                            className={cn(
-                              "flex flex-1 items-center gap-2",
-                              !checking && "invisible"
-                            )}
-                          >
-                            {/* One bar of the usual height, split along its length for
-                                a stereo track: left above, right below. A dead half
-                                of a pair has to be visible here or the check has not
-                                done its job. In dB, as on the recording screen and
-                                the desk. */}
-                            <div
-                              data-meter={track.name}
-                              className="relative h-2 flex-1 overflow-hidden rounded-full border bg-background"
-                            >
-                              {(levels[track.name] ?? [0]).map((side, k, all) => (
-                                <div
-                                  key={k}
-                                  className="absolute left-0 bg-signal transition-[width] duration-75"
-                                  style={{
-                                    width: `${meterReach(side) * 100}%`,
-                                    top: all.length > 1 && k === 1 ? "50%" : 0,
-                                    bottom: all.length > 1 && k === 0 ? "50%" : 0,
-                                  }}
-                                />
-                              ))}
-                            </div>
-                            {seen[track.name] ? (
-                              <span
-                                className="flex w-12 items-center gap-1 text-[11px] text-signal"
-                                title="Signal has arrived on this input"
-                              >
-                                <Check className="size-3" />
-                                signal
-                              </span>
-                            ) : (
-                              <span className="w-12 text-[11px] text-muted-foreground">
-                                silent
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {recordsNotes(track) && (
-                      <div className="flex items-center gap-3 px-11">
-                        <PortPicker
-                          label={`Track ${i + 1} MIDI port`}
-                          value={track.midi_port}
-                          ports={midiPorts}
-                          counting={checking}
-                          warn={standing === "none" || away}
-                          onChange={(port) => setTrack(i, { midi_port: port })}
-                        />
-                        <div
-                          data-check-slot="notes"
-                          className={cn("ml-auto grid shrink-0 items-center", END_COLUMN)}
-                        >
-                          {/* Only for a port the check opened: one picked
-                              since says nothing until the next check. */}
-                          <NotesCheck
-                            seen={(ear?.notes ?? 0) > 0 || (listed?.notes ?? 0) > 0}
-                            vel={ear ? (notesShown[checkedName(track, i)!] ?? 0) : 0}
-                            className={cn(
-                              "col-start-1 row-start-1",
-                              (!checkOpened(track, i) || away) && "invisible"
-                            )}
-                          />
-                          <span
-                            className={cn(
-                              "col-start-1 row-start-1 text-[11px] text-muted-foreground",
-                              !away && "invisible"
-                            )}
-                          >
-                            not connected
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="flex items-center justify-between gap-4">
-              <Button
-                variant="outline"
-                // A new track records Audio, on the input after the others'.
-                onClick={() =>
-                  setTracks((prev) => [
-                    ...prev,
-                    {
-                      name: "",
-                      channel: Math.min(prev.filter(recordsAudio).length + 1, maxChannels),
-                    },
-                  ])
-                }
-              >
-                <Plus />
-                Add track
-              </Button>
-
-              {/* Always on screen, not just when space runs low — while
-                  any track records sound, which is what fills a disk. */}
-              {disk?.ok && disk.minutes !== undefined && channelCount > 0 && (
-                <span
-                  className={cn(
-                    "flex items-center gap-1.5 text-xs",
-                    disk.low ? "text-destructive" : "text-muted-foreground"
-                  )}
-                >
-                  <HardDrive className="size-3.5" />
-                  {disk.low
-                    ? `Low disk space: room for ${aboutDuration(disk.minutes)}`
-                    : `Room for ${aboutDuration(disk.minutes)} of recording`}
-                </span>
-              )}
-            </div>
-          </div>
+        <div className="mx-auto max-w-3xl min-w-0">
+          {/* The tracks as one group, headed by what they record with, a
+              line between each row (Q1). */}
+          <section
+            data-tracks
+            className="flex animate-rise flex-col rounded-xl bg-card"
+            style={rise(1)}
+          >
+            {tracksHead}
+            {recordingWith}
+            <div className="flex flex-col gap-3 px-6 pb-4 empty:hidden">{warnings}</div>
+            <div className="flex flex-col">{tracks.length ? trackRows : noTracks}</div>
+            {tracksFoot}
+          </section>
         </div>
       </div>
       {/* The past set back from the rehearsal about to start: a panel of its
           own, darker, down the side, as history's list is. With both on the
           same background the two columns ran into one. */}
-      {lastTime?.last && (
-        <div className="border-t bg-panel px-6 py-6 min-[1100px]:order-first min-[1100px]:w-[26rem] min-[1100px]:shrink-0 min-[1100px]:overflow-y-auto min-[1100px]:border-t-0 min-[1100px]:border-r min-[1100px]:px-5">
-          {/* Under the tracks, as wide as they are. */}
-          <div className="mx-auto max-w-3xl">
-            <LastTime
-              data={lastTime}
-              playback={
-                cued && {
-                  take: cued,
-                  playing: player.playing,
-                  loading: player.loading,
-                  position: player.position,
-                }
-              }
-              problem={cued ? player.loadError : null}
-              onPlay={playLastTime}
-              onOpen={onOpenRehearsal}
-              onAll={onOpenHistory}
-              onOpenSong={onOpenSong}
-            />
+      {wide && pastPart && (
+        <div
+          data-part="past"
+          className="order-first w-[28rem] shrink-0 overflow-y-auto border-r bg-panel px-8 py-8"
+        >
+          <div className="animate-rise" style={rise(0)}>
+            {pastPart}
           </div>
         </div>
+      )}
+      {!wide && pastPart && (
+        <Sheet open={pastOpen} onOpenChange={setPastOpen}>
+          <SheetContent
+            side="left"
+            // Its button is in the header, not the Sheet's own trigger, so
+            // focus is sent back to it here.
+            onCloseAutoFocus={(e) => {
+              e.preventDefault()
+              pastButton.current?.focus()
+            }}
+          >
+            <SheetTitle className="sr-only">Last time</SheetTitle>
+            <SheetDescription className="sr-only">
+              The last rehearsal, the songs not played in it, and earlier ones.
+            </SheetDescription>
+            <div className="min-h-0 flex-1 overflow-y-auto px-8 pt-1 pb-8">{pastPart}</div>
+          </SheetContent>
+        </Sheet>
       )}
     </Shell>
   )

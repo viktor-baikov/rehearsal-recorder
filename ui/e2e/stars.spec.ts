@@ -124,7 +124,10 @@ test("Last time's ▶ plays a song's newest ★ go, and says which", async ({ pa
     before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#1'];",
   })
   const palyn = lastTime(page).locator("[data-song='Pałyn']")
-  await expect(palyn.locator("[data-plays]")).toHaveText("★ Pałyn 1 · Thu 10 Sep")
+  // The one star, an icon (C8), before the go and its day.
+  const plays = palyn.locator("[data-plays]")
+  await expect(plays).toHaveText("Pałyn 1 · Thu 10 Sep")
+  await expect(plays.getByRole("img", { name: "Starred" })).toBeVisible()
   await palyn.getByRole("button", { name: "Play Pałyn 1, the starred go at Pałyn" }).click()
   expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
     { name: "Guitar", file: "/rec/old/p1.wav" },
@@ -166,7 +169,7 @@ test("the bar of the go ▶ plays is lit, starred or not", async ({ page }) => {
   await openApp(page, {
     before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#1'];",
   })
-  const bars = lastTime(page).locator("[data-song='Pałyn'] [aria-hidden] > span")
+  const bars = lastTime(page).locator("[data-song='Pałyn'] [data-goes] > span")
   await expect(bars.locator("xpath=self::*[@data-lit]")).toHaveCount(1)
   await expect(bars.first()).toHaveAttribute("data-lit", "true")
   await expect(bars.first()).toHaveAttribute("data-starred", "true")
@@ -176,7 +179,7 @@ test("with no ★ the lit bar is the song's last go", async ({ page }) => {
   await openApp(page, {
     before: "window.__FULL_EVENING__ = true; window.__STARRED__ = [];",
   })
-  const bars = lastTime(page).locator("[data-song='Pałyn'] [aria-hidden] > span")
+  const bars = lastTime(page).locator("[data-song='Pałyn'] [data-goes] > span")
   await expect(bars.locator("xpath=self::*[@data-lit]")).toHaveCount(1)
   await expect(bars.last()).toHaveAttribute("data-lit", "true")
 })

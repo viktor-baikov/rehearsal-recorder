@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest"
 import type { MidiPort } from "@/lib/api"
-import { bareName, findPort, portRef } from "@/lib/midiPorts"
+import {
+  bareName,
+  findPort,
+  lineText,
+  portBusyText,
+  portGoneText,
+  portLine,
+  portRef,
+} from "@/lib/midiPorts"
 
 // The same cases as tests/test_midi.py section [2]: the picker says a saved
 // port is there, or not connected, exactly when Python finds it or does not.
@@ -64,6 +72,18 @@ describe("findPort: a saved port found again among the ports there (P1)", () => 
   })
 })
 
+describe("the sentences a track's port line says (B8)", () => {
+  it("says a port is in use by another app", () => {
+    expect(portBusyText("TD-17")).toBe("“TD-17” is in use by another app.")
+  })
+
+  it("says a port is not connected, and that the track picks its notes up when it is plugged in", () => {
+    expect(portGoneText("TD-17", "Drums")).toBe(
+      "“TD-17” is not connected. Drums records its notes from the moment it is plugged in."
+    )
+  })
+})
+
 describe("portRef: a listed port as a band keeps it", () => {
   it("keeps what the system said of it, and not the check's count", () => {
     expect(portRef({ name: "TD-17", device: "TD-17", maker: "Roland", id: "1001", notes: 12 })).toEqual({
@@ -76,5 +96,63 @@ describe("portRef: a listed port as a band keeps it", () => {
 
   it("leaves out what says nothing", () => {
     expect(portRef({ name: "TD-17", device: "", maker: " ", notes: 0 })).toEqual({ name: "TD-17" })
+  })
+})
+
+describe("portLine: what a track's own port line says (D7, P2, P3, P5, P8)", () => {
+  /** The line's sentence, whole, or null. */
+  const says = (...args: Parameters<typeof portLine>) => {
+    const line = portLine(...args)
+    return line && lineText(line)
+  }
+
+  it("asks for a port while none is picked", () => {
+    expect(says("none")).toBe("Pick a port, or set it to Audio.")
+    // Before anything else: a track with no port shares none.
+    expect(says("none", { sharing: "Bass", echo: "Keys" })).toBe("Pick a port, or set it to Audio.")
+  })
+
+  it("names the other track on the same port", () => {
+    expect(says("ok", { sharing: "Bass" })).toBe("Bass takes notes from this port too.")
+    // Before the port's own state: two on one port stops Start.
+    expect(says("in_use", { sharing: "Bass" })).toBe("Bass takes notes from this port too.")
+    expect(says("missing", { sharing: "Bass", echo: "Keys" })).toBe("Bass takes notes from this port too.")
+  })
+
+  it("says another app holds it", () => {
+    expect(says("in_use")).toBe("In use by another app. Records its notes from the moment it is free.")
+    expect(says("in_use", { echo: "Keys" })).toBe(
+      "In use by another app. Records its notes from the moment it is free."
+    )
+  })
+
+  it("says it is not connected", () => {
+    expect(says("missing")).toBe("Not connected. Records its notes from the moment it is plugged in.")
+    expect(says("missing", { echo: "Keys" })).toBe(
+      "Not connected. Records its notes from the moment it is plugged in."
+    )
+  })
+
+  it("asks whether one instrument is plugged in twice", () => {
+    expect(says("ok", { echo: "Synth" })).toBe("Same notes as Synth. Plugged in twice?")
+  })
+
+  it("says nothing of a port that is fine, or of a track that takes no notes", () => {
+    expect(says("ok")).toBeNull()
+    expect(says(null, { sharing: "Bass", echo: "Keys" })).toBeNull()
+  })
+
+  it("keeps the other track's name apart from the words round it", () => {
+    expect(portLine("ok", { sharing: "Bass" })).toEqual({
+      before: "",
+      who: "Bass",
+      after: " takes notes from this port too.",
+    })
+    expect(portLine("ok", { echo: "Synth" })).toEqual({
+      before: "Same notes as ",
+      who: "Synth",
+      after: ". Plugged in twice?",
+    })
+    expect(portLine("missing")?.who).toBe("")
   })
 })

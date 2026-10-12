@@ -19,21 +19,22 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Whole, WholeTip, useCut } from "@/components/ui/whole"
 import { SetSongsEditor } from "@/components/SetEditor"
 import { api, type SongChoices, type SongSet } from "@/lib/api"
+import { songsLabel } from "@/lib/format"
 import { asSetSongs } from "@/lib/setSongs"
 import { focusIsLeftover } from "@/hooks/useSpacebar"
 
 // The set a rehearsal plays by, picked on the start screen beside Start
 // rehearsal, and a new one made from there (issue #12 step 8, S1–S3).
 
-const songsLabel = (n: number) => (n === 1 ? "1 song" : `${n} songs`)
-
 /**
  * The button left of Start rehearsal, as tall as it: the set Start plays
  * by, or *No set*. Its menu opens over it: *No set: play freely*, each set
- * with its songs counted, and *New set…*. A long name is cut and shown
- * whole on hover; more sets than fit scroll.
+ * with its songs counted, and *New set…*. A long name is cut, on the button
+ * and in the menu, and shown whole in the shared tip on hover and on
+ * keyboard focus (B6); more sets than fit scroll.
  */
 export function SetPicker({
   sets,
@@ -47,30 +48,37 @@ export function SetPicker({
   onNew: () => void
 }) {
   const name = sets.find((s) => s.id === chosen)?.name ?? null
+  const [nameRef, cut] = useCut<HTMLSpanElement>()
   return (
     // Not modal: New set… opens a window as the menu closes, and a modal
     // menu closing would take the keyboard back to this button from it.
     <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="footer"
-          data-set-picker
-          title={name ?? "Play freely, or pick a set"}
-          // Focus the mouse left here (a set picked, the menu shut) is not
-          // aimed at it: Space starts the rehearsal, as with any button.
-          onKeyDown={(e) => {
-            if (e.key === " " && focusIsLeftover(e.currentTarget)) e.preventDefault()
-          }}
-          className="max-w-[18rem] px-5 has-[>svg]:px-5"
-        >
-          <ListMusic />
-          <span data-set-name className="min-w-0 truncate">
-            {name ?? "No set"}
-          </span>
-          <ChevronDown className="text-muted-foreground" />
-        </Button>
-      </DropdownMenuTrigger>
+      <WholeTip cut={cut} text={name}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="footer"
+            data-set-picker
+            // Focus the mouse left here (a set picked, the menu shut) is not
+            // aimed at it: Space starts the rehearsal, as with any button.
+            onKeyDown={(e) => {
+              if (e.key === " " && focusIsLeftover(e.currentTarget)) e.preventDefault()
+            }}
+            className="max-w-[18rem] px-5 has-[>svg]:px-5"
+          >
+            <ListMusic />
+            <span
+              ref={nameRef}
+              data-set-name
+              data-cut={cut || undefined}
+              className="block min-w-0 truncate"
+            >
+              {name ?? "No set"}
+            </span>
+            <ChevronDown className="text-muted-foreground" />
+          </Button>
+        </DropdownMenuTrigger>
+      </WholeTip>
       <DropdownMenuContent
         side="top"
         align="start"
@@ -108,12 +116,19 @@ export function SetPicker({
   )
 }
 
+/** A set in the menu: its name, cut at the menu's width and whole in its
+ *  tip on hover and when the arrows reach it, and how many songs it has. */
 function Choice({ value, label, detail }: { value: string; label: string; detail?: string }) {
+  const [nameRef, cut] = useCut<HTMLSpanElement>()
   return (
-    <DropdownMenuRadioItem value={value} title={label}>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {detail && <span className="shrink-0 text-xs text-muted-foreground">{detail}</span>}
-    </DropdownMenuRadioItem>
+    <WholeTip cut={cut} text={label}>
+      <DropdownMenuRadioItem value={value}>
+        <span ref={nameRef} data-cut={cut || undefined} className="min-w-0 flex-1 truncate">
+          {label}
+        </span>
+        {detail && <span className="shrink-0 text-xs text-muted-foreground">{detail}</span>}
+      </DropdownMenuRadioItem>
+    </WholeTip>
   )
 }
 
@@ -181,8 +196,9 @@ export function NewSetDialog({
                 Name
               </Label>
               {error && (
-                <p title={error} className="min-w-0 truncate text-sm text-destructive">
-                  · {error}
+                <p className="flex min-w-0 text-sm text-destructive">
+                  <span className="shrink-0 whitespace-pre">· </span>
+                  <Whole text={error} className="min-w-0 truncate" />
                 </p>
               )}
             </div>

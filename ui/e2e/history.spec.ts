@@ -423,7 +423,10 @@ test.describe("last time, on the setup screen", () => {
     const earlier = panel.getByRole("region", { name: "Earlier" })
     await expect(earlier).toContainText("Wednesday jam")
     await expect(earlier).toContainText("First rehearsal")
-    await expect(earlier.getByRole("button", { name: /Missing jam/ })).toContainText("not found")
+    // One wording for a rehearsal whose folder is gone, in the quiet look.
+    const missing = earlier.getByRole("button", { name: /Missing jam/ })
+    await expect(missing).toContainText("Not on disk")
+    await expect(missing).not.toContainText("not found")
     await expect(panel.getByRole("button", { name: /^History/ })).toContainText("4 rehearsals")
   })
 

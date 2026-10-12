@@ -390,19 +390,78 @@ test.describe("on the start screen", () => {
     await expect(picker(page)).toHaveText(/No set/)
   })
 
-  test("a long set name is cut and whole on hover", async ({ page }) => {
+  /** The shared tip a cut name shows whole in (B6): the open one, since a tip
+   *  that has just closed fades out for 220 ms beside the next. */
+  const tip = (page: Page) => page.locator("[data-whole][data-state$='open']")
+  /** The pointer off to the window's corner, as a hand moves it. */
+  const away = (page: Page) => page.mouse.move(0, 0, { steps: 8 })
+
+  test("a long set name is cut, and whole on hover and on keyboard focus", async ({ page }) => {
     const long = "The songs for the long gig in the club"
     await openApp(page, { before: withSets([{ id: 1, name: long, songs: ["Dym"] }]) })
-    await expect(picker(page)).toHaveAttribute("title", long)
-    const cut = await picker(page)
-      .locator("[data-set-name]")
-      .evaluate((el) => el.scrollWidth > el.clientWidth)
-    expect(cut).toBe(true)
+    const name = picker(page).locator("[data-set-name]")
+    await expect(name).toHaveText(long)
+    expect(await name.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+    // In the shared tip, not the browser's own.
+    await expect(picker(page)).not.toHaveAttribute("title")
+    await picker(page).hover()
+    await expect(tip(page)).toHaveText(long)
+    await away(page)
+    await expect(tip(page)).toHaveCount(0)
+    // The keys reach the button, and its tip shows at once.
+    await page.locator("#rehearsal-name").focus()
+    await page.keyboard.press("Tab")
+    await expect(picker(page)).toBeFocused()
+    await expect(tip(page)).toHaveText(long)
+
+    // In the menu, each cut name the same.
+    await page.keyboard.press("Enter")
+    const item = menu(page).getByRole("menuitemradio", { name: new RegExp(long) })
+    await expect(item).toBeVisible()
+    await expect(item).not.toHaveAttribute("title")
+    await page.keyboard.press("ArrowDown")
+    await expect(item).toBeFocused()
+    await expect(tip(page)).toHaveText(long)
+    await page.keyboard.press("ArrowUp")
+    await expect(tip(page)).toHaveCount(0)
+    await item.hover()
+    await expect(tip(page)).toHaveText(long)
+    await expect(page.locator("[title]")).toHaveCount(0)
+  })
+
+  test("a long set picked with the mouse leaves no tip behind", async ({ page }) => {
+    const long = "The songs for the long gig in the club"
+    await openApp(page, { before: withSets([{ id: 1, name: long, songs: ["Dym"] }], null) })
     await picker(page).click()
-    await expect(menu(page).getByRole("menuitemradio", { name: new RegExp(long) })).toHaveAttribute(
-      "title",
-      long
-    )
+    await menu(page).getByRole("menuitemradio", { name: new RegExp(long) }).click()
+    await expect(menu(page)).toHaveCount(0)
+    await expect(picker(page).locator("[data-set-name]")).toHaveText(long)
+    // The menu sends focus back to the button as it shuts, and the mouse
+    // put it there: no tip comes with it.
+    await expect(picker(page)).toBeFocused()
+    await away(page)
+    await page.waitForTimeout(800)
+    await expect(tip(page)).toHaveCount(0)
+  })
+
+  test("New set's cut reason is whole on hover", async ({ page }) => {
+    const long = "The songs for the long gig in the club"
+    await openApp(page, { before: onlySets([{ id: 1, name: long, songs: ["Dym"] }]) })
+    await picker(page).click()
+    await menu(page).getByRole("menuitem", { name: "New set…" }).click()
+    const dialog = page.getByRole("dialog", { name: "New set" })
+    await dialog.getByLabel("Name").fill(long)
+    await dialog.locator("[data-set-add]").getByRole("button", { name: "Dym" }).click()
+    await dialog.getByRole("button", { name: "Create set" }).click()
+    const line = dialog.locator("p", { hasText: "There is already" })
+    const reason = line.getByText(`There is already a set called ${long}`)
+    await expect(reason).toBeVisible()
+    expect(await reason.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+    // In the shared tip, not the browser's own.
+    await expect(line).not.toHaveAttribute("title")
+    await expect(line.locator("[title]")).toHaveCount(0)
+    await reason.hover()
+    await expect(tip(page)).toHaveText(`There is already a set called ${long}`)
   })
 
   test("many sets scroll in the menu", async ({ page }) => {

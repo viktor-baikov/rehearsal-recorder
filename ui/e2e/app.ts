@@ -9,6 +9,7 @@ export const TAKE_SECONDS = 6
 
 const FAKE = fileURLToPath(new URL("./fake-bridge.js", import.meta.url))
 const BAND = fileURLToPath(new URL("./band.js", import.meta.url))
+const STRESS = fileURLToPath(new URL("./stress.js", import.meta.url))
 
 /**
  * Every test fails on an error in the page: an exception, or anything the
@@ -79,12 +80,15 @@ export async function openApp(
 /**
  * Opens the app with the band laid over the fake: four musicians, their
  * song and their past rehearsals, as the docs' pictures and the site show
- * them. See band.js.
+ * them. See band.js. With `stress`, stress.js is laid over the band: long
+ * names, thirteen songs last time, seven not played, five tracks.
  */
-export async function openBandApp(page: Page) {
+export async function openBandApp(page: Page, { stress = false }: { stress?: boolean } = {}) {
   // One script, not two: the band sets the fake's top-level `let`s, which a
   // second init script would not see.
-  const source = [FAKE, BAND].map((f) => readFileSync(f, "utf-8")).join("\n")
+  const source = [FAKE, BAND, ...(stress ? [STRESS] : [])]
+    .map((f) => readFileSync(f, "utf-8"))
+    .join("\n")
   await page.addInitScript(source)
   await page.goto("/")
 }
@@ -104,15 +108,54 @@ export async function callCount(page: Page, name: string): Promise<number> {
   return (await calls(page, name)).length
 }
 
-/** The key a button shows it answers to, or null when it shows none. */
+/**
+ * Holds the fake's answer to `name` where it is until `letGo` lets it
+ * through: the call is made, and counted, and waits (window.__HOLD__, which
+ * fake-bridge.js reads). Anything else held stays held.
+ */
+export async function hold(page: Page, name: string) {
+  await page.evaluate((n) => {
+    const w = window as unknown as {
+      __HOLD__?: Record<string, Promise<void>>
+      __RELEASE__?: Record<string, () => void>
+    }
+    w.__HOLD__ = w.__HOLD__ || {}
+    w.__RELEASE__ = w.__RELEASE__ || {}
+    w.__HOLD__[n] = new Promise<void>((r) => (w.__RELEASE__![n] = r))
+  }, name)
+}
+
+/** Lets the calls to `name` that `hold` held through, and the next ones. */
+export async function letGo(page: Page, name: string) {
+  await page.evaluate((n) => {
+    const w = window as unknown as {
+      __HOLD__: Record<string, Promise<void>>
+      __RELEASE__: Record<string, () => void>
+    }
+    delete w.__HOLD__[n]
+    w.__RELEASE__[n]()
+  }, name)
+}
+
+/** The key a button shows it answers to, or null when it shows none: a chip
+ *  kept unseen, holding the button's width, shows none. */
 export async function keyOn(button: Locator): Promise<string | null> {
-  const key = button.locator(":is(kbd, [data-key])")
+  const key = button.locator(":is(kbd, [data-key])").filter({ visible: true })
   return (await key.count()) ? (await key.first().innerText()).trim() : null
 }
 
 /** The setup screen, as the app opens on it. */
 export function startButton(page: Page): Locator {
   return page.getByRole("button", { name: /Start rehearsal/ })
+}
+
+/**
+ * The setup screen's Last time button, in the header of a window too narrow
+ * for Last time beside the setup. Hidden from a screen reader with the rest
+ * of the page while its panel is open, as a modal hides it.
+ */
+export function lastTimeButton(page: Page): Locator {
+  return page.locator("header").getByRole("button", { name: /^Last time/, includeHidden: true })
 }
 
 /**
@@ -173,6 +216,11 @@ export function notices(page: Page, kind?: string): Locator {
       ? `section[aria-label='Notifications'] [data-notice='${kind}']`
       : "section[aria-label='Notifications'] [data-notice]"
   )
+}
+
+/** `text` as a regular expression that matches it literally. */
+export function literally(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 /** Sets something on the fake while the page runs: window.__IFACE_GONE__

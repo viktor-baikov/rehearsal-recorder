@@ -19,6 +19,7 @@ import {
 import { formatClock, formatDate, formatMMSS } from "@/lib/format"
 import { fallBack, isSilent, watchStep, type TrackWatch } from "@/lib/levels"
 import { recordsAudio, recordsNotes } from "@/lib/midi"
+import { portBusyText, portGoneText } from "@/lib/midiPorts"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 
@@ -341,8 +342,8 @@ export function Recording({
                   tip: !watched || watched.connected || !port
                     ? undefined
                     : watched.inUse
-                      ? `“${port}” is in use by another app.`
-                      : `“${port}” is not connected. ${t.name} records its notes from the moment it is plugged in.`,
+                      ? portBusyText(port)
+                      : portGoneText(port, t.name),
                 }
               : undefined
             if (heard && !recordsAudio(t))

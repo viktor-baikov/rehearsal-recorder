@@ -1,6 +1,7 @@
 import * as React from "react"
 import { CircleAlert, LoaderCircle, Pause, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useAfter } from "@/hooks/useAfter"
 import { playLabel, SPINNER_AFTER_MS, type PlayLook } from "@/lib/playLook"
 import { cn } from "@/lib/utils"
 
@@ -39,21 +40,6 @@ const LOOKS: Record<PlayLook, { variant: "ghost" | "default"; className: string 
   paused: { variant: "default", className: "border-primary" },
   failed: { variant: "ghost", className: cn(FRAME, "text-destructive hover:text-destructive") },
   missing: { variant: "ghost", className: FRAME },
-}
-
-/** True once `on` has been true for `ms` and for as long as it stays so; turns
- *  false, and starts counting afresh, whenever `on` does. */
-function useAfter(on: boolean, ms: number): boolean {
-  const [late, setLate] = React.useState(false)
-  React.useEffect(() => {
-    if (!on) return
-    const timer = setTimeout(() => setLate(true), ms)
-    return () => {
-      clearTimeout(timer)
-      setLate(false)
-    }
-  }, [on, ms])
-  return on && late
 }
 
 function PlayButton({

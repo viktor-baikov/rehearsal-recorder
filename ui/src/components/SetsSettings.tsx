@@ -8,14 +8,13 @@ import { SetSongsEditor } from "@/components/SetEditor"
 import { useSets } from "@/hooks/useSets"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { api, type SetsAnswer, type SongChoices, type SongSet } from "@/lib/api"
+import { songsLabel } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
 import { asSetSongs } from "@/lib/setSongs"
 import { cn } from "@/lib/utils"
 
 // What a change here said — one slot, so each says over the last.
 const SAID = "sets"
-
-const songsLabel = (n: number) => (n === 1 ? "1 song" : `${n} songs`)
 
 /** A name no set has yet: "New set", then "New set 2", and on. */
 function freeName(sets: SongSet[]) {

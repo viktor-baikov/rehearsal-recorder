@@ -89,6 +89,40 @@ test("the story goes through its five steps", async ({ page }) => {
   await expect(page.locator("[data-region-span]")).toBeVisible()
 })
 
+test("the first step ends once the check has begun, however slow it is to open", async ({ page }) => {
+  await page.goto("/stage.html#story")
+  // The fake waits on window.__HOLD__[name] before it answers (see
+  // fake-bridge.js): here, something that says when the check's opening
+  // has been asked for, and holds it until it is let go.
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __HOLD__?: Record<string, PromiseLike<void>>
+      __ASKED__?: boolean
+      __LET_GO__?: () => void
+    }
+    w.__HOLD__ = {
+      start_monitor: {
+        then(go) {
+          w.__ASKED__ = true
+          w.__LET_GO__ = () => void go?.()
+          return this as never
+        },
+      },
+    }
+  })
+  await step(page, 0)
+  const asked = () => page.evaluate(() => (window as unknown as { __ASKED__?: boolean }).__ASKED__ ?? false)
+  await expect.poll(asked, { timeout: 20_000 }).toBe(true)
+  // Check signal is pressed and still says so: the step is not over.
+  await page.waitForTimeout(1_000)
+  expect(await scene(page)).toBe(null)
+  await expect(page.getByRole("button", { name: "Check signal" })).toBeVisible()
+
+  await page.evaluate(() => (window as unknown as { __LET_GO__: () => void }).__LET_GO__())
+  await expect.poll(() => scene(page), { timeout: 10_000 }).toBe("setup")
+  await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+})
+
 test("the second step plays last week's Pałyn, starts, and picks Pałyn with the arrow key", async ({
   page,
 }) => {

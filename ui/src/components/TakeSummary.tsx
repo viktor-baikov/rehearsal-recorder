@@ -6,6 +6,7 @@ import { GoTitle } from "@/components/TakeTitle"
 import { api, type SongChoices, type Take } from "@/lib/api"
 import { against, formatDate, formatMMSS } from "@/lib/format"
 import { UNNAMED, goFor, songFor } from "@/lib/goes"
+import { drawnLength } from "@/lib/takeScale"
 import { cn } from "@/lib/utils"
 
 type Go = { take_number: number; go: number | null; duration_sec: number; starred: boolean }
@@ -135,7 +136,7 @@ export function TakeSummary({
                         ? "bg-signal/80"
                         : "bg-muted-foreground/40"
                   )}
-                  style={{ height: Math.max(5, (g.duration_sec / longest) * BAR_PX) }}
+                  style={{ height: drawnLength(g.duration_sec, longest, BAR_PX, 5) }}
                 />
               </span>
               <span

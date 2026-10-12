@@ -17,18 +17,21 @@ shows the app as it is; the site keeps its own big headings and layout
 ## Where things stand
 
 The foundation is in: the theme values, the shared components, Undo, the
-showcase and the check. The screens are redone on it one at a time, a pull
-request each, in this order: the start screen, the rehearsal screen,
-recording, Review, History, Drafts, and Settings. Until its turn a screen is
-on the check's [allow-list](#the-check) and may still break the rules it is
-listed for. Where a rule below says "as each screen is redone", the screens'
-pull requests carry it out and nothing does it yet. On reha.stream the
-pieces of the app are the real components and follow the theme already, but
-the page itself takes only the accent from it so far
-(`--page-accent: var(--primary)` in `site/src/page/page.css`); its own
-background, text colours and font (Instrument Sans) take the shared ones in
-the same release as the screens. The new look goes out in that one release,
-once every screen is done.
+showcase and the check. The start screen is redone on it: its pieces are the
+shared ones, all but the song list in New set, which it shares with
+Settings' Sets and which is redone with Settings, and its files are off the
+check's [allow-list](#the-check). The other screens follow, one pull request
+each, in this order: the rehearsal screen, recording, Review, History,
+Drafts, and Settings. Until its turn a screen is on the allow-list and may
+still break the rules it is listed for. Where a rule below says "as each
+screen is redone", the screens' pull requests carry it out, and so far only
+the start screen's has. On reha.stream the pieces of the app are the real
+components and follow the theme already, but the page itself takes only the
+accent from it so far (`--page-accent: var(--primary)` in
+`site/src/page/page.css`). After the last screen, reha.stream's own
+background, text colours and font (Instrument Sans) take the shared ones,
+and the release comes when the allow-list is empty: the new look goes out in
+that one release.
 
 ## The foundation
 
@@ -244,20 +247,23 @@ piece of its own moves onto the shared one when it is redone.
   of piece are built two to sixteen times each, and each copy drifts from
   the others. Each becomes one shared piece, taken from shadcn/ui where it
   has one (U1). Some are in `components/ui/` already, and the copies made by
-  hand move onto them: dividers (`Separator`), chips (`Badge`) and progress
-  bars (`Progress`). The rest are added by the first screen's pull request
-  that needs them: on/off and pick-one buttons (Toggle and ToggleGroup, with
-  arrow keys inside a group), one list row (Item, every row reachable by
-  keyboard), one ✕, one link, one size of icon button, warnings (Alert),
-  loading (Spinner), empty states (Empty), tooltips (Tooltip), expanding
+  hand move onto them: dividers (`Separator`), chips (`Badge`), progress
+  bars (`Progress`), and, added with the start screen, on/off and pick-one
+  buttons (`Toggle` and `ToggleGroup`, with arrow keys inside a group), one
+  list row (`Item`, every row reachable by keyboard), warnings (`Alert`),
+  loading (`Spinner`), empty states (`Empty`), tooltips (`Tooltip`) and
+  meters (`Meter`). The rest are added by the first screen's pull request
+  that needs them: one ✕, one link, one size of icon button, expanding
   (Collapsible), checkboxes (Checkbox or Switch), a field with a button
-  (InputGroup), and our own set list for both screens, meter, screen header,
-  side panel and pane head. A take's name is written by `TakeTitle`
+  (InputGroup), and our own set list for both screens, screen header, side
+  panel and pane head. A take's name is written by `TakeTitle`
   (`components/TakeTitle.tsx`) everywhere, where today one list uses it and
-  the rest write the name their own way. "Selected" has two looks instead of
-  seven: the white plate inside a switch, and a grey fill for a row, pill,
-  tab or toggle that is on. The full table, with every place each piece is
-  built today, is C8 in the spec.
+  the rest write the name their own way. A take drawn as a bar is as tall as
+  it ran against the longest, through `drawnLength` (`lib/takeScale.ts`),
+  never under a few pixels. "Selected" has two looks instead of seven: the
+  white plate inside a switch, and a grey fill for a row, pill, tab or
+  toggle that is on. The full table, with every place each piece is built
+  today, is C8 in the spec.
 
 The other shared components, each with its stories:
 
@@ -289,6 +295,93 @@ The other shared components, each with its stories:
 - **Progress**, `progress.tsx`: a thin bar in the accent for how far along a
   job is, where it was started (the take being saved under Stop, a crop, a
   draft) and in the background work list.
+- **Tooltip**, `tooltip.tsx`: a small tip in the text's colour. On hover it
+  comes after 400 ms, so a pointer on its way across the screen is not
+  asking; on keyboard focus it comes at once. Focus the mouse left opens
+  none: a click, or a menu or popover shut with a click handing focus back
+  to its button. It is gone with Esc or the pointer leaving. It is for a
+  name a row had to cut, shown whole (B6), for what an icon button does, and
+  for a word on a button that needs a line to say what it does (Stereo):
+  C8's native `title` tooltips. A tip that only repeats its button's name is
+  for the eyes (`aria-hidden` inside it), so a screen reader does not hear
+  the name twice. Each `Tooltip` has its own provider, so it needs nothing
+  round it.
+- **Sheet**, `sheet.tsx`: a panel that slides in from the left or the right
+  over the window's full height, 28 rem wide and never wider than the window
+  less 3 rem. It is a dialog on the Dialog's veil and z-index, so the notices
+  stay above it and a click on one does not close it (C4); Esc, the veil and
+  its ✕, the shared `Button`, close it and the focus goes back to the button
+  that opened it. For the start screen's left part in a narrow window, the
+  narrow form of C8's side panel.
+- **Toggle**, `toggle.tsx`: a button that stays pressed (`aria-pressed`), in
+  `default` and `outline`, sized as Button's `row` (32 px) and `icon-row`.
+  On is the grey `selected` fill, never the accent (F2), and it has the same
+  weight and 1 px frame on or off, so pressing it moves nothing. C8's on/off
+  buttons: Stereo. Check signal says what pressing it does ("Check signal",
+  "Stop checking"), and a toggle's name must not change with it, so it is a
+  Button, grey while the check runs.
+- **ToggleGroup**, `toggle-group.tsx`: pick one or several, with the arrow
+  keys moving along the group and Tab leaving it. `default` and `outline` are
+  Toggles joined into a bar; `switch` is History's switch, a grey track with
+  the chosen item a plate on it with a light shadow, as wide as the screen
+  makes it (`size` does nothing for it). With `type="single"`, pressing the
+  chosen item again empties the group (`onValueChange("")`), so a pick-one
+  that must always have one chosen ignores the "", as Audio · Both · MIDI
+  does (`ModeSwitch`). C8's three identical segmented switches and its
+  pick-one groups.
+- **Alert**, `alert.tsx`: a box for a line the screen has to say, with an
+  icon, a title and a text, all optional. `warning` is the theme's `warn`
+  colour on the icon and the edge with a faint wash behind; `destructive` is
+  a failure; `default` is neutral. C8's warnings and errors.
+- **Spinner**, `spinner.tsx`: lucide's `Loader2Icon`, turning, `role="status"`
+  and named Loading. It is there from the start but invisible for the first
+  second (`SPINNER_AFTER_MS`, or its `after` in ms), so a quick answer does
+  not flash it and nothing moves when it shows (B4, B5). It stands still
+  under Reduce motion and while a take records (F11). C8's loading signs. A
+  control that keeps its own icon until the spinner takes its place, as the
+  small player, Look again, Check signal and Start do, counts the second
+  with `useAfter`
+  (`hooks/useAfter.ts`), the hook the Spinner counts with.
+- **Empty**, `empty.tsx`: an empty list that says what will be here and how it
+  gets here (B7): a title, a line, and the button that fills it. C8's empty
+  states.
+- **Item**, `item.tsx`: the one list row (C8): a title, a line under it and
+  what can be done at the end, in `default`, `outline` and `muted`. A row that
+  goes somewhere is an `asChild` link or button, which Tab reaches and Enter
+  follows, with the shared focus ring.
+- **Meter**, `meter.tsx`: one thin bar for a reading that moves, C8's meter:
+  the signal check's level (`tone="signal"`, the signal green) and the notes
+  check's velocity (`tone="notes"`, grey in the text's colour). `sides` are
+  values from 0 to 1; two split the bar along its length, the first above,
+  the second below, so a dead half of a pair shows. It follows its value over
+  75 ms and keeps doing so under Reduce motion and while a take records: a
+  meter is a reading, not motion. It is a picture, hidden from a screen
+  reader, unless given a `label`, and then a `meter` at its largest side.
+- **Whole**, `whole.tsx`: B6's pieces for a long name. `Whole` is a plain
+  text that shows whole in a tip on hover when it is cut; the keys do not
+  reach a plain text, so it has no keyboard focus to show on. `useCut` and
+  `WholeTip` do the same round a button, a link or anything with a
+  `tabindex`, the tip also showing on keyboard focus and staying while focus
+  is there, even when focusing scrolled the panel. The tip is for the eyes:
+  what it says is in the page already, so it is not read out again as the
+  control's description.
+  `Figures` is the line of figures beside a name: it takes the room the name
+  leaves, drops whole figures, the least needed first (`lib/figures.ts`), and
+  shows them all on hover once it has dropped some; a screen reader reads
+  the whole line, whatever shows. That tip is for the pointer, and a line
+  that has dropped everything has no width left to hover, so it says when
+  it drops any (`onDropped`) and the name's tip, which the keyboard reaches,
+  says the whole line under the name (WholeTip's `figures`, drawn by
+  `FigureLine`). Where that tip is a whole row's, as on Earlier's rows and
+  Recording with, the line has no tip of its own (`tip={false}`). A figure
+  can be drawn as more than its words, such as a ★ take with the star icon
+  (`node`): it is measured and shown as drawn, and read out as its `text`.
+- **Mark**, `mark.tsx`: a mark's pieces (C8). `LabelDot` is the one label
+  dot, 8 px and round, in the label's colour; `MarkLine` is the one note
+  line: the dot, the time, the take where the line is away from it, then the
+  label and what was written, cut at the end of the room. Last time uses
+  both; the other dots and note lines move onto them as their screens are
+  redone.
 
 ## Writing components
 
@@ -361,10 +454,11 @@ as the `cn` import.
   copy. `offerUndo()` in `lib/trash.ts` raises the notice. Python keeps what
   went in `<recordings>/_deleting/` (`src/rehearsal_recorder/holding.py`)
   and sends it on to the Trash when the notice ends, when the app quits, or
-  at the next start after a crash; nothing is destroyed either way. Three
-  more removals that happen at once get the same notice as their screens are
-  redone: a song taken out of a set, a song's old name forgotten, and a
-  track taken off the start screen.
+  at the next start after a crash; nothing is destroyed either way. A track
+  taken off the start screen has it too ("{name} was taken off."), and puts
+  the track back in its place with its readings; two more removals that
+  happen at once get the same notice as their screens are redone: a song
+  taken out of a set and a song's old name forgotten.
 - **B2. A question only where nothing can be undone**: finishing a rehearsal
   by Esc, removing a rehearsal from history, deleting a label that has
   marks, deleting a set, and merging two songs. Each is a `ConfirmDialog`,
@@ -379,9 +473,9 @@ as the `cn` import.
   player.
 - **B4. Nothing jumps.** A field keeps a line under it for its error, so an
   error appearing moves nothing, and a list keeps its place while it loads:
-  a layout that jumps is a bug. The Check signal button, the notes warnings
-  on the start screen and the song rows already hold their room and are the
-  model; the rest as each screen is redone.
+  a layout that jumps is a bug. On the start screen the Check signal button,
+  a track's port line and Start's unseen Space chip hold their room, as the
+  song rows do, and are the model; the rest as each screen is redone.
 - **B5. Loading.** Under 1 s nothing shows, so a quick answer does not
   flash; from 1 s a spinner takes the place of what is loading; past 10 s it
   says what it is doing. `PlayButton` already waits its second
@@ -390,8 +484,11 @@ as the `cn` import.
 - **B6. Long names.** A name never gives way to a secondary figure: the name
   is what tells one thing from another. The figure wraps, goes first, or
   hides and shows on hover, as the MIDI tile's count does; a cut name shows
-  whole on hover; where a name has room for a second line, it wraps. As
-  each screen is redone.
+  whole on hover, and on keyboard focus when it is a button, a link or has a
+  `tabindex` (`useCut` and `WholeTip` round it; `Whole` is a plain text and
+  shows on hover only); where a name has room for a second line, it wraps;
+  the figures beside it are `Figures`, which drop whole, least needed first.
+  As each screen is redone.
 - **B7. Empty states.** An empty list that only says it is empty leaves the
   person to guess what to do next: "This set has no songs." under Next take
   does not say how a song gets there. So an empty list says, in its own
@@ -473,7 +570,7 @@ says what each broken rule is for. The rules are in
 
 ```json
 {
-  "src/screens/Setup.tsx": ["px-text", "raw-colour", "raw-button"]
+  "src/screens/Settings.tsx": ["raw-colour", "raw-button"]
 }
 ```
 
