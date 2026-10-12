@@ -591,6 +591,7 @@ export function Rehearsal({
                   take: cued.take_number,
                   playing: player.playing,
                   loading: player.loading,
+                  failed: Boolean(player.loadError),
                   position: player.position,
                   duration: player.duration,
                 }

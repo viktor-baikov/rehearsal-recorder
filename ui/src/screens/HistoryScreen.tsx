@@ -46,6 +46,7 @@ import {
   formatWhen,
 } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
+import { cn } from "@/lib/utils"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 import {
   useActivity,
@@ -1011,6 +1012,20 @@ export function HistoryScreen({
   // Neither view is drawn until History knows which it is on.
   const reading = rehearsals === null || view === null
   const noSongs = songIndex !== null && songOrder.length === 0
+  // The evening's figures, in the head of the pane of a rehearsal that is on
+  // disk: the overview under it does not say them, and the header has them
+  // only once a take is open. Their place is there from the first frame,
+  // with the folder button and no figure until the takes are read, so that
+  // the name is laid out once, and not again when they arrive or at each
+  // switch from one rehearsal to another.
+  const facts =
+    summary && readable ? (
+      <EveningFacts
+        takes={opened?.folder === current ? opened.takes : null}
+        bytes={summary.disk_bytes}
+        folder={summary.folder}
+      />
+    ) : null
 
   return (
     <Shell
@@ -1150,10 +1165,20 @@ export function HistoryScreen({
               className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
             >
               {summary && (
-                <div className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1">
-                      <h2 className="truncate text-xl leading-tight font-semibold">
+                <div>
+                  <div className="flex items-start gap-2">
+                    {/* With the facts beside it the name keeps its width and
+                        they give way to it, as in the rehearsal screen's
+                        header. The name wraps when it is longer than its row,
+                        through a word if need be, and is never cut (B6); the
+                        pencil stays beside its first line. */}
+                    <div
+                      className={cn(
+                        "flex min-w-0 items-start gap-1",
+                        facts ? "flex-[0_1_auto]" : "flex-1"
+                      )}
+                    >
+                      <h2 className="min-w-0 pt-1 text-xl leading-tight font-semibold wrap-anywhere">
                         {summary.name}
                       </h2>
                       {!summary.missing && (
@@ -1168,36 +1193,43 @@ export function HistoryScreen({
                         </Button>
                       )}
                     </div>
-                    <div
-                      data-rehearsal-head
-                      className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
-                    >
-                      <span className="shrink-0">
-                        {formatDay(summary.created_at).split(" ")[0]}{" "}
-                        {formatDateHuman(summary.created_at)}
-                      </span>
-                      <span aria-hidden>·</span>
-                      {summary.set_name && (
-                        <>
-                          <SetName name={summary.set_name} className="shrink" />
-                          <span aria-hidden>·</span>
-                        </>
-                      )}
-                      <FolderOpen className="size-3.5 shrink-0" />
-                      <span className="truncate font-mono">{summary.folder}</span>
-                    </div>
+                    {facts}
+                    {!summary.missing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Delete rehearsal ${summary.name}`}
+                        onClick={() => void deleteRehearsal(summary)}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 />
+                      </Button>
+                    )}
                   </div>
-                  {!summary.missing && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Delete rehearsal ${summary.name}`}
-                      onClick={() => void deleteRehearsal(summary)}
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 />
-                    </Button>
-                  )}
+                  {/* Under the name, the facts and Delete, across the whole
+                      head: under the name alone, a short name made it as narrow
+                      as the name. The date is whole; the folder has what the
+                      date and the set leave, and is cut at the head's edge;
+                      the set is cut only when there is no room for it whole,
+                      and to half the line at most. */}
+                  <div
+                    data-rehearsal-head
+                    className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
+                  >
+                    <span className="shrink-0">
+                      {formatDay(summary.created_at).split(" ")[0]}{" "}
+                      {formatDateHuman(summary.created_at)}
+                    </span>
+                    <span aria-hidden>·</span>
+                    {summary.set_name && (
+                      <>
+                        <SetName name={summary.set_name} className="max-w-1/2" />
+                        <span aria-hidden>·</span>
+                      </>
+                    )}
+                    <FolderOpen className="size-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate font-mono">{summary.folder}</span>
+                  </div>
                 </div>
               )}
   

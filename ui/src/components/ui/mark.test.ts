@@ -1,7 +1,7 @@
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
-import { LabelDot, MarkLine } from "@/components/ui/mark"
+import { LabelDot, MarkLine, MarkTick } from "@/components/ui/mark"
 import type { LabelColour } from "@/lib/api"
 import { LABEL_COLOURS, labelLook } from "@/lib/labels"
 
@@ -74,5 +74,38 @@ describe("LabelDot", () => {
     const dot = attrsOf(out, /(?<=^<span [^>]*>)<span [^>]*>/)
     expect(dot).toMatchObject({ "aria-hidden": "true", "data-slot": "label-dot" })
     expect(dot.class.split(" ")).toEqual(expect.arrayContaining(["size-2", "rounded-full"]))
+  })
+})
+
+describe("MarkTick", () => {
+  const tick = (colour: LabelColour, at: number, className?: string) =>
+    renderToStaticMarkup(createElement(MarkTick, { colour, at, className }))
+
+  it("stands at its percent of the bar, 3 px wide with a small corner", () => {
+    const out = tick("red", 33.5)
+    const own = attrsOf(out, /^<span [^>]*>/)
+    expect(own.style).toMatch(/(^|;)\s*left:\s*33\.5%/)
+    expect(own.class.split(" ")).toEqual(expect.arrayContaining(["absolute", "w-[3px]", "rounded-sm"]))
+  })
+
+  it("is drawn in its label's colour and says which, for a test to read", () => {
+    for (const colour of LABEL_COLOURS) {
+      const own = attrsOf(tick(colour, 10), /^<span [^>]*>/)
+      expect(own.class.split(" ")).toContain(labelLook(colour).dot)
+      expect(own["data-mark-colour"]).toBe(colour)
+    }
+    // A colour from a newer version's library is grey, as everywhere.
+    expect(tick("indigo" as LabelColour, 10)).toContain(labelLook("grey").dot)
+  })
+
+  it("is an empty mark a screen reader skips: the line under the bar says it in words", () => {
+    const out = tick("teal", 50)
+    expect(out).toMatch(/^<span [^>]*><\/span>$/)
+    expect(out).toContain('aria-hidden="true"')
+    expect(out).not.toMatch(/\brole=|aria-label|title=|tabindex/)
+  })
+
+  it("takes the caller's class for where it sits up and down", () => {
+    expect(attrsOf(tick("teal", 50, "inset-y-1"), /^<span [^>]*>/).class.split(" ")).toContain("inset-y-1")
   })
 })
