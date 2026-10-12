@@ -5,9 +5,9 @@ import { Whole } from "@/components/ui/whole"
 
 /** The least a notes plate is tall at the Appearance scale of 1, and so the
  *  lane beside it: room to name six drum rows, 0.875rem each (NotesLane's
- *  LABEL_MIN), between 3 px above and below, and under the 1 px line a lower
- *  half has. Its own text takes about 72, which left the drums' rows unnamed; a lane
- *  of notes is not so short that a kit cannot be read.
+ *  LABEL_MIN_REM), between 3 px above and below, and under the 1 px line a
+ *  lower half has. Its own text takes about 72, which left the drums' rows
+ *  unnamed; a lane of notes is not so short that a kit cannot be read.
  *
  *  The rows' names are 12 px text, so they grow and shrink with the scale, and
  *  six of them are 5.25rem. The 7 px are not rem: they are the lane's own 3 px

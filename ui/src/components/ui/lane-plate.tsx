@@ -6,8 +6,9 @@ import { laneHalf, type LaneHalf } from "@/lib/laneHalf"
   The plate beside a track's lane (C6): the audio track's, the notes' and the
   master's are this one box. It is the card's fill with no frame, 12 px across
   and 8 above and below; what it holds, and the gap between, is the caller's.
-  At 56 px a plate has room for one row of 20 px and a fader of 16 under it,
-  4 apart, so a lane's plate is exactly as tall as its lane.
+  At 56 px a plate has room for a name of 16 px and under it a row of 20 (the
+  fader, with M and S after it), 4 apart, so a lane's plate is exactly as tall
+  as its lane.
 
   `half` makes it one of the two halves of a track that records both (laneHalf).
 */

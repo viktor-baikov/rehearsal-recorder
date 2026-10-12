@@ -1,10 +1,12 @@
 import {
   colour,
   expect,
+  expectedError,
   hold,
   letGo,
   openApp,
   openBandApp,
+  problemBar,
   recordTake,
   scaled,
   settled,
@@ -452,7 +454,10 @@ test.describe("M and S at the fader", () => {
       for (const name of ["Drums volume", "Master volume"]) {
         const fader = await box(page.getByRole("slider", { name }))
         const thumb = await pixelAt(page, fader.x + fader.width - 7, middle(fader))
-        expect(thumb, name).toEqual(await rgbOf(page, text))
+        // The probe is painted by a canvas and the thumb by the page, so a
+        // channel may differ by a step or two of rounding.
+        const want = await rgbOf(page, text)
+        thumb.forEach((c, i) => expect(Math.abs(c - want[i]), `${name}, channel ${i}`).toBeLessThanOrEqual(2))
       }
     })
   }
@@ -505,6 +510,43 @@ test.describe("M and S at the fader", () => {
     await expect(spinners).toHaveCount(0)
     await page.waitForTimeout(300)
     expect(await layout()).toEqual(waiting)
+  })
+
+  // A read that fails is said in the lane, where the notes would be, and the
+  // spinner it waited with does not turn for ever.
+  test("a notes lane says so when its notes cannot be read, and the audio lanes are as they were", async ({
+    page,
+    pageErrors,
+  }) => {
+    const since = await openTake2(page, () =>
+      page.evaluate(() => {
+        const bridge = (window as unknown as { pywebview: { api: Record<string, unknown> } }).pywebview.api
+        bridge.take_notes = async () => {
+          const e = new Error("The disk went away")
+          e.name = "OSError"
+          throw e
+        }
+      })
+    )
+    const at = (ms: number) => page.waitForTimeout(Math.max(0, ms - (Date.now() - since)))
+    const lanes = page.locator("[data-notes-lane]")
+    await expect(lanes).toHaveCount(2)
+    for (const name of ["Drums", "Keys (Nord Stage 3 MIDI)"])
+      await expect(notesLane(page, name)).toHaveText("Could not read the notes")
+    // The bar has said what Python raised.
+    await expect(problemBar(page)).toContainText("The disk went away")
+    expectedError(pageErrors, /take_notes failed/)
+    // And a lane that is not waiting has no spinner to show after the second.
+    await at(2000)
+    const spinners = lanes.getByRole("status", { name: "Loading", includeHidden: true })
+    expect(await spinners.count(), "a spinner in a lane that failed").toBe(0)
+    // The audio lanes are drawn and their plates are 56 px, as ever.
+    await expect(page.locator("[data-lane]")).not.toHaveCount(0)
+    for (const track of ["Drums", HANNA]) {
+      expect((await box(plate(page, track))).height).toBeCloseTo(56, 0)
+      expect((await box(lane(page, track))).height).toBeCloseTo(56, 0)
+    }
+    await expect(plate(page, HANNA).getByRole("button", { name: `Mute ${HANNA}` })).toBeEnabled()
   })
 
   test("a notes lane's row names are 12 px", async ({ page }) => {

@@ -17,7 +17,8 @@ import { cn } from "@/lib/utils"
 /*
   B6's pieces for a long name: a cut name shows whole on hover and, when it
   is a button or a link, on keyboard focus (`useCut` and `WholeTip`; `Whole`
-  puts both round a plain text, which only a pointer reaches), and the
+  puts both round a plain text, which only a pointer reaches unless it has
+  `reach`: then it is a Tab stop while it is cut), and the
   figures beside a name give way to it, whole figure by whole figure
   (`Figures`, the arithmetic in lib/figures.ts). The figures' own tip is for
   the pointer; the name's tip, which a keyboard reaches too, says the line
