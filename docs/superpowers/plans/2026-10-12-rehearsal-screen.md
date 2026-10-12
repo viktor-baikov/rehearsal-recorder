@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Step 4 of the design system's rollout for its second screen: the rehearsal screen and the big player. The screen is grouped as the owner chose on three mockups, and the lanes are one group as he asked after them. Every piece is on the shared components, nothing jumps, and its 15 files leave the design check's allow-list.
+**Goal:** Step 4 of the design system's rollout for its second screen: the rehearsal screen and the big player. The screen is grouped as the owner chose on three mockups, and the lanes are one group as he asked after them, each lane's picture on a well of its own as he chose on a fifth. Every piece is on the shared components, nothing jumps, and its 15 files leave the design check's allow-list.
 
 **Architecture:** First the test fixtures: a rehearsal stress band with a MIDI-only track, which the band's meters can take. Then the screen from the outside in:
 
@@ -12,13 +12,13 @@
 4. the strip and its tabs;
 5. the transport, and the one line the player keeps for what it has to say;
 6. the lane plates with M and S at the fader (Q3);
-7. last, the lanes as one group.
+7. last, the lanes as one group, each picture on its own well.
 
-Each task adds the shared piece it is the first to need, with its story: `PopoverAnchor`, `rise`, `MarkTick`, Alert's `line` size, `Whole`'s `reach`, Toggle's `lane` size. The reference tree is `/mnt/project-files/design-system/screen-rehearsal/mockup-tree/`: q3's patch, which carries q1 and q2, applied on 684d726. Its README says which `lib/mk.ts` branches the PR keeps. Task 8 takes the lanes from `/mnt/project-files/design-system/screen-rehearsal/q4-lanes/` instead: its `src/q4-over-q3.diff` is what it changes over q3, and its README says how it was measured.
+Each task adds the shared piece it is the first to need, with its story: `PopoverAnchor`, `rise`, `MarkTick`, Alert's `line` size, `Whole`'s `reach`, Toggle's `lane` size. The reference tree is `/mnt/project-files/design-system/screen-rehearsal/mockup-tree/`: q3's patch, which carries q1 and q2, applied on 684d726. Its README says which `lib/mk.ts` branches the PR keeps. Task 8 takes the lanes from two later mockups instead. `/mnt/project-files/design-system/screen-rehearsal/q4-lanes/src/q4-over-q3.diff` makes them one group over q3. `/mnt/project-files/design-system/screen-rehearsal/q5-lanes-apart/src/q5-over-q4.diff` adds the owner's pick over that, its `inset` branches only. Each README says how it was measured.
 
 **Tech Stack:** React 19, TypeScript, Tailwind v4, the unified `radix-ui` package, cva, lucide; Storybook 10.6.1; Vitest (node) and Playwright on `ui/e2e/fake-bridge.js` with `ui/e2e/band.js`.
 
-**Spec:** `docs/superpowers/specs/2026-10-08-design-system-design.md`: C1-C8, U1-U5, B1-B9, K3, rollout step 4 (`:416-421`), and the big player restyled with this screen (`:495-496`). The rules as merged are in `docs/design-system.md`. The owner's answers are at the end of `/mnt/project-files/design-system/rulings.md`: "Rehearsal screen Q1" to "Q3" and "Lanes as one group". What the PR does without asking is in `/mnt/project-files/design-system/screen-rehearsal/inventory.md`:
+**Spec:** `docs/superpowers/specs/2026-10-08-design-system-design.md`: C1-C8, U1-U5, B1-B9, K3, rollout step 4 (`:416-421`), and the big player restyled with this screen (`:495-496`). The rules as merged are in `docs/design-system.md`. The owner's answers are at the end of `/mnt/project-files/design-system/rulings.md`: "Rehearsal screen Q1" to "Q3", "Lanes as one group" and "Lanes apart inside the group". What the PR does without asking is in `/mnt/project-files/design-system/screen-rehearsal/inventory.md`:
 
 - §1: the pieces, and six layout jumps;
 - §2: the 29 allow-list cases in 15 files;
@@ -51,9 +51,14 @@ The inventory counted lines on 4de49d5; `ui/src` is the same on 684d726, and eve
   - **Q3 «M и S у фейдера»** (10:08Z): on every plate in the player (tracks, Master, MIDI notes), M and S sit in the fader's row, after the fader. The name has the plate's whole width (about 152 px), is cut past that, and shows whole in the shared tooltip on hover and keyboard focus. Every lane stays 56 px.
   - **Lanes as one group** (10:09Z, «и я бы дорожки сделал одной группой»):
     - one fill for all the track lanes, plates and waveforms, the MIDI notes lane included;
-    - lanes split by a 1 px line, as the start screen's tracks group;
     - Master stays its own group under the lanes, sticky at the bottom;
     - lanes stay 56 px, with M and S at the fader.
+  - **Lanes apart «Волна на подложке»** (11:21Z, on the q5-lanes-apart card, after «хм... сливаются визуально дорожки....» at 10:47Z on q4-lanes' 1 px lines):
+    - no line between tracks;
+    - each lane's picture, a waveform or a notes lane, sits on a well of its own: `--background`, 8 px corners (`rounded-md`), with 3 px of the group's fill above and below it, so 6 px of fill between two tracks' wells;
+    - a Both track's audio and notes share one well, split by a 1 px `--border` line;
+    - the plates stay a column on the group's fill, with no box or line of their own;
+    - a lane stays 56 px; its waveform is 50 px, and a Both track's audio waveform 53.
 - Copy, exact:
   - The panel's label is `Next take` (no capitals). An empty set says `This set has no songs yet. Add them in Settings › Sets.`
   - Footer: `Finish` with `Esc`, and `Record take {N}` with `Space`. Both chips stay, unseen, while a take is in hand.
@@ -116,8 +121,9 @@ The inventory counted lines on 4de49d5; `ui/src` is the same on 684d726, and eve
 
    Test in Task 4.
 5. **Eight tracks, one on Both and one on MIDI only, at 960 × 680 with the page scrolled** (the rehearsal stress data). Expected:
-   - the lanes are one group, with a 1 px line between tracks, none between a Both track's audio and notes, and no gaps;
-   - every audio lane is 56 px;
+   - the lanes are one group with no line between tracks and no gaps between rows;
+   - every picture is on its well, 3 px inside its row, and a Both track's audio and notes are one well under a 1 px line;
+   - every audio lane is 56 px, its waveform 50;
    - Master is its own group, stuck to the bottom in a band as wide as the lanes, with nothing of a lane beside it;
    - a cut plate name reached by Tab shows whole.
 
@@ -157,10 +163,11 @@ The inventory's §4 calls stand. This plan adds:
 - **A greyed button's reason is a Tooltip, and the button's description**, not dropped. This covers Send starred and Clear false starts (`EveningActions.tsx:149`, `:161`), and a row's cloud error (`RehearsalOverview.tsx:487`). It is the only place the reason is said, and `docs/using-it.md` promises that pointing at the button says why. Every other native title in §3's list goes, or becomes a Tooltip on an icon button with the same words.
 - **Rows that do one thing are the shared `Button`**: the set's and the songs' rows, a tab list's rows, a mark's line, as the mockup drew them. A take row keeps its own grid, with its bar (a Button) as the way in by keys. `Item`'s paddings (12 px or 16 px) would make every row taller than in the mockup the owner chose. §3's "rows on Item" is carried out as rows that keys reach, with the shared focus ring. The share dialog's three options, each a title and a line, go on `Item asChild` with a ghost `Button`, as Earlier's rows do (`LastTime.tsx:425-447`).
 - **A cut plate name is the shared `Whole` with a new `reach` option**: a Tab stop only while the name is cut, the shared focus ring, and the tip on focus. The mockup's `PlateName` does not come over. That keeps one piece for a cut name (U2: a variant, not a copy).
-- **The notes lane's row names go from 9 px to 12 px**, and in rem. They need 14 px a row (`0.875rem`), and the notes plate's least height becomes 91 px at the scale of 1 (6 × 14 + 3 + 3 + 1), also in rem. A lane of notes is 18 px taller. In Task 8 the lower half's line goes: a Both track's notes row has none, and a MIDI-only notes row has its line outside it. So the plate's least height is 90.
-- **The lanes group (Task 8) is q4-lanes' as built in its second round**: a line between tracks only, none between a Both track's audio and its notes, and Master's sticky band as wide as the lanes. Two calls the mockup left open:
-  - **`laneHalf` goes.** Once every track plate is a row of the group, only Master's plate has a box, and nothing uses the halves. `LanePlate` takes `grouped` in place of `half`, and `lib/laneHalf.ts` and its test are deleted.
-  - **The notes lane's octave lines drop to 40 % of the border colour** (`--nl-grid`, today 80 %), and its row names' backing becomes the card's (`bg-card/85`). On the group's fill the octave lines at 80 % read as the lines between lanes in the light theme, and a `bg-background` backing would show as a chip.
+- **The notes lane's row names go from 9 px to 12 px**, and in rem. They need 14 px a row (`0.875rem`), and the notes plate's least height becomes `calc(5.25rem + 7px)`: the six names in rem, the lane's 3 px above and below and the split line in px, 91 at the scale of 1. All in rem it would be a pixel short at 90 %. A lane of notes is 18 px taller. In Task 8 the notes lane moves onto its well, and the plate's least height grows by the well's padding: `calc(5.25rem + 10px)` beside a Both track's notes (the split line and 3 below; 94 at the scale of 1) and `calc(5.25rem + 12px)` beside a MIDI-only track's (3 above and below; 96).
+- **The lanes group (Task 8) is q4-lanes' second round with q5-lanes-apart's «Волна на своей подложке»**: no lines in the group but a Both track's split, each picture on its well, and Master's sticky band as wide as the lanes. Three calls the mockups left open:
+  - **`laneHalf` goes.** Once every track plate is a row of the group, only Master's plate has a box, and no plate uses the halves. `LanePlate` takes `grouped` in place of `half`. A Both track's well is the Waveform's and the NotesLane's own box (`rounded-md bg-background`), so its split is two class strings, said once in `Timeline.tsx`: `rounded-b-none` on the audio's waveform and `rounded-t-none border-t` on the notes lane. `lib/laneHalf.ts` and its test are deleted.
+  - **The notes row's least height stays in one place, `NotesPlate`'s `MIN_PX`.** The mockup repeated it as `min-h-[73px]` on the notes lane. Here the plate's minimum grows by the well instead (Calls, the notes lane's row names), and the lane, `h-full` in its padded cell, gets what is left: 90 px of content.
+  - **The notes lane keeps its octave lines and its names' backing as they are on main** (`--nl-grid` at 80 %, `bg-background/85`). It is back on a `bg-background` well, as on main, so neither reads as anything new.
 - **History's overview loses its figures line with this PR** (§4's call). Its header has the same figures through `EveningFacts`, and History's PR leaves it so. `EveningFacts` gives way in History's header too.
 - **The header's figures measure with `fitFigures`** (`lib/figures.ts`, B6's arithmetic). The facts stay stacked as label over value, 24 apart (today 28). A fact that gives way is not drawn. The group's tip and an `sr-only` line say them all.
 - **"Record take {N}" keeps room for two digits** (`tnum`), so Finish does not move at take 10 (jump 6). It grows once, at 100.
@@ -477,7 +484,7 @@ The inventory's §4 calls stand. This plan adds:
 
   Rewrite:
   - `lanes.spec.ts:114-145`: at each scale, M and S sit beside the fader, not above it. Keep the 3.5rem rows and the plates holding all they have;
-  - `lanes.spec.ts:147-163`: the notes plate's least height is 91 and `91 * scale`.
+  - `lanes.spec.ts:147-163`: the notes plate's least height is at least 91 and `84 * scale + 7`.
 
   `M and S are 20 by 20 and 6 px apart` (`:96`) stays as it is.
 - [ ] **Step 2:** Build and run them. Expected: FAIL.
@@ -485,56 +492,58 @@ The inventory's §4 calls stand. This plan adds:
 - [ ] **Step 4:** Run the whole Playwright suite (`lanes`, `midi-player`, `player`, `review`), Vitest, lint, design-check and build-storybook.
 - [ ] **Step 5:** Commit: `ui: M and S at the fader, the plate's name whole on hover and focus`.
 
-### Task 8: The lanes as one group
+### Task 8: The lanes as one group, each picture on its own well
 
-The reference is the q4-lanes mockup in its second round, `/mnt/project-files/design-system/screen-rehearsal/q4-lanes/`. Take its changes over q3 (`src/q4-over-q3.diff`) to `Timeline.tsx`, `TakeMap.tsx`, `LaneControls.tsx`, `midi/NotesPlate.tsx` and `ui/lane-plate.tsx`, with this plan's two calls on top (Calls, "The lanes group"). Its `lib/mk.ts` change and its `twoLines` branches are mockup only. Its MOCKUP comments become plain ones. If its README has changed since this plan (a third round), follow the README and say so in the report.
+The reference is two mockups, one over the other, in `/mnt/project-files/design-system/screen-rehearsal/`:
+- `q4-lanes/` in its second round: its changes over q3 (`src/q4-over-q3.diff`) to `Timeline.tsx`, `TakeMap.tsx`, `LaneControls.tsx`, `midi/NotesPlate.tsx` and `ui/lane-plate.tsx` make the lanes one group;
+- `q5-lanes-apart/`: its changes over q4-lanes (`src/q5-over-q4.diff`), **the `inset` look only**, put each picture on its well and drop q4-lanes' lines.
+
+This plan's three calls go on top (Calls, "The lanes group"). Both mockups' `lib/mk.ts` changes, `useMkLanes()`, the `line`, `bright`, `zebra` and `boxes` branches, `trackOf` and the `twoLines` branches are mockup only. Their MOCKUP and q5-lanes-apart comments become plain ones. If either README has changed since this plan, follow the README and say so in the report.
 
 **Files:**
 - Modify: `ui/src/components/Timeline.tsx`:
   - `END_PX = 12` beside `ROW_GAP_PX` and `COLUMN_GAP_PX` (`:31-33`), and one column template, `${GUTTER_PX}px minmax(0, 1fr) ${END_PX - COLUMN_GAP_PX}px`, for the grid round the ruler (`:304`) and every row of the group;
   - the grid's rows (`:311-314`) become the ruler and one row for the group;
-  - the lanes at `:479-559` become one `<div data-lanes className="flex flex-col rounded-lg bg-card">` spanning the grid's columns. Each lane is a `grid` row with `data-lane-row={name}` on the same template. An audio row is `height: 3.5rem` with `gridTemplateRows: "minmax(0, 1fr)"`; without that guard the waveform's canvas grows its row (q4-lanes, "Found on the way");
-  - a row after the first draws `box-content border-t`, except a Both track's notes row, which carries `data-paired` and draws none;
-  - the Waveform and the NotesLane get `rounded-none bg-transparent` in place of `laneHalf(…)` (`:508`, `:552`). The `laneHalf` import (`:11`) and the notes rows' `marginTop` (`:488`) go;
+  - the lanes at `:479-559` become one `<div data-lanes className="flex flex-col rounded-lg bg-card">` spanning the grid's columns. Each lane is a `grid` row with `data-lane-row={name}` on the same template, and no border. An audio row is `height: 3.5rem` with `gridTemplateRows: "minmax(0, 1fr)"`; without that guard the waveform's canvas grows its row (q4-lanes, "Found on the way");
+  - the well: each row's picture cell (`[data-lane]`, and the notes lane's `min-w-0` div) is padded 3 px: `py-[3px]`, but `pt-[3px]` on a Both track's audio row and `pb-[3px]` on its notes row (which carries `data-paired`), so its two pictures touch;
+  - the Waveform (`:552`) and the NotesLane (`:508`) keep their own `rounded-md bg-background`, which is the well. A Both track's audio waveform adds `rounded-b-none`; its notes lane adds `rounded-t-none border-t`. These replace `laneHalf(…)`. The `laneHalf` import (`:11`) and the notes rows' `marginTop` (`:488`) go;
   - `endPx={END_PX}` on the TakeMap (`:289`);
   - Master at `:573-585`: the sticky strip carries `data-master-band` and loses its `width: GUTTER_PX`, so it spans the lanes in `bg-background`; a `GUTTER_PX`-wide div inside holds `MasterControls`;
   - the tick labels at `:351` become `text-xs`.
 - Modify: `ui/src/components/TakeMap.tsx`: `endPx?: number` (default 0) beside `gutterPx` and `gapPx` (`:30-31`, `:48-49`), as `paddingRight` on the grid at `:96`.
-- Modify: `ui/src/components/ui/lane-plate.tsx`: `grouped` in place of `half`. The box is `rounded-lg bg-card` unless `grouped`. `lane-plate.stories.tsx`: `Top` (`:71`), `Bottom` (`:76`) and `Halves` (`:88`) and their light twins give way to `Grouped` and `GroupedLight`: three rows on one fill, the second a Both track's notes with no line above it. `Both` (`:134-181`) drops `laneHalf`.
+- Modify: `ui/src/components/ui/lane-plate.tsx`: `grouped` in place of `half`. The box is `rounded-lg bg-card` unless `grouped`. `lane-plate.stories.tsx`: `Top` (`:71`), `Bottom` (`:76`) and `Halves` (`:88`) and their light twins give way to `Grouped` and `GroupedLight`: three rows on one fill, each picture on its well, the second row a Both track's notes sharing the first's well under its line. `Both` (`:134-181`) drops `laneHalf` for the two class strings above.
 - Delete: `ui/src/lib/laneHalf.ts`, `ui/src/lib/laneHalf.test.ts`. The comments naming it at `ui/scripts/design-rules.mjs:274` and `design-rules.test.mjs:501` name `lib/labels.ts` alone.
-- Modify: `ui/src/components/LaneControls.tsx` (a track's plate is `grouped`, with `data-paired`; Master's plate carries `data-master-plate`), `ui/src/components/midi/NotesPlate.tsx` (`grouped` in place of `half` at `:54`; `MIN_PX` 90, its comment saying a Both track's notes row has no line and a MIDI-only one has its line outside)
-- Modify: `ui/src/components/midi/NotesLane.tsx`: `--nl-grid` at 40 % (`:152`); the row names' backing `bg-card/85` (`:172`, `:186`)
+- Modify: `ui/src/components/LaneControls.tsx` (a track's plate is `grouped`, with `data-paired`; Master's plate carries `data-master-plate`), `ui/src/components/midi/NotesPlate.tsx`: `grouped` in place of `half` at `:54`, and its least height grows by the well, from Task 7's `calc(5.25rem + 7px)`: `calc(5.25rem + 10px)` beside a Both track's notes (six names at 0.875rem, the lane's own 3 px above and below, 1 for the split line, 3 for the well below: 94 at the scale of 1) and `calc(5.25rem + 12px)` beside a MIDI-only track's (the well's 3 above and below instead: 96). Its comment says that sum.
 - Modify: `ui/design-check.allow.json` (drop `Timeline.tsx`)
 - Test: `ui/e2e/lanes.spec.ts:147-267`, `ui/e2e/midi-player.spec.ts:109-146`, `:449-490`
 
 **Interfaces:**
-- Consumes: Task 1's `openBandApp(page, { stress: "rehearsal" })`; Task 7's plates; `review`, `BOTH`, `band(n)`, `plate`, `lane`, `notesPlate`, `notesLane` and `strip` in `lanes.spec.ts`.
+- Consumes: Task 1's `openBandApp(page, { stress: "rehearsal" })`; Task 7's plates; `review`, `BOTH`, `band(n)`, `plate`, `lane`, `notesPlate`, `notesLane`, `audioLane` and `strip` in the specs.
 - Produces:
   - `[data-lanes]`: one element with the `--card` fill, a 12 px radius and no border. Master is outside it.
-  - `[data-lane-row]` on each row, and `data-paired` on a Both track's notes row. The plate, the waveform and the notes lane have no fill or corners of their own.
-  - A row that starts a track, after the first, has a 1 px top border in `--border`, outside its 3.5rem (`box-content`), so the pitch from track to track is 57. A Both track's notes row has none.
+  - `[data-lane-row]` on each row, with no border; `data-paired` on a Both track's notes row. A plate has no fill or corners of its own. A waveform and a notes lane have the `--background` fill and 8 px corners, 3 px inside their row, but where a Both track's two meet: there the corners are square, nothing pads them apart, and the notes lane has a 1 px top border in `--border`.
   - `[data-master-band]`, the sticky strip, as wide as `[data-lanes]`; `[data-master-plate]`, Master's plate in it.
   - `TakeMap({ …, endPx })`; `LanePlate({ grouped })`, with no `half`.
 
 - [ ] **Step 1: Write the failing e2e tests** (rewrite `lanes.spec.ts:165-267`):
-  - `the lanes are one group with the card's fill and no frame, in the dark theme` and `…in the light theme`: as above. Every `[data-plate]`, `[data-lane] > div` and `[data-notes-lane]` background is transparent, with a 0 radius.
-  - `the lanes touch, a 1 px line between each, and every audio lane is 56 px` (`band(4)`): for consecutive rows, the next row's border box starts where the row before ends, its top border is 1 px in `--border`, and each `[data-lane]` is 56 px. Resize to 960 by 680 and back to 1180 by 820, and each is still 56 px.
-  - `a Both track's notes are the next row, with no line between them` (`BOTH`, replaces `:204-251`): the row holding `[data-notes-plate='Drums']` starts where Drums' audio row ends, with a 0 top border; Gtr's row has its line.
-  - `a MIDI-only lane is a row of the group, under a line` (`BOTH`, replaces `:253-267`).
+  - `the lanes are one group with the card's fill and no frame, in the dark theme` and `…in the light theme`: as above. Every `[data-plate]` and `[data-notes-plate]` background is transparent, with a 0 radius. Every `[data-lane] > div` and `[data-notes-lane]` background is `--background`, with 8 px corners (`band(4)` has no Both track).
+  - `the lanes touch with no line between them, and each waveform sits on its well 3 px in` (`band(4)`): for consecutive rows, the next row's border box starts where the row before ends, and every row's top border is 0. Each `[data-lane]` is 56 px, and its waveform's top and bottom are 3 px inside it (50 px tall). Resize to 960 by 680 and back to 1180 by 820, and each is still 56 and 50.
+  - `a Both track's audio and notes share one well split by a 1 px line` (`BOTH`, replaces `:204-251`): Drums' waveform is 3 px under its row's top and ends at its row's foot, with square lower corners. The notes lane starts where the waveform ends (under 0.5 px apart), with square upper corners and a 1 px top border in `--border`, and ends 3 px above its row's foot. Gtr's waveform, the next track's, is 3 px under its row's top, so 6 px of the group's fill lie between the two wells.
+  - `a MIDI-only lane is a row of the group on a well of its own` (`BOTH`, replaces `:253-267`): Keys' notes lane is 3 px inside its row at top and bottom, with 8 px corners and no top border.
   - `the time axis is one line from the map down through every lane` (`band(4)`): every waveform starts and ends at the same x as the others (under 0.5 px apart), 212 px from `[data-lanes]`' left and 12 px from its right. Zoomed with ⌘ and the wheel over the lanes, the map's strip (`[data-view-frame]`'s parent) starts and ends there too.
   - `a loop drawn across two lanes runs from the ruler's foot to the group's foot`: drag from 0.3 to 0.6 of the axis across Drums and Bass. `[data-region]`'s bottom is the group's bottom (under 0.5 px apart), and its left and right are the drag's.
   - `the master is its own group in a band as wide as the lanes` (`band(4)`, not stuck): `[data-master-plate]` is outside `[data-lanes]`, 200 px, with the `--card` fill and 12 px corners, 24 px under the group. `[data-master-band]`'s left and right are the group's (under 0.5 px apart), and its background is `--background`.
   - `stuck, the master's band covers the lanes under it` (`band(8)` at 1180 by 600, as `:277`): with the band stuck, `document.elementFromPoint` at points across `[data-master-band]` every 20 px never lands inside `[data-lanes]`. The sticky tests at `:277-324` stay as they are.
-  - `the octave lines are lighter than the lines between lanes`: `--nl-grid` on `[data-notes-lane]` mixes 40 % of the border colour.
-  - `eight tracks with a Both and a MIDI-only track at 960 by 680 stay one group as the page scrolls` (Review Focus 5): `openBandApp(page, { stress: "rehearsal" })`, open take 2. There are 9 rows and 7 lines. Scroll `main` to the middle: the rows are still contiguous, the band is stuck to the bottom with nothing of a lane beside it, and Tab reaches Hanna's cut name, which shows whole.
+  - `eight tracks with a Both and a MIDI-only track at 960 by 680 stay one group as the page scrolls` (Review Focus 5): `openBandApp(page, { stress: "rehearsal" })`, open take 2. There are 9 rows, no row has a top border, and every picture is on its well (the Drums pair touching under its line). Scroll `main` to the middle: the rows are still contiguous, the band is stuck to the bottom with nothing of a lane beside it, and Tab reaches Hanna's cut name, which shows whole.
 
   Update:
-  - `lanes.spec.ts:147-163` (Task 7's rewrite): the notes plate's least height is 90 and `90 * scale`;
-  - `midi-player.spec.ts:109` ("as the lower half of its card" becomes the next row of the group, with no line) and its assertions at `:449-490`, which keep the 56 px audio lanes and the notes lane as tall as its plate.
+  - `lanes.spec.ts:147-163` (Task 7's rewrite): the Drums notes plate's least height (a Both track's) is at least 94 and `84 * scale + 10`, and its lane is 3 px shorter than the plate;
+  - `midi-player.spec.ts:109` ("as the lower half of its card" becomes "sharing its audio's well under a line"): the plates touch with no line between them (0 top border on the notes plate); the notes lane starts where the waveform ends, with its 1 px solid top border, and is the plate's height less the well's 3 px. The drum rows and Keys' C4 are still named;
+  - `midi-player.spec.ts:449-490`: the audio plates stay 56 px. A notes lane is as tall as its plate less its well's padding: 3 px for Drums (on Both), 6 for the long-named keyboard (MIDI only). Drums' notes plate is 94 (its text takes 69, under the floor), and the comment says so.
 - [ ] **Step 2:** Build and run them. Expected: FAIL.
-- [ ] **Step 3: Implement** as in Files. Then check by eye in both themes, at 960×680 with stress, that no waveform, loop band, mark or playhead reaches the group's round corners, and that a notes lane does not read as rows of its own. Remove `Timeline.tsx` from the allow-list.
+- [ ] **Step 3: Implement** as in Files. Then check by eye in both themes, at 960×680 with stress, against `q5-lanes-apart/shots/w960-inset-dark.png` and `both-drums-inset-dark.png`: each well reads as its lane, a Both track reads as one well, and no loop band, mark or playhead reaches the group's round corners. Remove `Timeline.tsx` from the allow-list.
 - [ ] **Step 4:** Run the whole Playwright suite, Vitest, lint, design-check and build-storybook.
-- [ ] **Step 5:** Commit: `ui: the player's lanes as one group, a line between tracks`.
+- [ ] **Step 5:** Commit: `ui: the player's lanes as one group, each picture on its own well`.
 
 ### Task 9: Off the allow-list, and what the PR says
 
@@ -543,15 +552,15 @@ The reference is the q4-lanes mockup in its second round, `/mnt/project-files/de
 - Modify: `docs/design-system.md`:
   - "Where things stand" (`:17-35`): the rehearsal screen and the big player are redone;
   - "Shared components": `PopoverAnchor` in Popover's line (`:281`), Alert's `line` (`:332`), Toggle's `lane` (`:316`), Whole's `reach` (`:360`), `MarkTick` in Mark's line (`:379`);
-  - C6 (`:233-241`): M and S are `Toggle size="lane"` after the fader, under the name. The lanes are one group on the card's fill, with a 1 px line between tracks and none between a Both track's audio and its notes. `LanePlate grouped` is a plate in that group, and `laneHalf()` is gone. Master is its own group, sticky in a band as wide as the lanes;
-  - C7 (`:242-245`): a group of rows, such as the start screen's tracks or the player's lanes, splits them with 1 px lines and lets each row keep its own padding;
+  - C6 (`:233-241`): M and S are `Toggle size="lane"` after the fader, under the name. The lanes are one group on the card's fill, with no lines between tracks: each lane's picture sits on a well of its own (`--background`, 8 px corners, 3 px of the group's fill above and below), and a Both track's audio and notes share one well split by a 1 px line. `LanePlate grouped` is a plate in that group, and `laneHalf()` is gone. Master is its own group, sticky in a band as wide as the lanes;
+  - C7 (`:242-245`): a group of rows, such as the start screen's tracks, splits them with 1 px lines and lets each row keep its own padding. Where each row holds a picture of its own, as the player's lanes do, the pictures' wells split the rows instead, and there are no lines;
   - "How screens work": B4's models gain Finish and Record's unseen chips, Mark's one width and the player's kept line; B5, the notes lane; B6, `reach`; B7, its example is the new set sentence.
 - Modify: `docs/using-it.md`:
   - `:158-160`: the buttons sit at the head of the songs, beside the marks' colours, with no figures above them;
   - `:167-172`: the figures give way when the name needs the room, the size on disk first, and pointing at them shows them all;
   - `:178-179`: the set is the first part of the panel, under the field, not a card;
   - `:307-309`: the fader is under the name, with M and S after it;
-  - `:738-741`: a track's notes are the next lane of the group, with no line between them and its audio, not the lower half of a card.
+  - `:738-741`: a track's notes are the next lane of the group, sharing its audio's well under a thin line, not the lower half of a card.
 - Modify: `CHANGELOG.md` (Unreleased: one entry, after the start screen's and the takes' at `:55-85`)
 - Check: `site/`
 
@@ -561,7 +570,7 @@ The reference is the q4-lanes mockup in its second round, `/mnt/project-files/de
   - a long rehearsal name that wraps, and figures that give way;
   - nothing moving as a take plays, a mark nears, a crop runs or an error shows;
   - M and S at the fader, and a cut track name whole on hover and focus;
-  - the lanes as one group;
+  - the lanes as one group, each track's picture on its own well;
   - smaller things: spinners after a second, the notes lane's names at 12 px, Repeat, M and S grey when on, and an empty set saying how to fill it.
 - [ ] **Step 3:** Run everything:
   - in `ui/`: design-check, lint (21), Vitest, both tsc, build, build-storybook, and the whole Playwright suite;
