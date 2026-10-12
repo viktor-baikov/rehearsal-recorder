@@ -1597,8 +1597,16 @@ test.describe("Last time and long names on the shared pieces", () => {
     return inPanel(page)
   }
 
-  /** The tip a name or a figure line shows. */
-  const tip = (page: Page) => page.locator("[data-whole]")
+  /** The tip a name or a figure line shows: the open one. A tip that has
+   *  just closed (Tab moved on past a cut name, or the pointer left) stays
+   *  in the page for its 220 ms fade with data-state "closed", beside the
+   *  next one, and Playwright's strict mode fails at once on two matches
+   *  without waiting for the fade to end. Open is "instant-open" or
+   *  "delayed-open". */
+  const tip = (page: Page) => page.locator("[data-whole][data-state$='open']")
+  /** Every tip in the page, a fading one too: none once a closed tip has
+   *  faded and left. */
+  const tips = (page: Page) => page.locator("[data-whole]")
   /** The pointer off to the window's corner, moving as a hand does: Radix
    *  keeps a tip while the pointer may be on its way into it, until it has
    *  moved somewhere else. */
@@ -1660,7 +1668,7 @@ test.describe("Last time and long names on the shared pieces", () => {
       await expect(tip(page), where).toBeVisible()
       await expect(tip(page), where).toContainText(`${star.replace("★ ", "")} · Sat 19 Sep, ${ago} · 4 takes`)
       await dayLine(past).click()
-      await expect(tip(page), where).toHaveCount(0)
+      await expect(tips(page), where).toHaveCount(0)
     }
 
     await check(beside(page), "beside the setup")
@@ -1757,7 +1765,7 @@ test.describe("Last time and long names on the shared pieces", () => {
       await expect(tip(page), where).toBeVisible()
       await expect(tip(page), where).toContainText(KALYCHANKA)
       await away(page)
-      await expect(tip(page), where).toHaveCount(0)
+      await expect(tips(page), where).toHaveCount(0)
     }
     await hover(beside(page), "beside the setup")
     await hover(await openPanel(page), "in the panel")
@@ -1796,11 +1804,13 @@ test.describe("Last time and long names on the shared pieces", () => {
       }
     }
     await expect.poll(by).toEqual({ across: true, near: true })
-    // Still open once a closing tip would have faded (220 ms).
+    // Still open once a closing tip would have faded (220 ms), and the only
+    // tip in the page: the one Tab opened on a cut name on the way here has
+    // faded and left.
     const stays = async () => {
       await page.waitForTimeout(500)
       await expect(tip(page)).toBeVisible()
-      await expect(tip(page)).not.toHaveAttribute("data-state", "closed")
+      await expect(tips(page)).toHaveCount(1)
       expect(await by()).toEqual({ across: true, near: true })
     }
     await stays()
@@ -1828,7 +1838,7 @@ test.describe("Last time and long names on the shared pieces", () => {
       await expect(tip(page), where).toContainText(DANCING)
       await expect(tip(page), where).toContainText("2 takes · 10:10")
       await away(page)
-      await expect(tip(page), where).toHaveCount(0)
+      await expect(tips(page), where).toHaveCount(0)
 
       // And by keyboard, which reaches the name and not the figures.
       await dayLine(past).click()
@@ -1843,12 +1853,12 @@ test.describe("Last time and long names on the shared pieces", () => {
         "2 takes · 10:10"
       )
       await dayLine(past).click()
-      await expect(tip(page), where).toHaveCount(0)
+      await expect(tips(page), where).toHaveCount(0)
 
       // A name with room beside it shows no tip of its own.
       await songName(past, "Zorka").hover()
       await page.waitForTimeout(700)
-      await expect(tip(page), where).toHaveCount(0)
+      await expect(tips(page), where).toHaveCount(0)
       await away(page)
     }
     await check(beside(page), "beside the setup")
@@ -1873,7 +1883,7 @@ test.describe("Last time and long names on the shared pieces", () => {
       await expect(tip(page), where).toContainText(SOUNDCHECK)
       await expect(tip(page), where).toContainText("5 min · 2 takes")
       await away(page)
-      await expect(tip(page), where).toHaveCount(0)
+      await expect(tips(page), where).toHaveCount(0)
 
       await earlier.getByRole("heading", { name: "Earlier" }).click()
       await tabTo(page, row)
@@ -1883,7 +1893,7 @@ test.describe("Last time and long names on the shared pieces", () => {
       await expect(row, where).toHaveAccessibleName(/^Sat 12 Sep ?Soundcheck at .+ concert ?5 min · 2 takes$/)
       await expect(row, where).toHaveAccessibleDescription("")
       await earlier.getByRole("heading", { name: "Earlier" }).click()
-      await expect(tip(page), where).toHaveCount(0)
+      await expect(tips(page), where).toHaveCount(0)
     }
     await check(beside(page), "beside the setup")
     await check(await openPanel(page), "in the panel")
@@ -1907,7 +1917,7 @@ test.describe("Last time and long names on the shared pieces", () => {
     await expect(tip(page)).toContainText("Universal Audio Apollo Twin X DUO Heritage Edition")
     await expect(tip(page)).toContainText("18 inputs · 48 kHz · 24 bit")
     await away(page)
-    await expect(tip(page)).toHaveCount(0)
+    await expect(tips(page)).toHaveCount(0)
 
     // The tip is the button's, so Tab shows it too.
     const button = row.getByRole("button", { name: "Change the interface and quality" })
@@ -1941,12 +1951,12 @@ test.describe("Last time and long names on the shared pieces", () => {
       await expect(tip(page), where).toHaveText(`${TUESDAY}Open in History`)
       await expect(open, where).toHaveAccessibleDescription("")
       await dayLine(past).click()
-      await expect(tip(page), where).toHaveCount(0)
+      await expect(tips(page), where).toHaveCount(0)
       // The pointer finds it on the name as well.
       await name.hover()
       await expect(tip(page), where).toHaveText(TUESDAY)
       await away(page)
-      await expect(tip(page), where).toHaveCount(0)
+      await expect(tips(page), where).toHaveCount(0)
     }
     await check(beside(page), "beside the setup")
     await check(await openPanel(page), "in the panel")
@@ -1971,13 +1981,13 @@ test.describe("Last time and long names on the shared pieces", () => {
       await open.hover()
       await expect(tip(page), at).toHaveText("Open in History")
       await away(page)
-      await expect(tip(page), at).toHaveCount(0)
+      await expect(tips(page), at).toHaveCount(0)
       await dayLine(past).click()
       await page.keyboard.press("Tab")
       await expect(open, at).toBeFocused()
       await expect(tip(page), at).toHaveText("Open in History")
       await dayLine(past).click()
-      await expect(tip(page), at).toHaveCount(0)
+      await expect(tips(page), at).toHaveCount(0)
     }
     await check("at 100 %")
     // A new Appearance size, set live: Open and the name are measured afresh.
@@ -1993,13 +2003,13 @@ test.describe("Last time and long names on the shared pieces", () => {
     await expect(open).toHaveText("Open")
     await open.hover()
     await page.waitForTimeout(700)
-    await expect(tip(page)).toHaveCount(0)
+    await expect(tips(page)).toHaveCount(0)
     await away(page)
     await dayLine(past).click()
     await page.keyboard.press("Tab")
     await expect(open).toBeFocused()
     await page.waitForTimeout(300)
-    await expect(tip(page)).toHaveCount(0)
+    await expect(tips(page)).toHaveCount(0)
   })
 
   test("the small play button shows a spinner after one second", async ({ page }) => {
