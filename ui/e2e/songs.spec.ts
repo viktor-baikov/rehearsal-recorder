@@ -275,6 +275,8 @@ test.describe("Songs in History", () => {
     const bar = gone.getByRole("button", { name: /^Take 1 Pałyn 8/ })
     await expect(bar).toBeDisabled()
     await expect(bar).not.toHaveAttribute("aria-describedby")
+    // Its name says what the row says, not the cloud's status.
+    await expect(bar).toHaveAccessibleName("Take 1 Pałyn 8 — Not found on disk")
   })
 
   test("starred goes come first, and from last time lists the marks", async ({ page }) => {

@@ -405,7 +405,9 @@ export function TakeRow({
             <Button
               type="button"
               variant="ghost"
-              aria-label={takeButtonLabel(take, status)}
+              // A take not on disk is named as the row says it, whatever
+              // the cloud's status.
+              aria-label={takeButtonLabel(take, missing ? "Not found on disk" : status)}
               aria-describedby={error ? why : undefined}
               onClick={() => open(take)}
               disabled={missing}
