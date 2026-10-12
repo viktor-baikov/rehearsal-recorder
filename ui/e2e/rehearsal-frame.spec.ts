@@ -58,35 +58,48 @@ function expectSame(now: Box, was: Box, what: string) {
   }
 }
 
-/** How the h1 holds the rehearsal's name: its lines, whether anything of it
- *  is cut or drawn past its box, and where the pencil is against its last
- *  line. */
+/** How the h1 holds the rehearsal's name: its lines and the text of each,
+ *  whether anything of it is cut or drawn past its box, and where the pencil
+ *  is against its last line. */
 const holdsName = (h1: Locator) =>
   h1.evaluate((el) => {
     const own = el.getBoundingClientRect()
-    // Each line of the name, by the boxes its words make.
-    const words = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
-    const lines = new Map<number, { top: number; bottom: number }>()
+    // Each line of the name, by the boxes its letters make. A space a line
+    // ends at may have no box: it goes with the letter before it.
+    const lines: { top: number; bottom: number; text: string }[] = []
+    let at: (typeof lines)[number] | undefined
     let right = 0
+    const words = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
     for (let n = words.nextNode(); n; n = words.nextNode()) {
-      const range = document.createRange()
-      range.selectNodeContents(n)
-      for (const r of range.getClientRects()) {
-        if (r.width === 0) continue
-        lines.set(Math.round(r.top), { top: r.top, bottom: r.bottom })
-        right = Math.max(right, r.right)
+      const text = n.textContent ?? ""
+      for (let i = 0; i < text.length; ) {
+        const len = String.fromCodePoint(text.codePointAt(i)!).length
+        const range = document.createRange()
+        range.setStart(n, i)
+        range.setEnd(n, i + len)
+        const r = [...range.getClientRects()].find((b) => b.height > 0)
+        if (r) {
+          const middle = (r.top + r.bottom) / 2
+          at = lines.find((l) => middle > l.top && middle < l.bottom)
+          if (!at) lines.push((at = { top: r.top, bottom: r.bottom, text: "" }))
+          if (r.width > 0) right = Math.max(right, r.right)
+        }
+        if (at) at.text += text.slice(i, i + len)
+        i += len
       }
     }
-    const last = [...lines.values()].sort((a, b) => a.top - b.top).at(-1)!
+    lines.sort((a, b) => a.top - b.top)
+    const last = lines.at(-1)!
     const pencil = el.querySelector("button")!.getBoundingClientRect()
     const cs = getComputedStyle(el)
     return {
-      lines: lines.size,
+      lines: lines.length,
+      texts: lines.map((l) => l.text.trim()),
       // Cut is clipped, or shown with an ellipsis, or drawn past the box.
       cut: cs.overflowX !== "visible" || cs.textOverflow === "ellipsis" || right > own.right,
       pencilRight: pencil.right - own.right,
       pencilMiddle: pencil.top + pencil.height / 2,
-      last,
+      last: { top: last.top, bottom: last.bottom },
     }
   })
 
@@ -97,6 +110,13 @@ function expectHeld(seen: Awaited<ReturnType<typeof holdsName>>, what: string) {
   expect(seen.pencilRight, `${what}: the pencil past the box`).toBeLessThanOrEqual(0.5)
   expect(seen.pencilMiddle, `${what}: the pencil above the last line`).toBeGreaterThan(seen.last.top)
   expect(seen.pencilMiddle, `${what}: the pencil below the last line`).toBeLessThan(seen.last.bottom)
+}
+
+/** The name's last word is whole on its last line: a word that fits the box
+ *  is not broken, at a hyphen or anywhere else. */
+function expectLastWordWhole(seen: Awaited<ReturnType<typeof holdsName>>, name: string, what: string) {
+  const word = name.split(" ").at(-1)!
+  expect(seen.texts.at(-1)!.split(/\s+/).at(-1), `${what}: the last line, of ${seen.texts.join(" / ")}`).toBe(word)
 }
 
 /** How many of the facts fit in the room they have, the most needed first, as
@@ -135,9 +155,28 @@ test.describe("the header", () => {
       await expect(h1).toContainText(LONG)
       const seen = await holdsName(h1)
       expectHeld(seen, `${width} px`)
+      expectLastWordWhole(seen, LONG, `${width} px`)
       // In a window this narrow the name takes more than one line.
       if (width === 960) expect(seen.lines).toBeGreaterThan(1)
     }
+  })
+
+  test("a rehearsal name ending in a date keeps the date whole on its last line", async ({ page }) => {
+    // The date has hyphens a line could break at, and at 960 px the line
+    // ends inside it; it is far narrower than the box, so it goes to the
+    // next line whole instead.
+    const name = "Tuesday jam at the old brewery with the horn section and the 2026-10-12"
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openApp(page)
+    await page.locator("#rehearsal-name").fill(name)
+    await startRehearsal(page)
+    await settled(page)
+    const h1 = title(page)
+    await expect(h1).toContainText(name)
+    const seen = await holdsName(h1)
+    expect(seen.lines).toBeGreaterThan(1)
+    expectHeld(seen, "a date at the end")
+    expectLastWordWhole(seen, name, "a date at the end")
   })
 
   test("a rehearsal name of one long word breaks inside the title box", async ({ page }) => {

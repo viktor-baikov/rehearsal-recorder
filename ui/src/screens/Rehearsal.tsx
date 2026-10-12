@@ -390,11 +390,11 @@ export function Rehearsal({
   // The panel is wider from 1100 px, which follows the Appearance scale.
   const wide = useWide()
 
-  // The name wraps when it is longer than its row, never cut (B6). The pencil
-  // goes with the last character, so that it is never alone on a line; the
-  // rest of the last word is free to break, so that a word wider than the
-  // whole box (one with no spaces in it) breaks inside it rather than being
-  // drawn past it.
+  // The name wraps when it is longer than its row, never cut (B6). The last
+  // word goes to the next line whole, never split at a hyphen the way a date
+  // would be; only a word wider than the whole box (one with no spaces in it)
+  // breaks, inside the box rather than being drawn past it. The pencil goes
+  // with the last character, so that it is never alone on a line.
   const nameWords = session.name.split(" ")
   const lastWord = Array.from(nameWords.pop() ?? "")
   const lastChar = lastWord.pop()
@@ -408,18 +408,20 @@ export function Rehearsal({
       title={
         <>
           {nameWords.length > 0 && `${nameWords.join(" ")} `}
-          {lastWord.join("")}
-          <span className="whitespace-nowrap">
-            {lastChar}
-            <Button
-              variant="ghost"
-              size="icon-row"
-              aria-label="Rename rehearsal"
-              onClick={() => setRenamingRehearsal(true)}
-              className="-my-1.5 ml-2 align-middle text-muted-foreground hover:text-foreground"
-            >
-              <Pencil />
-            </Button>
+          <span className="inline-block max-w-full">
+            {lastWord.join("")}
+            <span className="whitespace-nowrap">
+              {lastChar}
+              <Button
+                variant="ghost"
+                size="icon-row"
+                aria-label="Rename rehearsal"
+                onClick={() => setRenamingRehearsal(true)}
+                className="-my-1.5 ml-2 align-middle text-muted-foreground hover:text-foreground"
+              >
+                <Pencil />
+              </Button>
+            </span>
           </span>
         </>
       }
