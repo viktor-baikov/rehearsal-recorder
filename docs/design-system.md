@@ -19,16 +19,17 @@ shows the app as it is; the site keeps its own big headings and layout
 The foundation is in: the theme values, the shared components, Undo, the
 showcase and the check. The start screen is redone on it, and so are the
 rehearsal screen and the big player, which Review and History open takes in
-too: their pieces are the shared ones, all but the song list in New set,
-which the start screen shares with Settings' Sets and which is redone with
-Settings, and their files are off the check's [allow-list](#the-check). The
-other screens follow, one pull request each, in this order: recording,
-Review, History, Drafts, and Settings. Until its turn a screen is on the
-allow-list and may still break the rules it is listed for. Where a rule
-below says "as each screen is redone", the screens' pull requests carry it
-out, and so far the start screen's and the rehearsal screen's have. On
-reha.stream the pieces of the app are the real components and follow the
-theme already, but the page itself takes only the accent from it so far
+too: their pieces are the shared ones, and their files are off the check's
+[allow-list](#the-check). The one piece the start screen still builds on
+its own is the song list in New set, which it shares with Settings' Sets
+and which is redone with Settings. The other screens follow, one pull
+request each, in this order: recording, Review, History, Drafts, and
+Settings. Until its turn a screen is on the allow-list and may still break
+the rules it is listed for. Where a rule below says "as each screen is
+redone", the screens' pull requests carry it out, and so far the start
+screen's and the rehearsal screen's have. On reha.stream the pieces of the
+app are the real components and follow the theme already, but the page
+itself takes only the accent from it so far
 (`--page-accent: var(--primary)` in `site/src/page/page.css`). After the
 last screen, reha.stream's own background, text colours and font
 (Instrument Sans) take the shared ones, and the release comes when the
@@ -246,10 +247,9 @@ piece of its own moves onto the shared one when it is redone.
   line. That split is two class strings, said once in `Timeline.tsx`.
   `LanePlate` is the plate beside a lane, the same for audio, notes and the
   master; `LanePlate grouped` is a plate in the group, with no fill or
-  corners of its own, and `laneHalf()` is gone. A notes lane is as tall as
-  its plate needs. Master is its own group, a plate with the card's fill,
-  sticky at the bottom in a band as wide as the lanes, so that no part of a
-  lane shows beside it.
+  corners of its own. A notes lane is as tall as its plate needs. Master is
+  its own group, a plate with the card's fill, sticky at the bottom in a
+  band as wide as the lanes, so that no part of a lane shows beside it.
 - **C7. Group**, `Card`: a panel set apart by its fill (F4), with 12 px
   corners, 16 px inside, and no border or shadow. A screen gives it more air
   with `className`. It takes the place of about 21 hand-made bordered boxes
@@ -353,8 +353,9 @@ The other shared components, each with its stories:
   icon, a title and a text, all optional. `warning` is the theme's `warn`
   colour on the icon and the edge with a faint wash behind; `destructive` is
   a failure; `default` is neutral. C8's warnings and errors. Its `size` is
-  `box`, the default, or `line`: one line of 12 px words after the icon in
-  the variant's colour, 24 px tall whatever it says, with no box or wash, and
+  `box`, the default, or `line`: the icon in the variant's colour, and one
+  line of 12 px words, red for `destructive` and in the text's colour
+  otherwise. It is 24 px tall whatever it says, with no box or wash, and
   cut with "…" where the room ends, whole in the shared tip. `line` is for a
   place that keeps one line for whatever it has to say, as the player does
   (B4).

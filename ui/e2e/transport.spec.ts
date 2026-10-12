@@ -424,6 +424,41 @@ test.describe("the marker's kind", () => {
     await expect(note).toBeFocused()
   })
 
+  test("Space chooses the kind the arrows came to, and Save keeps it", async ({ page }) => {
+    await openApp(page, {
+      before:
+        "window.__LABELS__ = [{id:7, name:'Solo', colour:'violet'}, {id:1, name:'Note', colour:'grey'}, {id:3, name:'Went wrong', colour:'red'}];",
+    })
+    await startRehearsal(page)
+    await recordTake(page)
+    await page.getByRole("button", { name: "Add marker" }).click()
+    const dialog = page.getByRole("dialog")
+    const kinds = dialog.getByRole("radio")
+    await expect(dialog.getByRole("textbox", { name: "Marker note" })).toBeFocused()
+
+    // Back to the chosen kind, and along to the next: the arrow moves the
+    // focus and leaves the choice where it was.
+    await page.keyboard.press("Shift+Tab")
+    await expect(kinds.nth(0)).toBeFocused()
+    await page.keyboard.press("ArrowRight")
+    await expect(kinds.nth(1)).toBeFocused()
+    await expect(kinds.nth(1)).toHaveAttribute("aria-checked", "false")
+    // Space chooses it.
+    await page.keyboard.press("Space")
+    await expect(kinds.nth(1)).toHaveAttribute("aria-checked", "true")
+    await expect(kinds.nth(0)).toHaveAttribute("aria-checked", "false")
+    await expect(dialog).toHaveCount(1)
+
+    // And Save keeps the marker with it, Note, whose id is 1: held on this
+    // screen until Save take hands the take's marks over.
+    await dialog.getByRole("button", { name: "Save", exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+    await page.getByRole("button", { name: /Save take/ }).click()
+    await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+    const kept = (await calls(page, "keep_take")).at(-1)!.args
+    expect((kept[5] as { label_id: number }[]).map((m) => m.label_id)).toEqual([1])
+  })
+
   test("a kind other than the first, chosen, is the one the Tab key comes to", async ({ page }) => {
     await openApp(page, {
       before:

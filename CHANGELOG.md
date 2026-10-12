@@ -99,26 +99,26 @@ opening.
   a take in hand and at take 10; **Mark** is as wide as **Open mark**; an
   error in the footer is said over its buttons; and the player keeps one
   line between its buttons and the map for a crop, a take that did not
-  load, or a warning about where the sound goes out. In the player **M** and
-  **S** are on the fader's row, after the fader, so a track's name has its
-  plate's whole width; a name still too long is cut, and shows whole on
-  hover and when Tab reaches it. The tracks are one group, with no lines
+  load, or a warning about the output the sound is sent to. In the player
+  **M** and **S** are on the fader's row, after the fader, so a track's name
+  has its plate's whole width; a name still too long is cut, and shows whole
+  on hover and when Tab reaches it. The tracks are one group, with no lines
   between them: each track's waveform, or its notes, sits on a darker well
   of its own, and a track on **Both** has its audio and its notes on one
-  well, split by a thin line. **Master** is a group of its own under them;
-  held at the bottom of the window as the page scrolls, it is as wide as the
-  lanes, so no part of a lane shows beside it. In History, with no take
-  open, the evening's figures have moved from over the songs into the
-  rehearsal's own head: they sit beside its name, give way when the name
-  needs the room, and pointing at them shows them all. The name wraps there
-  too instead of being cut, and the day, the set and the folder run across
-  the head under them. Smaller things: the player's **Play**, the share
-  dialog and a lane of notes being read show a spinner only after a second,
-  and a lane whose notes cannot be read says so; the names of a lane of
-  notes' rows are 12 px, up from 9, and the lane is taller to hold them;
-  **Repeat**, **M** and **S** are grey when on; the marker's labels are one
-  switch that the arrow keys move along; on the map the part on screen is
-  grey; and an empty set under **Next take** says how to fill it.
+  well, split by a thin line. **Master** is a group of its own under them,
+  held at the bottom of the window in a band as wide as the lanes, so no
+  part of a lane shows beside it. In History, with no take open, the
+  evening's figures have moved from over the songs into the rehearsal's own
+  head: they sit beside its name, give way when the name needs the room, and
+  pointing at them shows them all. The name wraps there too instead of being
+  cut, and the day, the set and the folder run across the head under them.
+  Smaller things: the player's **Play**, the share dialog and a lane of
+  notes being read show a spinner only after a second, and a lane whose
+  notes cannot be read says so; the row names in a lane of notes are 12 px,
+  up from 9, and the lane is taller to hold them; **Repeat**, **M** and
+  **S** are grey when on; the marker's labels are one switch that the arrow
+  keys move along; on the map the part on screen is grey; and an empty set
+  under **Next take** says how to fill it.
 
 ## 0.11.1
 

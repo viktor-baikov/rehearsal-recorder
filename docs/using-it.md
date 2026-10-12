@@ -174,7 +174,8 @@ A long name wraps, with its pencil after its last word, and is never cut.
 The figures give way when the name needs the room, a whole figure at a
 time: the size on disk first, then the cloud, then the takes, and the
 length last. Once one has gone, pointing at them shows them all. The button
-always stays. The player in History has the same header.
+always stays. The player in History has the same figures and button beside
+the rehearsal's name, which wraps there too, but no pencil.
 
 On the right is **Next take**: the name the next take will get, in a field
 of its own, and under it the songs. A long name wraps in the field. A new
@@ -578,10 +579,10 @@ There are three ways to send takes:
 
 - **By hand:** press the cloud button on a take and choose what to send. The
   copy is made in the background, so you can keep working.
-- **The starred ones:** **Send starred**, over the takes on the rehearsal
-  screen and in History, sends every ★ take of the evening that is not in
-  the cloud folder yet and not waiting to go. Its tooltip says why when
-  there is nothing to send.
+- **The starred ones:** **Send starred**, at the head of the songs on the
+  rehearsal screen and in History, sends every ★ take of the evening that
+  is not in the cloud folder yet and not already waiting to be sent. Its
+  tooltip says why when there is nothing to send.
 - **Automatically:** turn on **Send saved takes automatically** in Settings.
   Every take is then copied after you save it. Nothing is copied while a take
   is recording. This setting needs a cloud folder, and it turns off if you
