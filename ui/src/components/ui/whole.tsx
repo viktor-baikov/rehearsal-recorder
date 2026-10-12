@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ComponentProps,
   type ReactElement,
   type ReactNode,
 } from "react"
@@ -135,12 +136,39 @@ export function WholeTip({
   )
 }
 
-/** A text that may be cut, shown whole on hover when it is. */
-export function Whole({ text, className }: { text: string; className?: string }) {
+/**
+ * A text that may be cut, shown whole on hover when it is.
+ *
+ * Plain, only a pointer reaches it. With `reach` the keys do too: while the
+ * text is cut it is a Tab stop, with the shared focus ring, and its tip opens
+ * on focus; once it fits, it takes no place in the Tab order and no ring. That
+ * is for a name nothing else on the page says whole, such as a lane's plate.
+ * Anything else given goes on the text's box (a `data-` mark for a test).
+ */
+export function Whole({
+  text,
+  className,
+  reach = false,
+  ...props
+}: Omit<ComponentProps<"span">, "children" | "ref"> & {
+  text: string
+  /** A Tab stop while the text is cut. */
+  reach?: boolean
+}) {
   const [ref, cut] = useCut<HTMLSpanElement>()
   return (
     <WholeTip cut={cut} text={text}>
-      <span ref={ref} data-cut={cut || undefined} className={cn("block", className)}>
+      <span
+        {...props}
+        ref={ref}
+        data-cut={cut || undefined}
+        tabIndex={reach && cut ? 0 : undefined}
+        className={cn(
+          "block",
+          reach && "rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          className,
+        )}
+      >
         {text}
       </span>
     </WholeTip>

@@ -77,10 +77,37 @@ export const Bottom: Story = { render: () => <Bare half="bottom" /> }
 export const BottomLight: Story = { ...Bottom, globals: { theme: "light" } }
 
 /** A track's plate in its row of 56 px: the card's fill with no frame, the
- *  name with M and S on one row and the fader under it. */
+ *  name on a row of its own, and under it the fader with M and S after it. */
 export const Single: Story = { render: () => <Audio /> }
 /** The same on the light theme, whatever the toolbar says. */
 export const SingleLight: Story = { ...Single, globals: { theme: "light" } }
+
+/** A name past the plate's width (about 152 px) is cut to its row and whole in
+ *  the shared tip on hover; Tab reaches it while it is cut. The notes plate's
+ *  name and port are the same. */
+export const LongName: Story = {
+  render: () => (
+    <div className="flex flex-col gap-2">
+      <div className="h-14">
+        <LaneControls
+          name="Lead and backing vocals (Hanna)"
+          icon="vocals"
+          channels={1}
+          muted={false}
+          soloed={false}
+          dimmed={false}
+          volume={0.8}
+          levels={[0.45]}
+          onToggleMute={noop}
+          onToggleSolo={noop}
+          onVolume={noop}
+          onVolumeCommit={noop}
+        />
+      </div>
+      <NotesPlate name="Keys (Nord Stage 3 MIDI)" icon="keys" port="Nord Stage 3 MIDI Output" />
+    </div>
+  ),
+}
 
 /** A track that records notes too is one card of two halves: the audio plate
  *  above, with its lower corners square, and the notes' plate below, with its

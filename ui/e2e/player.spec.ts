@@ -556,7 +556,8 @@ test.describe("the mix", () => {
     await expect(master).toHaveValue(level)
 
     // Reached with the keyboard, the fader is what the arrows are aimed at.
-    await page.focus("input[aria-label='Vocals volume']")
+    // It is the stop after the last track's S, which is after its fader.
+    await page.focus("button[aria-label='Solo Vocals']")
     await page.keyboard.press("Tab")
     expect(await page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toBe(
       "Master volume"

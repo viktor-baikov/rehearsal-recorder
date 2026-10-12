@@ -54,6 +54,27 @@ describe("Whole", () => {
     const out = renderToStaticMarkup(createElement(Whole, { text: "A long name" }))
     expect(out).toMatch(/<span[^>]*data-slot="tooltip-trigger"[^>]*>A long name<\/span>/)
   })
+
+  it("takes no Tab stop and no ring of its own unless it is asked to reach", () => {
+    const out = renderToStaticMarkup(createElement(Whole, { text: "A long name" }))
+    expect(out).not.toContain("tabindex")
+    expect(out).not.toContain("focus-visible")
+  })
+
+  it("with reach has the shared focus ring, and a Tab stop only once it is cut", () => {
+    // Rendered on the server nothing is measured, so nothing is cut yet.
+    const out = renderToStaticMarkup(createElement(Whole, { text: "A long name", reach: true }))
+    expect(out).toContain("focus-visible:ring-[3px]")
+    expect(out).toContain("focus-visible:ring-ring/50")
+    expect(out).not.toContain("tabindex")
+  })
+
+  it("puts what else it is given on its text's box", () => {
+    // A variable, not a literal: only JSX lets a data- attribute through.
+    const props = { text: "Drums", reach: true, className: "truncate", "data-plate-name": "Drums" }
+    const out = renderToStaticMarkup(createElement(Whole, props))
+    expect(out).toMatch(/<span[^>]*data-plate-name="Drums"[^>]*class="[^"]*truncate[^"]*"[^>]*>Drums<\/span>/)
+  })
 })
 
 describe("a figure drawn as more than its text", () => {
