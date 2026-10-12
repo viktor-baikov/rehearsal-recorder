@@ -665,9 +665,8 @@ test("a long song name is cut to 224 px and shown whole on hover and on focus", 
   await expect(name).toHaveText(LONG)
   await settled(page)
   expect((await name.boundingBox())!.width).toBeLessThanOrEqual(224)
-  // The tip is the shared one: no native title is left in the strip. (The ★
-  // is StarButton's, which the take row shares.)
-  const titled = strip(page).locator("[title]:not([aria-label^='Star '])")
+  // The tip is the shared one: no native title is left in the strip.
+  const titled = strip(page).locator("[title]")
   await expect(titled).toHaveCount(0)
 
   const tip = page.locator("[data-whole][data-state$='open']")

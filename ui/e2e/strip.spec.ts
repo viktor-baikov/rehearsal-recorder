@@ -200,11 +200,11 @@ test("the marks on a tab are shared dots with no title, and a count at 12 px", a
   const count = dots.last().locator("xpath=following-sibling::span")
   await expect(count).toHaveText("1")
   expect((await style(count, "font-size"))["font-size"]).toBe("12px")
-  // Nothing in the strip is titled but the ★ (StarButton, which the take row
-  // shares): not the dots, not the number, not the buttons.
+  // Nothing in the strip is titled: not the dots, not the number, not the
+  // buttons, not the star.
   await songs(page).click()
   await expect(strip(page).locator("[data-column] [data-slot='label-dot']")).not.toHaveCount(0)
-  await expect(strip(page).locator("[title]:not([aria-label^='Star '])")).toHaveCount(0)
+  await expect(strip(page).locator("[title]")).toHaveCount(0)
 })
 
 test("the edge buttons are the shared ones with their name in a tip", async ({ page }) => {
