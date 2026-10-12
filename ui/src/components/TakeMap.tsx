@@ -151,7 +151,7 @@ export function TakeMap({
         {zoomed && (
           <span
             data-view-frame
-            className="absolute inset-y-0 min-w-1.5 cursor-grab rounded-sm bg-primary/30 active:cursor-grabbing"
+            className="absolute inset-y-0 min-w-1.5 cursor-grab rounded-sm bg-foreground/15 active:cursor-grabbing"
             style={{ left: `${pct(from)}%`, width: `${pct(to) - pct(from)}%` }}
           />
         )}
@@ -164,7 +164,7 @@ export function TakeMap({
             it goes. Without a word saying so that reads as the zoom having
             broken. */}
         {zoomed && closest && (
-          <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-[10px] text-muted-foreground">
+          <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-xs text-muted-foreground">
             closest zoom
           </span>
         )}

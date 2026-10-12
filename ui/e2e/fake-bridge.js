@@ -1853,6 +1853,7 @@ window.__MAKE_API__ = () => ({
     return {ok:true, queued, failed};
   }),
   unshare_take: track('unshare_take', async (folder, n) => {
+    await held('unshare_take');
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     if (take) take.cloud = {};
     return JSON.parse(JSON.stringify({ok:true, removed:[], trashed:true}));

@@ -999,7 +999,7 @@ export function HistoryScreen({
             spaceKey
             goKeys
             canCrop={!busy}
-            status={<RunningLine entry={cropping} label="Cropping" />}
+            status={cropping && <RunningLine entry={cropping} label="Cropping" />}
           />
         </div>
         {takeDialogs}

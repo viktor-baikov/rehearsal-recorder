@@ -1,23 +1,32 @@
 import { useEffect, useState } from "react"
 import {
+  CircleAlert,
   Flag,
-  Loader2,
   Pencil,
   Pause,
   Play,
   Repeat,
   SkipBack,
+  TriangleAlert,
   Undo2,
   Redo2,
   X,
 } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { LabelDot } from "@/components/ui/mark"
+import { Spinner } from "@/components/ui/spinner"
+import { Toggle } from "@/components/ui/toggle"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { WholeTip, useCut } from "@/components/ui/whole"
 import { Timeline } from "@/components/Timeline"
 import { PlayerKeys } from "@/components/PlayerKeys"
+import { useAfter } from "@/hooks/useAfter"
 import { useKey } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
+import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import { api, type Marker, type MissingNotes, type NotesFile, type TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 
@@ -114,8 +123,9 @@ export function TakePlayer({
    *  real seconds, and a second click is not a no-op: Python re-reads the now
    *  shorter take and cuts it again. */
   canCrop?: boolean
-  /** A line of its own above the player's warnings — how far along a crop
-   *  of this take is. */
+  /** What the player's line says while a crop of this take runs — how far
+   *  along it is. Set only while there is something to say: a line that
+   *  is there but empty would keep the warning from being heard. */
   status?: React.ReactNode
   /** Space plays and pauses on this screen. On the review screen it saves
    *  the take instead, and Play must not claim it. */
@@ -123,7 +133,6 @@ export function TakePlayer({
   /** ↑ and ↓ go to the song's other goes: the take strip is above. */
   goKeys?: boolean
 }) {
-  const labels = useLabels()
   const notesRead = useTakeNotes(notes, notesMissing)
   // The same rule the timeline draws by: one end set reaches to the take's
   // own start or end.
@@ -137,7 +146,7 @@ export function TakePlayer({
   const cropRegionOk = !tooShort && lost > WHOLE_TAKE_SLACK_SEC
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col">
       <Transport
         player={player}
         spaceKey={spaceKey}
@@ -147,109 +156,188 @@ export function TakePlayer({
         onEditMarker={onEditMarker}
       />
 
-      {status}
+      <PlayerLine error={player.loadError} status={status} warning={player.outputWarning} />
 
-      {player.outputWarning && !player.loadError && (
-        <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
-          {player.outputWarning}
-        </div>
-      )}
+      {/* The take is one group, 24 px apart inside it. The line above holds
+          that room itself, so it has no gap round it. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-6">
+        <Timeline
+          player={player}
+          markers={markers}
+          notes={notes}
+          notesMissing={notesMissing}
+          notesRead={notesRead}
+          crop={
+            onCrop
+              ? {
+                  onClick: () => band && onCrop(band.a, band.b),
+                  enabled: cropRegionOk && canCrop && !player.loading,
+                  // A disabled button cannot be hovered, so a tip on it would
+                  // never reach anybody while it matters. The reason has to
+                  // be on screen, beside the button it explains. The two
+                  // reasons are opposite mistakes, and the advice for one is
+                  // no help at all with the other.
+                  whyOff: cropRegionOk
+                    ? undefined
+                    : tooShort
+                      ? "at least a second to crop"
+                      : "that is the whole take",
+                }
+              : undefined
+          }
+        />
 
-      {player.loadError && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {player.loadError}
-        </div>
-      )}
-
-      <Timeline
-        player={player}
-        markers={markers}
-        notes={notes}
-        notesMissing={notesMissing}
-        notesRead={notesRead}
-        crop={
-          onCrop
-            ? {
-                onClick: () => band && onCrop(band.a, band.b),
-                enabled: cropRegionOk && canCrop && !player.loading,
-                // The two reasons the button can be off are opposite
-                // mistakes, and the advice for one is no help at all with
-                // the other.
-                title: cropRegionOk
-                  ? "Keep only this part of the take"
-                  : tooShort
-                    ? "Mark at least a second of the take to keep"
-                    : "Mark a shorter part of the take to keep",
-                // And the title never reaches anybody while it matters: a
-                // disabled button cannot be hovered. The reason has to be
-                // on screen, beside the button it explains.
-                whyOff: cropRegionOk
-                  ? undefined
-                  : tooShort
-                    ? "at least a second to crop"
-                    : "that is the whole take",
-              }
-            : undefined
-        }
-      />
-
-      {markers.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">Markers</span>
-          {markers.map((m) => {
-            const label = labelOf(labels, m.label_id)
-            const look = labelLook(label.colour)
-            return (
-              <span
+        {markers.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Markers</span>
+            {markers.map((m) => (
+              <MarkChip
                 key={m.at}
-                className={cn(
-                  "inline-flex max-w-full items-center gap-1.5 rounded-full border bg-card py-0.5 pr-1 pl-2.5",
-                  look.chip
-                )}
-              >
-                <span className={cn("size-1.5 shrink-0 rounded-full", look.dot)} />
-                <button
-                  type="button"
-                  onClick={() => player.seek(m.at)}
-                  className="tnum shrink-0 text-xs hover:text-primary"
-                  title="Jump to this marker"
-                >
-                  {formatMMSS(m.at)}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onEditMarker?.(m)}
-                  className="truncate text-xs text-muted-foreground hover:text-foreground"
-                  title={markText(label, m.note)}
-                >
-                  {markText(label, m.note)}
-                </button>
-                {onEditMarker && (
-                  <button
-                    type="button"
-                    onClick={() => onEditMarker(m)}
-                    aria-label={`Edit marker at ${formatMMSS(m.at)}`}
-                    className="shrink-0 text-muted-foreground hover:text-foreground"
-                  >
-                    <Pencil className="size-3" />
-                  </button>
-                )}
-                {onRemoveMarker && (
-                  <button
-                    type="button"
-                    onClick={() => onRemoveMarker(m.at)}
-                    aria-label={`Remove marker at ${formatMMSS(m.at)}`}
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
-                  >
-                    <X className="size-3" />
-                  </button>
-                )}
-              </span>
-            )
-          })}
-        </div>
-      )}
+                marker={m}
+                onSeek={player.seek}
+                onEdit={onEditMarker}
+                onRemove={onRemoveMarker}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
+  )
+}
+
+/** One thing said in the line, whole in a tip when it is cut. The tip is on
+ *  the line itself, and cut, the line is a Tab stop too, so the keyboard
+ *  reaches the whole of it as the pointer does. The ring is round the line
+ *  and not the words: the words are cut at their own box, which would clip a
+ *  ring drawn outside them. A tip's trigger takes over the data-slot of what
+ *  it is put on, which the Alert's own look does not use. */
+function Said({ variant, text }: { variant: "warning" | "destructive"; text: string }) {
+  const [ref, cut] = useCut<HTMLSpanElement>()
+  const Icon = variant === "destructive" ? CircleAlert : TriangleAlert
+  return (
+    <WholeTip cut={cut} text={text}>
+      <Alert
+        size="line"
+        variant={variant}
+        tabIndex={cut ? 0 : undefined}
+        className="rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <Icon />
+        <AlertDescription>
+          <span ref={ref} className="block truncate">
+            {text}
+          </span>
+        </AlertDescription>
+      </Alert>
+    </WholeTip>
+  )
+}
+
+/**
+ * The one line the player keeps for what it has to say (B4), between the
+ * transport and the map: always there, 24 px tall, empty until something
+ * comes. So nothing under it moves when a crop starts or the output goes
+ * quiet. One thing at a time: a take that did not load, since its lanes
+ * never come; else how far a crop is; else the output's warning.
+ */
+export function PlayerLine({
+  error,
+  status,
+  warning,
+}: {
+  error: string | null
+  status: React.ReactNode
+  warning: string | null
+}) {
+  return (
+    <div data-player-line className="flex h-6 shrink-0 items-center">
+      {error ? (
+        <Said variant="destructive" text={error} />
+      ) : status ? (
+        status
+      ) : warning ? (
+        <Said variant="warning" text={warning} />
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * A marker of the take: its time, which goes there, and its label and note,
+ * which open the marker. Words too long for the room are cut, and show whole
+ * in a tip.
+ */
+function MarkChip({
+  marker,
+  onSeek,
+  onEdit,
+  onRemove,
+}: {
+  marker: Marker
+  onSeek: (at: number) => void
+  onEdit?: (marker: Marker) => void
+  onRemove?: (at: number) => void
+}) {
+  const labels = useLabels()
+  const label = labelOf(labels, marker.label_id)
+  const words = markText(label, marker.note)
+  const [wordsRef, cut] = useCut<HTMLSpanElement>()
+  return (
+    <span
+      className={cn(
+        "inline-flex max-w-full items-center gap-1 rounded-full border bg-card py-0.5 pr-1 pl-2.5",
+        labelLook(label.colour).chip
+      )}
+    >
+      <LabelDot colour={label.colour} />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-tiny"
+        onClick={() => onSeek(marker.at)}
+        className="tnum w-auto px-1 text-xs"
+      >
+        {formatMMSS(marker.at)}
+      </Button>
+      <WholeTip cut={cut} text={words}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-tiny"
+          onClick={() => onEdit?.(marker)}
+          className="w-auto min-w-0 shrink px-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <span ref={wordsRef} className="truncate">
+            {words}
+          </span>
+        </Button>
+      </WholeTip>
+      {onEdit && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-tiny"
+          onClick={() => onEdit(marker)}
+          aria-label={`Edit marker at ${formatMMSS(marker.at)}`}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <Pencil />
+        </Button>
+      )}
+      {onRemove && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-tiny"
+          onClick={() => onRemove(marker.at)}
+          aria-label={`Remove marker at ${formatMMSS(marker.at)}`}
+          className="rounded-full text-muted-foreground hover:text-destructive"
+        >
+          <X />
+        </Button>
+      )}
+    </span>
   )
 }
 
@@ -268,13 +356,7 @@ function Transport({
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
 }) {
-  const { looping, position, duration, region } = player
-  // The same rule the timeline draws by: one end set reaches to the take's
-  // own start or end.
-  const loopBand =
-    region.a !== null || region.b !== null
-      ? { a: region.a ?? 0, b: region.b ?? duration }
-      : null
+  const { looping, position, duration } = player
 
   // A marker within a second of the cursor counts as "this one".
   const nearby = markers.find((m) => Math.abs(m.at - position) < 1)
@@ -286,24 +368,30 @@ function Transport({
   useKey("Home", player.restart, !player.loading)
   useKey("m", mark, !!onAddMarker && !player.loading)
   useKey("r", player.toggleLoop, !player.loading)
+  // Play keeps its triangle for the first second of a take opening (B5).
+  const slow = useAfter(player.loading, SPINNER_AFTER_MS)
 
   return (
     <div
       role="toolbar"
       aria-label="Transport"
-      className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3"
+      className="flex flex-wrap items-center gap-3 rounded-xl bg-card px-6 py-4"
     >
-      <Button
-        variant="ghost"
-        size="icon-row"
-        onClick={player.restart}
-        aria-label="To start"
-        aria-keyshortcuts="Home"
-        title="To start"
-        disabled={player.loading}
-      >
-        <SkipBack />
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-row"
+            onClick={player.restart}
+            aria-label="To start"
+            aria-keyshortcuts="Home"
+            disabled={player.loading}
+          >
+            <SkipBack />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>To start</TooltipContent>
+      </Tooltip>
       <Button
         variant="ghost"
         size="icon-row"
@@ -323,13 +411,7 @@ function Transport({
         aria-label={player.playing ? "Pause" : "Play"}
         aria-keyshortcuts={spaceKey ? "Space" : undefined}
       >
-        {player.loading ? (
-          <Loader2 className="animate-spin" />
-        ) : player.playing ? (
-          <Pause />
-        ) : (
-          <Play />
-        )}
+        {slow ? <Spinner after={0} /> : player.playing ? <Pause /> : <Play />}
       </Button>
 
       <Button
@@ -351,38 +433,39 @@ function Transport({
       {/* Repeat is part of how the take plays, so it sits with the playing,
           by the time. Clear and Crop are not here: they are about the
           region, and sit under its times on the timeline. */}
-      <Button
-        variant={looping ? "default" : "outline"}
-        size="row"
-        onClick={player.toggleLoop}
+      <Toggle
+        variant="outline"
+        pressed={looping}
+        onPressedChange={() => player.toggleLoop()}
         disabled={player.loading}
-        aria-pressed={looping}
         aria-label="Repeat"
         aria-keyshortcuts="R"
-        title={loopBand ? "Loop the marked stretch" : "Loop the whole take"}
-        className={cn(looping && "bg-warn text-warn-foreground hover:bg-warn/90")}
       >
         <Repeat />
         Repeat
-      </Button>
+      </Toggle>
 
       <div className="ml-auto flex items-center gap-1.5">
         {onAddMarker && (
           <Button
-            variant={nearby !== undefined ? "default" : "outline"}
+            variant="outline"
             size="row"
             onClick={mark}
             disabled={player.loading}
             aria-label={nearby !== undefined ? "Edit marker" : "Add marker"}
             aria-keyshortcuts="M"
-            title={
-              nearby !== undefined
-                ? "There is already a marker here — open it"
-                : "Mark this spot and say what happened"
-            }
           >
             <Flag />
-            {nearby !== undefined ? "Open mark" : "Mark"}
+            {/* One width whichever it says: nothing beside it moves, and the
+                row does not wrap as the playhead nears a mark (B4). */}
+            <span className="grid">
+              <span className={cn("col-start-1 row-start-1", nearby !== undefined && "invisible")}>
+                Mark
+              </span>
+              <span className={cn("col-start-1 row-start-1", nearby === undefined && "invisible")}>
+                Open mark
+              </span>
+            </span>
           </Button>
         )}
 

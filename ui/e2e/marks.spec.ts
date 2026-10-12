@@ -337,7 +337,7 @@ test.describe("Marks in History", () => {
     await row(page, VIASNA).locator("[data-line='comment']").click()
     await page.getByRole("button", { name: "Edit marker at 0:40" }).click()
     const dialog = page.getByRole("dialog")
-    await dialog.getByRole("button", { name: "Do again" }).click()
+    await dialog.getByRole("radio", { name: "Do again" }).click()
     await dialog.getByRole("button", { name: "Save", exact: true }).click()
     await expect(dialog).toHaveCount(0)
     await page.keyboard.press("Escape")
@@ -398,7 +398,7 @@ test.describe("Marks in History", () => {
     await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
     await page.getByRole("button", { name: "Edit marker at 0:40" }).click()
     const dialog = page.getByRole("dialog")
-    await dialog.getByRole("button", { name: "Do again" }).click()
+    await dialog.getByRole("radio", { name: "Do again" }).click()
     await dialog.getByRole("button", { name: "Save", exact: true }).click()
     await expect(dialog).toHaveCount(0)
 

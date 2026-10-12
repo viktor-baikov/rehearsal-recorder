@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react"
 import { Repeat, Scissors, X } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 
@@ -7,21 +9,22 @@ import { formatMMSS } from "@/lib/format"
 export type RegionCrop = {
   onClick: () => void
   enabled: boolean
-  title: string
   /** Why Crop is off, in a few words, or absent when it is usable. */
   whyOff?: string
 }
 
 /** Plain, like the other buttons: Crop does something to the take, and the
- *  orange is the region's own. Solid, so the waveform under it does not show
- *  through the word. */
+ *  orange is the region's own. Solid in both themes, so the waveform under
+ *  it does not show through the word. */
 const ACTION =
-  "inline-flex h-6 items-center gap-1 rounded-md border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+  "h-6 gap-1 bg-card px-2 text-xs hover:bg-accent dark:bg-card dark:hover:bg-accent"
 
 /** The two beside the times are parts of the tag, in its own orange, not
- *  buttons of their own: tinted apart from it, they read as something else. */
+ *  buttons of their own: tinted apart from it, they read as something else.
+ *  They are as tall as the tag and square, the tag rounds them; their tints
+ *  are the tag's own text colour, a little of it. */
 const ON_TAG =
-  "inline-flex w-5 items-center justify-center border-l border-warn-foreground/15 transition-colors hover:bg-black/10 focus-visible:ring-2 focus-visible:ring-warn-foreground/50 focus-visible:outline-none focus-visible:ring-inset"
+  "h-auto w-5 self-stretch rounded-none border-transparent border-l-warn-foreground/15 text-warn-foreground hover:bg-warn-foreground/10 hover:text-warn-foreground focus-visible:border-transparent focus-visible:border-l-warn-foreground/15 focus-visible:ring-warn-foreground/50 focus-visible:ring-inset dark:hover:bg-warn-foreground/10"
 
 /**
  * The region's times, written on the region, with what can be done with it.
@@ -82,52 +85,70 @@ export function RegionTag({
       style={{ left, top: topPx }}
     >
       <div className="flex items-stretch overflow-hidden rounded bg-warn text-warn-foreground">
-        <span data-region-span className="tnum px-1.5 py-0.5 text-[11px] leading-4">
+        <span data-region-span className="tnum px-1.5 py-0.5 text-xs leading-4">
           {formatMMSS(a)} – {formatMMSS(b)}
         </span>
         {actions && (
           <div className="pointer-events-auto flex items-stretch" onPointerDown={theirs}>
             {/* On, it is pressed in: darker, its loop at full strength. Off,
                 the loop is faint, as the transport's Repeat is plain. */}
-            <button
-              type="button"
-              onClick={onToggleLoop}
-              aria-pressed={looping}
-              aria-label="Loop the region"
-              title={looping ? "Stop repeating it (R)" : "Repeat it (R)"}
-              className={cn(ON_TAG, looping ? "bg-black/15 hover:bg-black/20" : "[&>svg]:opacity-55")}
-            >
-              <Repeat className="size-3" />
-            </button>
-            <button
-              type="button"
-              onClick={onClear}
-              aria-label="Clear the loop region"
-              title="Clear it — Repeat then loops the whole take"
-              className={ON_TAG}
-            >
-              <X className="size-3" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-tiny"
+                  onClick={onToggleLoop}
+                  aria-pressed={looping}
+                  aria-label="Loop the region"
+                  className={cn(
+                    ON_TAG,
+                    looping
+                      ? "bg-warn-foreground/15 hover:bg-warn-foreground/20 dark:hover:bg-warn-foreground/20"
+                      : "[&>svg]:opacity-55"
+                  )}
+                >
+                  <Repeat className="size-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{looping ? "Stop repeating it (R)" : "Repeat it (R)"}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-tiny"
+                  onClick={onClear}
+                  aria-label="Clear the loop region"
+                  className={ON_TAG}
+                >
+                  <X className="size-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Clear it — Repeat then loops the whole take</TooltipContent>
+            </Tooltip>
           </div>
         )}
       </div>
       {actions && crop && (
         <div className="pointer-events-auto flex items-center gap-1" onPointerDown={theirs}>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="row"
             onClick={crop.onClick}
             disabled={!crop.enabled}
             aria-label="Crop to the region"
-            title={crop.title}
             className={ACTION}
           >
             <Scissors className="size-3" />
             Crop
-          </button>
-          {/* A disabled button takes no pointer events, so its title is
-              never read; the reason has to be on screen beside it. */}
+          </Button>
+          {/* A disabled button takes no pointer events, so a tip on it would
+              never open; the reason has to be on screen beside it. */}
           {crop.whyOff && (
-            <span className="rounded-sm bg-card/85 px-1.5 py-px text-[11px] text-muted-foreground">
+            <span className="rounded-sm bg-card/85 px-1.5 py-px text-xs text-muted-foreground">
               {crop.whyOff}
             </span>
           )}
