@@ -2,6 +2,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -38,6 +39,7 @@ import { NewSetDialog, SetPicker } from "@/components/SetPicker"
 import { Shell } from "@/components/Shell"
 import { TrackRow } from "@/components/TrackRow"
 import { useAfter } from "@/hooks/useAfter"
+import { useSteady } from "@/hooks/useSteady"
 import { chosenSet, useSets } from "@/hooks/useSets"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
@@ -156,8 +158,12 @@ export function Setup({
   // never opened its input or its port.
   const checkRun = useRef(0)
   // Python is opening the inputs for a check: a press meanwhile opens no
-  // second one, nor a second chain of reads.
+  // second one, nor a second chain of reads. The ref is for the press, read
+  // at once; the state turns the button's icon into a spinner once it has
+  // taken a second (B5), as Start's does while the rehearsal opens.
   const opening = useRef(false)
+  const [openingCheck, setOpeningCheck] = useState(false)
+  const slowCheck = useAfter(openingCheck, SPINNER_AFTER_MS)
   // What the check hears from each track's port (P5, P8) and where its bar
   // stands, by the names the tracks had when it began, as Python has them;
   // and, by each track's place in the band, that name and what the track
@@ -208,6 +214,7 @@ export function Setup({
   const songChoices = useSongChoices(makingSet, null, null)
   const [rescanning, setRescanning] = useState(false)
   const slowLook = useAfter(rescanning, SPINNER_AFTER_MS)
+  const slowStart = useAfter(starting, SPINNER_AFTER_MS)
   const [stillMissing, setStillMissing] = useState(false)
 
   /**
@@ -590,12 +597,15 @@ export function Setup({
         recordsNotes(t) ? { name: t.name, mode: modeOf(t), port: portName(t) } : null
       )
     )
+    // Asked before the press is counted as opening: a bridge that is not
+    // there throws here, and leaves the button free for another press.
+    const asked = api().start_monitor(deviceIndex, samplerate, band)
     opening.current = true
-    const res = await api()
-      .start_monitor(deviceIndex, samplerate, band)
-      .finally(() => {
-        opening.current = false
-      })
+    setOpeningCheck(true)
+    const res = await asked.finally(() => {
+      opening.current = false
+      setOpeningCheck(false)
+    })
     if (!res.ok) {
       setError(res.error ?? "Could not open the input for checking")
       return
@@ -725,10 +735,27 @@ export function Setup({
   useSpacebar(inHand ? player.toggle : start, (inHand || canStart) && !makingSet)
   useEscape(uncue, inHand)
 
-  const playLastTime = (take: Take) => {
+  // Last time's handlers keep their identity while the check reads the
+  // levels every 80 ms and this screen is drawn again for each reading:
+  // Last time (memo) is then drawn again only when what plays changes, and
+  // does not measure its two dozen names and figure lines each time.
+  const playLastTime = useSteady((take: Take) => {
     if (checking) void stopCheck()
     playInOverview(take)
-  }
+  })
+  const openRehearsal = useSteady((folder: string) => onOpenRehearsal(folder))
+  const openHistory = useSteady(() => onOpenHistory())
+  const openSong = useSteady((title: string | null) => onOpenSong?.(title))
+  const pastPlayback = useMemo(
+    () =>
+      cued && {
+        take: cued,
+        playing: player.playing,
+        loading: player.loading,
+        position: player.position,
+      },
+    [cued, player.playing, player.loading, player.position]
+  )
 
   const saveTemplate = async () => {
     // device_index says which card this layout is for. It does not change the
@@ -913,7 +940,9 @@ export function Setup({
               checking && "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected"
             )}
           >
-            <Activity />
+            {/* A check that takes a second to open turns a spinner in its
+                icon's place (B5). */}
+            {slowCheck ? <Spinner after={0} /> : <Activity />}
             {/* As wide whichever it says, so nothing beside it moves. */}
             <span className="grid">
               <span className={cn("col-start-1 row-start-1", checking && "invisible")}>
@@ -925,8 +954,22 @@ export function Setup({
             </span>
           </Button>
           <Button variant="outline" size="row" onClick={saveTemplate}>
-            {saved ? <Check /> : null}
-            {saved ? "Template saved" : "Save as template"}
+            {/* As wide whichever it says, so Check signal beside it never
+                moves (B4). */}
+            <span className="grid">
+              <span className={cn("col-start-1 row-start-1", saved && "invisible")}>
+                Save as template
+              </span>
+              <span
+                className={cn(
+                  "col-start-1 row-start-1 flex items-center gap-2",
+                  !saved && "invisible"
+                )}
+              >
+                <Check />
+                Template saved
+              </span>
+            </span>
           </Button>
         </div>
       </div>
@@ -1036,19 +1079,12 @@ export function Setup({
   const pastPart = lastTime?.last ? (
     <LastTime
       data={lastTime}
-      playback={
-        cued && {
-          take: cued,
-          playing: player.playing,
-          loading: player.loading,
-          position: player.position,
-        }
-      }
+      playback={pastPlayback}
       problem={cued ? player.loadError : null}
       onPlay={playLastTime}
-      onOpen={onOpenRehearsal}
-      onAll={onOpenHistory}
-      onOpenSong={onOpenSong}
+      onOpen={openRehearsal}
+      onAll={openHistory}
+      onOpenSong={onOpenSong ? openSong : undefined}
     />
   ) : null
   const pastPlaying = cued !== null && player.playing
@@ -1134,7 +1170,10 @@ export function Setup({
                 disabled={!canStart}
                 aria-keyshortcuts={inHand ? undefined : "Space"}
               >
-                <Radio />
+                {/* A rehearsal that takes a second to open turns a spinner
+                    in the icon's place (B5): Start keeps its words and its
+                    width. */}
+                {slowStart ? <Spinner after={0} className="size-5" /> : <Radio />}
                 Start rehearsal
                 {/* Kept unseen while Space is the take's, so Start keeps its
                     width and the set beside it stays where it is (B4). */}
@@ -1163,7 +1202,7 @@ export function Setup({
         data-part="setup"
         className={cn("px-8 py-8", wide && "min-w-0 flex-1 overflow-y-auto")}
       >
-        <div className="mx-auto flex max-w-3xl min-w-0 flex-col gap-12">
+        <div className="mx-auto max-w-3xl min-w-0">
           {/* The tracks as one group, headed by what they record with, a
               line between each row (Q1). */}
           <section

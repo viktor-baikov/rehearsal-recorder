@@ -1118,6 +1118,7 @@ window.__MAKE_API__ = () => ({
   // window.__TONIGHT__ = [{name, duration_sec, starred?, markers?, cloud?}, …],
   // numbered from 1 in that order.
   start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, tracksIn, _depth, setId) => {
+    await held('start_rehearsal');
     const folder = '/rec/' + name;
     const tonight = (window.__TONIGHT__ || []).map((t, i) => ({take_number:i + 1, markers:[],
       tracks:[{name:'Guitar', file:`${folder}/t${i + 1}.wav`}], ...t}));

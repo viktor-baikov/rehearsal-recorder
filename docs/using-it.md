@@ -36,8 +36,8 @@ under **ASIO** to get all of them. The system output always plays through
 ![The setup screen with four tracks, checking the signal, and the set Gig on the 25th picked beside Start rehearsal](screenshots/setup.png)
 
 The setup screen has one track per musician: a name and the input it comes
-in on. The line under **Recording with** shows the interface, how many inputs
-it has and the recording quality. Click it to open Settings.
+in on. Beside **Recording with** is the interface, with how many inputs it
+has and the recording quality. Click it to open Settings.
 
 - Type a name for the rehearsal, at the bottom beside the set and
   **Start rehearsal**, or keep the date.

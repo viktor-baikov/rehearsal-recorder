@@ -2,6 +2,7 @@ import {
   callCount,
   calls,
   expect,
+  expectedError,
   hold,
   keyOn,
   lastTimeButton,
@@ -180,6 +181,85 @@ test.describe("the signal check", () => {
     expect(await callCount(page, "monitor_levels")).toBe(1)
     await letGo(page, "monitor_levels")
     await expect(page.getByText("signal", { exact: true })).toHaveCount(1)
+  })
+
+  test("a check that could not reach Python can be asked for again", async ({ page, pageErrors }) => {
+    await openApp(page)
+    const check = page.getByRole("button", { name: "Check signal" })
+    // The bridge gone for a moment, as before Python is ready: the press
+    // throws before anything is asked.
+    await page.evaluate(() => {
+      const w = window as unknown as { pywebview: { api?: unknown }; __API__?: unknown }
+      w.__API__ = w.pywebview.api
+      w.pywebview.api = undefined
+    })
+    await check.click()
+    await expect.poll(() => pageErrors.some((e) => /not ready yet/.test(e))).toBe(true)
+    expectedError(pageErrors, /not ready yet/)
+    await page.evaluate(() => {
+      const w = window as unknown as { pywebview: { api?: unknown }; __API__?: unknown }
+      w.pywebview.api = w.__API__
+    })
+
+    await check.click()
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+    expect(await callCount(page, "start_monitor")).toBe(1)
+  })
+
+  // B5: a press that takes a second shows a spinner in its icon's place, and
+  // nothing round it moves.
+  test("Check signal shows a spinner only after one second", async ({ page }) => {
+    await openApp(page)
+    const check = page.getByRole("button", { name: "Check signal" })
+    const save = page.getByRole("button", { name: "Save as template" })
+    await expect(check).toBeVisible()
+    await settled(page)
+    const boxes = async () => [await check.boundingBox(), await save.boundingBox()]
+    const before = await boxes()
+    await hold(page, "start_monitor")
+    const spinner = check.getByRole("status", { name: "Loading" })
+    const since = Date.now()
+    const at = (ms: number) => page.waitForTimeout(Math.max(0, ms - (Date.now() - since)))
+    await check.click()
+    await at(500)
+    expect(await spinner.isVisible(), "a spinner at 0.5 s").toBe(false)
+    await at(900)
+    expect(await spinner.isVisible(), "a spinner at 0.9 s").toBe(false)
+    await expect(spinner, "a spinner by 2 s").toBeVisible({ timeout: 2000 })
+    // Its words and its box as they were.
+    await expect(check.locator("span:not(.invisible) > span:not(.invisible)")).toHaveText("Check signal")
+    expect(await boxes()).toEqual(before)
+
+    await letGo(page, "start_monitor")
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+    await expect(page.getByRole("status", { name: "Loading" })).toHaveCount(0)
+  })
+
+  test("Start rehearsal shows a spinner only after one second", async ({ page }) => {
+    await openApp(page)
+    const start = startButton(page)
+    await expect(start).toBeEnabled()
+    await settled(page)
+    const boxes = async () => [
+      await start.boundingBox(),
+      await page.locator("[data-set-picker]").boundingBox(),
+    ]
+    const before = await boxes()
+    await hold(page, "start_rehearsal")
+    const spinner = start.getByRole("status", { name: "Loading" })
+    const since = Date.now()
+    const at = (ms: number) => page.waitForTimeout(Math.max(0, ms - (Date.now() - since)))
+    await start.click()
+    await at(500)
+    expect(await spinner.isVisible(), "a spinner at 0.5 s").toBe(false)
+    await at(900)
+    expect(await spinner.isVisible(), "a spinner at 0.9 s").toBe(false)
+    await expect(spinner, "a spinner by 2 s").toBeVisible({ timeout: 2000 })
+    await expect(start).toContainText("Start rehearsal")
+    expect(await boxes()).toEqual(before)
+
+    await letGo(page, "start_rehearsal")
+    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
   })
 
   test("Space after clicking Check signal starts the rehearsal, not the check again", async ({
@@ -687,8 +767,9 @@ test.describe("the track rows on the shared pieces", () => {
     await expect(looking).toBeDisabled()
     await at(500)
     expect(await spinner.isVisible(), "a spinner at 0.5 s").toBe(false)
-    await at(1500)
-    expect(await spinner.isVisible(), "a spinner at 1.5 s").toBe(true)
+    await at(900)
+    expect(await spinner.isVisible(), "a spinner at 0.9 s").toBe(false)
+    await expect(spinner, "a spinner by 2 s").toBeVisible({ timeout: 2000 })
     // The button keeps its box, its words and its spinner changing in it.
     expect(await looking.boundingBox()).toEqual(box)
 
@@ -837,6 +918,23 @@ test.describe("the start screen's groups", () => {
     const first = (await rows(page).first().boundingBox())!
     // The first row's own line is the edge between them.
     expect(Math.abs(first.y - (rw.y + rw.height))).toBeLessThanOrEqual(1)
+  })
+
+  test("Check signal does not move when the template is saved", async ({ page }) => {
+    await openApp(page)
+    const check = page.getByRole("button", { name: "Check signal" })
+    const save = page.getByRole("button", { name: /^(Save as template|Template saved)$/ })
+    await expect(save).toHaveAccessibleName("Save as template")
+    await settled(page)
+    const boxes = async () => [await check.boundingBox(), await save.boundingBox()]
+    const before = await boxes()
+
+    await save.click()
+    await expect(save).toHaveAccessibleName("Template saved")
+    expect(await boxes()).toEqual(before)
+    // It says Save as template again after a while, in the same box.
+    await expect(save).toHaveAccessibleName("Save as template", { timeout: 4000 })
+    expect(await boxes()).toEqual(before)
   })
 
   test("Start keeps its width while Last time plays", async ({ page }) => {
@@ -1515,6 +1613,70 @@ test.describe("Last time and long names on the shared pieces", () => {
     await check(await openPanel(page), "in the panel")
   })
 
+  test("the check's readings do not measure Last time again", async ({ page }) => {
+    // The stress data beside the setup: two dozen figure lines and cut names,
+    // each measured as it is drawn. The check reads the levels every 80 ms.
+    await page.setViewportSize({ width: 1180, height: 820 })
+    await openBandApp(page, { stress: true })
+    await expect(beside(page)).toBeVisible()
+    await settled(page)
+    // Every box or width read inside Last time, from here on.
+    await page.evaluate(() => {
+      const w = window as unknown as { __READS__: number }
+      w.__READS__ = 0
+      const inside = (el: Element) => el.closest("aside[aria-label='Last time']") !== null
+      const rect = Element.prototype.getBoundingClientRect
+      Element.prototype.getBoundingClientRect = function () {
+        if (inside(this)) w.__READS__++
+        return rect.call(this)
+      }
+      for (const prop of ["scrollWidth", "clientWidth"] as const) {
+        const own = Object.getOwnPropertyDescriptor(Element.prototype, prop)!
+        Object.defineProperty(Element.prototype, prop, {
+          configurable: true,
+          get() {
+            if (inside(this)) w.__READS__++
+            return own.get!.call(this)
+          },
+        })
+      }
+    })
+    const reads = () => page.evaluate(() => (window as unknown as { __READS__: number }).__READS__)
+    // The band's levels are not counted by the fake: counted here.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __LEVEL_READS__: number
+        pywebview: { api: Record<string, (...a: unknown[]) => unknown> }
+      }
+      w.__LEVEL_READS__ = 0
+      const api = w.pywebview.api
+      const levels = api.monitor_levels
+      api.monitor_levels = (...a) => {
+        w.__LEVEL_READS__++
+        return levels(...a)
+      }
+    })
+    const readings = () =>
+      page.evaluate(() => (window as unknown as { __LEVEL_READS__: number }).__LEVEL_READS__)
+
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+    await expect.poll(readings).toBeGreaterThanOrEqual(2)
+    const before = await reads()
+    const from = await readings()
+    await expect.poll(readings).toBeGreaterThanOrEqual(from + 10)
+    expect(await reads(), "reads inside Last time over ten readings").toBe(before)
+
+    // And it still plays, and opens.
+    await page.getByRole("button", { name: "Stop checking" }).click()
+    const play = beside(page).getByRole("button", { name: /^Play Pałyn 7/ })
+    await play.click()
+    await expect(beside(page).getByRole("button", { name: /^Pause Pałyn 7/ })).toBeVisible()
+    await beside(page).getByRole("button", { name: /^Pause Pałyn 7/ }).click()
+    await beside(page).getByRole("button", { name: /^Open .* in history$/ }).click()
+    await expect(page.getByRole("navigation", { name: "Rehearsals" })).toBeVisible()
+  })
+
   test("a press the browser called off leaves the tip to the keyboard", async ({ page }) => {
     await openBandApp(page, { stress: true })
     const past = beside(page)
@@ -1792,10 +1954,7 @@ test.describe("Last time and long names on the shared pieces", () => {
     const play = past.getByRole("button", { name: "Play Pałyn 2, the last go at Pałyn" })
     await expect(play).toBeVisible()
     // The take is slow to open: the fake holds it until it is let go.
-    await page.evaluate(() => {
-      const w = window as unknown as { __HOLD__?: Record<string, Promise<void>>; __LET_GO__?: () => void }
-      w.__HOLD__ = { player_open: new Promise<void>((r) => (w.__LET_GO__ = r)) }
-    })
+    await hold(page, "player_open")
     const button = past.locator("[data-song='Pałyn'] button[data-look]")
     const spinner = button.locator(".animate-spin")
     const box = await button.boundingBox()
@@ -1804,13 +1963,14 @@ test.describe("Last time and long names on the shared pieces", () => {
     await play.click()
     await expect(button).toHaveAttribute("data-look", "loading")
     await at(500)
-    expect(await spinner.count(), "a spinner at 0.5 s").toBe(0)
-    await at(1500)
-    expect(await spinner.count(), "a spinner at 1.5 s").toBe(1)
+    expect(await spinner.isVisible(), "a spinner at 0.5 s").toBe(false)
+    await at(900)
+    expect(await spinner.isVisible(), "a spinner at 0.9 s").toBe(false)
+    await expect(spinner, "a spinner by 2 s").toBeVisible({ timeout: 2000 })
     // The spinner takes the ▶'s place, in the same box: nothing round it moves.
     expect(await button.boundingBox(), "the ▶'s box with the spinner").toEqual(box)
 
-    await page.evaluate(() => (window as unknown as { __LET_GO__: () => void }).__LET_GO__())
+    await letGo(page, "player_open")
     await expect(past.getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })).toBeVisible()
     await expect(spinner).toHaveCount(0)
   })

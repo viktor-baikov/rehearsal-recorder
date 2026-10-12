@@ -1,7 +1,7 @@
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
-import { FigureLine, Figures, Whole } from "@/components/ui/whole"
+import { FigureLine, Figures, Whole, type FigurePart } from "@/components/ui/whole"
 
 const parts = [
   { text: "18 inputs", keep: 2 },
@@ -58,7 +58,7 @@ describe("Whole", () => {
 
 describe("a figure drawn as more than its text", () => {
   // A ★ go: drawn with the star icon, measured as drawn, read as its words.
-  const drawn = [
+  const drawn: FigurePart[] = [
     { text: "★ Dym 2", keep: 3, node: createElement("b", null, "Dym 2") },
     { text: "Sat 19 Sep", keep: 1 },
     { text: "3 weeks ago", keep: 0, join: ", " },

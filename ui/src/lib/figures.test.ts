@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { fitFigures, joinFigures, joinsOf, type Part } from "@/lib/figures"
 
-const p = (text: string, keep: number, join?: string): Part => ({ text, keep, join })
+const p = (text: string, keep: number, join?: ", "): Part => ({ text, keep, join })
 const parts = [p("18 inputs", 2), p("48 kHz", 1), p("24 bit", 0)]
 
 describe("fitFigures: which figures show beside a name", () => {
@@ -30,6 +30,14 @@ describe("fitFigures: which figures show beside a name", () => {
     // b goes first, and c is then joined to a by a dot: 20 + 10 + 40 = 70.
     expect(fitFigures(three, [20, 30, 40], 10, 6, 70)).toEqual([true, false, true])
     expect(fitFigures(three, [20, 30, 40], 10, 6, 66)).toEqual([true, false, false])
+  })
+
+  it("knows one join besides the dot, the comma that Figures measures", () => {
+    // Figures measures " · " and ", " alone: any other join would be counted
+    // at a comma's width.
+    // @ts-expect-error -- a join other than ", " is refused
+    const odd: Part = { text: "a", keep: 0, join: " – " }
+    expect(odd.join).toBe(" – ")
   })
 
   it("drops equal keeps from the first, and shows nothing for no parts", () => {

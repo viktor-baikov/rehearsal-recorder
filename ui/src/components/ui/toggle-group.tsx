@@ -13,8 +13,12 @@ import { cn } from "@/lib/utils"
   it, with a light shadow. The plate is one of the two looks of "selected"
   (C8), the one inside a switch; the grey fill is the other, for a row, a
   pill or a toggle that is on. A screen gives the switch the width it needs
-  with `className`, on the group and on its items. The items hold one weight,
-  so choosing another changes no width.
+  with `className`, on the group and on its items; `size` does nothing for
+  it. The items hold one weight, so choosing another changes no width.
+
+  `type="single"` is Radix's, and can be emptied: pressing the chosen item
+  again sends `onValueChange("")`. A pick-one that must always have one
+  chosen ignores the "", as ModeSwitch does.
 */
 
 type Variant = "default" | "outline" | "switch"

@@ -113,6 +113,7 @@ test.describe("the setup screen with a rehearsal before", () => {
     const start = (await startButton(page).boundingBox())!
     expect(last.x + last.width).toBeLessThanOrEqual(setup.x)
     expect(setup.x + setup.width).toBeGreaterThan(start.x)
+    expect(setup.y + setup.height).toBeLessThanOrEqual(start.y)
   })
 
   test("narrow, the new rehearsal over Start and Last time behind its button", async ({ page }) => {

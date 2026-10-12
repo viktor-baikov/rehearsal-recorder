@@ -1,5 +1,5 @@
 import { ChevronRight, History, Star } from "lucide-react"
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { memo, useEffect, useRef, useState, type ReactNode } from "react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Item } from "@/components/ui/item"
@@ -56,8 +56,13 @@ const LEFT_OUT_SHOWN = 5
  * it is longer than its whole row, and the figures beside it drop whole, the
  * least needed first. What is cut or dropped shows whole on hover and on
  * keyboard focus.
+ *
+ * Drawn again only when what it is given changes (memo): the start screen is
+ * drawn every 80 ms while the check runs, and every name and figure line
+ * here is measured each time it is drawn. The screen keeps its handlers and
+ * `playback` the same objects between readings for that.
  */
-export function LastTime({
+export const LastTime = memo(function LastTime({
   data,
   playback,
   problem,
@@ -200,7 +205,7 @@ export function LastTime({
       </section>
     </aside>
   )
-}
+})
 
 /**
  * One song of last time: its goes as columns as tall as they ran (Q2), the
@@ -363,7 +368,7 @@ function NotPlayedRow({
             ]
           : []),
         { text: formatDay(s.created_at), keep: 1 },
-        ...(ago ? [{ text: ago, keep: 0, join: ", " }] : []),
+        ...(ago ? [{ text: ago, keep: 0, join: ", " as const }] : []),
         { text: goesLabel(s.goes), keep: 2 },
       ]
   return (
@@ -411,8 +416,13 @@ function EarlierRow({
   ]
   return (
     // The row is one button, so its one tip says what the row could not
-    // show: the name whole, and the figures whole once any has dropped.
-    <WholeTip cut={cut} text={r.name} figures={dropped ? <FigureLine parts={parts} /> : null}>
+    // show: the name whole, and the figures whole once any has dropped. A
+    // row whose folder is gone has no figures, so none have dropped.
+    <WholeTip
+      cut={cut}
+      text={r.name}
+      figures={dropped && !r.missing ? <FigureLine parts={parts} /> : null}
+    >
       <Item asChild size="sm" className="flex-nowrap items-baseline gap-3 px-2 py-2">
         <Button
           variant="ghost"

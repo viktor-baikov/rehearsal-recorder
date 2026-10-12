@@ -5,14 +5,18 @@
  */
 
 /** One figure of a figure line: `keep` orders what goes first (lowest
- *  first); `join` is what joins it to the figure before it while that one
- *  shows (" · " otherwise). */
-export type Part = { text: string; keep: number; join?: string }
+ *  first); `join` is a comma joining it to the figure before it while that
+ *  one shows (" · " otherwise). The comma is the one other join there is:
+ *  Figures measures the dot and the comma alone. */
+export type Part = { text: string; keep: number; join?: ", " }
+
+/** The join between two figures, unless a part says otherwise. */
+const DOT = " · "
 
 /** What sits between two shown figures when the one after is `part` and the
  *  one before it, in the list, is shown or not. */
 const joinBefore = (part: Part, beforeShown: boolean) =>
-  part.join && beforeShown ? part.join : " · "
+  part.join && beforeShown ? part.join : DOT
 
 /** What goes before each figure in the line the shown ones make: nothing
  *  before the first shown, and null for one that is not shown. The line is
@@ -35,9 +39,10 @@ export function joinFigures(parts: Part[], shown: boolean[]): string {
 
 /**
  * Which figures show in `room` px. `widths` are the parts measured alone;
- * `dot` and `comma` are the widths of " · " and of a part's own `join`. Parts
- * go lowest `keep` first (the first of equals first) until what is left is at
- * most half a pixel wider than the room: a measured width is never exact.
+ * `dot` and `comma` are the widths of " · " and of ", ". Parts drop lowest
+ * `keep` first (the first of equals first) until what is left is at most half
+ * a pixel wider than the room: a measured width is never exact. The line is
+ * measured as joinsOf joins it, so what is fitted is what is drawn.
  */
 export function fitFigures(
   parts: Part[],
@@ -47,17 +52,12 @@ export function fitFigures(
   room: number,
 ): boolean[] {
   const shown = parts.map(() => true)
-  const width = () => {
-    let sum = 0
-    let any = false
-    parts.forEach((p, i) => {
-      if (!shown[i]) return
-      if (any) sum += p.join && shown[i - 1] ? comma : dot
-      sum += widths[i]
-      any = true
-    })
-    return sum
-  }
+  const joinWidth = (join: string) => (join === "" ? 0 : join === DOT ? dot : comma)
+  const width = () =>
+    joinsOf(parts, shown).reduce<number>(
+      (sum, join, i) => (join === null ? sum : sum + joinWidth(join) + widths[i]),
+      0,
+    )
   const order = parts
     .map((p, i) => ({ keep: p.keep, i }))
     .sort((a, b) => a.keep - b.keep)

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react"
  * of 0 or less) it is true at once while `on`, whatever it was counting
  * before. What waits a second before it shows (B5) asks it: the Spinner, and
  * a control that keeps its own icon until a spinner takes its place, as the
- * small player and Look again do.
+ * small player, Look again, Check signal and Start do.
  */
 export function useAfter(on: boolean, ms: number): boolean {
   const [late, setLate] = useState(false)

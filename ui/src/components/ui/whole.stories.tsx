@@ -121,7 +121,7 @@ export const ResizedUnderThePointer: Story = {
   render: () => <Resizable />,
 }
 
-const p = (text: string, keep: number, join?: string): Part => ({ text, keep, join })
+const p = (text: string, keep: number, join?: ", "): Part => ({ text, keep, join })
 const FIGURES = [p("18 inputs", 2), p("48 kHz", 1), p("24 bit", 0)]
 const DATED = [p("Sat 19 Sep", 1), p("3 weeks ago", 0, ", ")]
 
@@ -138,13 +138,6 @@ function Row({ width, name, parts }: { width: string; name: string; parts: Part[
  *  narrows; the name keeps its width. When any has gone, hovering the rest
  *  shows them all. */
 export const FiguresGivingWay: Story = {
-  decorators: [
-    (Story) => (
-      <div className="flex min-h-48 items-start justify-center pt-4">
-        <Story />
-      </div>
-    ),
-  ],
   render: () => (
     <div className="flex flex-col gap-4">
       {["20rem", "15rem", "12rem", "9rem"].map((w) => (
@@ -157,7 +150,6 @@ export const FiguresGivingWay: Story = {
 /** A date and how long ago, joined by a comma while both show and by a dot
  *  otherwise. */
 export const FiguresJoinedByAComma: Story = {
-  decorators: FiguresGivingWay.decorators,
   render: () => (
     <div className="flex flex-col gap-4">
       {["20rem", "14rem", "10rem", "5rem"].map((w) => (
