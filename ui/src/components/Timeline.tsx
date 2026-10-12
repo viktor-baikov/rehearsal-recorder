@@ -36,8 +36,18 @@ const COLUMN_GAP_PX = 12
 /** The lanes group's room right of the pictures, as a plate has 12 px left of
  *  its name. The ruler and the map above end there too, so the time axis is
  *  the same line all the way down, and the loop band, the marks and the
- *  playhead never reach the group's round corner. */
+ *  playhead never reach the group's round corner.
+ *
+ *  It must be at least COLUMN_GAP_PX. The column gap before the last column
+ *  (COLUMNS) gives the first COLUMN_GAP_PX of this room and the column the
+ *  rest, END_PX - COLUMN_GAP_PX, 0 today: below 0 that is a width no grid
+ *  column can have, and the template would be dropped whole. */
 const END_PX = 12
+/** The plates' column, the time axis, and the group's room after it. The
+ *  grid round the ruler and every row of the lanes group lay their columns
+ *  out by this one template, over the same width, so a waveform lies exactly
+ *  under the ruler and the band drawn across them. */
+const COLUMNS = `${GUTTER_PX}px minmax(0, 1fr) ${END_PX - COLUMN_GAP_PX}px`
 /** How fast the wheel zooms. One notch of a mouse wheel is about 100 units,
  *  so this makes a notch a fifth of the window. */
 const ZOOM_PER_PIXEL = 0.002
@@ -287,11 +297,6 @@ export function Timeline({
   const lanes = media.length > 0 ? laneOrder(media, notes ?? [], notesMissing ?? []) : []
   const rows = lanes.length
   const ticks = tickTimes(from, to, width)
-  // The plates' column, the time axis, and the group's room after it. The
-  // grid round the ruler and every row of the lanes group lay their columns
-  // out by this one template, over the same width, so a waveform lies exactly
-  // under the ruler and the band drawn across them.
-  const columns = `${GUTTER_PX}px minmax(0, 1fr) ${END_PX - COLUMN_GAP_PX}px`
 
   return (
     <>
@@ -323,7 +328,7 @@ export function Timeline({
         <div
           className="grid min-h-0"
           style={{
-            gridTemplateColumns: columns,
+            gridTemplateColumns: COLUMNS,
             // The ruler, and under it the lanes as one group, none before the
             // first track's media arrives (never, once loadError is set). The
             // group is as tall as its rows, and no row takes a share of what
@@ -526,7 +531,7 @@ export function Timeline({
                       data-lane-row={lane.name}
                       data-paired={paired || undefined}
                       className="grid"
-                      style={{ gridTemplateColumns: columns, columnGap: COLUMN_GAP_PX }}
+                      style={{ gridTemplateColumns: COLUMNS, columnGap: COLUMN_GAP_PX }}
                     >
                       <NotesPlate
                         name={lane.name}
@@ -564,7 +569,7 @@ export function Timeline({
                     data-lane-row={m.name}
                     className="grid"
                     style={{
-                      gridTemplateColumns: columns,
+                      gridTemplateColumns: COLUMNS,
                       columnGap: COLUMN_GAP_PX,
                       // 3.5rem, whatever its waveform's canvas was last drawn
                       // at: the one track of the row is the row's height and

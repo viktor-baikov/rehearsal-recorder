@@ -464,12 +464,18 @@ test.describe("the region", () => {
     await page.mouse.up()
     await expect.poll(async () => (await lastLoop(page))?.[1] as number).toBeCloseTo(TAKE_SECONDS * 0.5, 0)
     expect(Math.abs(((await lastLoop(page))![0] as number) - TAKE_SECONDS * 0.25)).toBeLessThan(0.05)
-    // A six-second take across this width gets two-second steps on the
-    // ruler: the axis is 476 px, which ends 12 px short of the lanes group's
-    // edge, so a second is 79 px, short of the 80 a one-second step needs.
+    // The ruler keeps its scale through all of that. Its step is the first
+    // of the clock's 1, 2, 5 and 10 seconds that keeps the ticks 80 px apart
+    // across the axis (lib/timeline.ts), so which it is follows from the
+    // axis' width, read here as the timeline reads it: a six-second take gets
+    // a second or two, whatever a few pixels of layout do to that width.
+    const axis = await timeline(page).evaluate((e) => e.clientWidth)
+    const step = [1, 2, 5, 10].find((s) => (s / TAKE_SECONDS) * axis >= 80)
+    expect(step, `the step across ${axis} px`).toBeLessThanOrEqual(2)
+    const want: string[] = []
+    for (let t = 0; t < TAKE_SECONDS; t += step!) want.push(`0:${String(t).padStart(2, "0")}`)
     const ruler = page.getByRole("group", { name: "Timeline clock" })
-    await expect(ruler).toContainText("0:04")
-    await expect(ruler).not.toContainText("0:05")
+    await expect(ruler.locator("span.tnum")).toHaveText(want)
   })
 })
 
