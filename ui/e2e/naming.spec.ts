@@ -493,13 +493,19 @@ test("All songs… draws a song lit or in focus inside its own box, so none of i
   const panel = page.getByRole("dialog", { name: "All songs" })
   await expect(panel).toBeVisible()
 
-  const drawnOutside = (el: Element) => {
-    const cs = getComputedStyle(el)
-    const shadows = cs.boxShadow === "none" ? [] : cs.boxShadow.split(/,(?![^(]*\))/)
-    const shadow = shadows.some((s) => !s.includes("inset") && !s.includes("rgba(0, 0, 0, 0)"))
-    const width = parseFloat(cs.outlineWidth)
-    const outline = cs.outlineStyle !== "none" && width > 0 && parseFloat(cs.outlineOffset) > -width
-    return shadow || outline
+  // Over the next eight frames, as a ring or an outline that grows into
+  // place is outside its box on the way.
+  const drawnOutside = async (el: Element) => {
+    for (let frame = 0; frame < 8; frame++) {
+      const cs = getComputedStyle(el)
+      const shadows = cs.boxShadow === "none" ? [] : cs.boxShadow.split(/,(?![^(]*\))/)
+      const shadow = shadows.some((s) => !s.includes("inset") && !s.includes("rgba(0, 0, 0, 0)"))
+      const width = parseFloat(cs.outlineWidth)
+      const outline = cs.outlineStyle !== "none" && width > 0 && parseFloat(cs.outlineOffset) > -width
+      if (shadow || outline) return true
+      await new Promise(requestAnimationFrame)
+    }
+    return false
   }
   const lit = panel.locator("[aria-current=true]")
   await expect(lit).toHaveText("Ahoń 1")
@@ -509,8 +515,10 @@ test("All songs… draws a song lit or in focus inside its own box, so none of i
   await page.keyboard.press("Shift")
   const other = panel.getByRole("button", { name: "Daroha" })
   await other.focus()
-  expect(await other.evaluate((el) => el.matches(":focus-visible"))).toBe(true)
+  // Watched from the moment it has the focus, then known to be the
+  // keyboard's focus.
   expect(await other.evaluate(drawnOutside)).toBe(false)
+  expect(await other.evaluate((el) => el.matches(":focus-visible"))).toBe(true)
 })
 
 test("the field holds the song's title, and the go beside it follows what is typed", async ({

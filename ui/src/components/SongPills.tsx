@@ -239,9 +239,10 @@ function AllSongsPill({
               // button's ring and frame are left out, the outline put back
               // where the button takes it away: the window is WebKit on a
               // Mac, which carried anything under the last song of a column
-              // to the top of the next.
+              // to the top of the next. Only the colours fade, so the outline
+              // does not grow into place from outside the box.
               className={cn(
-                "block h-auto w-full truncate rounded-md border-0 px-1.5 py-0.5 text-left break-inside-avoid hover:bg-accent dark:hover:bg-accent",
+                "block h-auto w-full truncate rounded-md border-0 px-1.5 py-0.5 text-left break-inside-avoid transition-colors hover:bg-accent dark:hover:bg-accent",
                 "focus-visible:ring-0 focus-visible:ring-transparent focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring",
                 isChoice(c) && "bg-selected hover:bg-selected dark:hover:bg-selected"
               )}
