@@ -643,12 +643,15 @@ test.describe("setup", () => {
     expect(await shown(portNote(page, 2), "Plugged in twice?")).toBe(true)
     const words = portNote(page, 2).locator("[data-cut]")
     await expect(words).toHaveCount(1)
-    // Whole in its tip, under the pointer and on keyboard focus.
-    const tip = page.locator("[data-whole]")
+    // Whole in its tip, under the pointer and on keyboard focus. The open
+    // tip: one that has just closed fades out for 220 ms beside the next.
+    // Gone means every tip, a fading one too.
+    const tip = page.locator("[data-whole][data-state$='open']")
+    const tips = page.locator("[data-whole]")
     await words.hover()
     await expect(tip).toHaveText(question)
     await page.mouse.move(0, 0, { steps: 8 })
-    await expect(tip).toHaveCount(0)
+    await expect(tips).toHaveCount(0)
     await picker(page, 2).focus()
     await page.keyboard.press("Tab")
     await expect(portNote(page, 2)).toBeFocused()
@@ -681,9 +684,9 @@ test.describe("setup", () => {
     await page.mouse.move(0, 0)
     expect(await shown(portNote(page, 2), "takes notes from this port too.")).toBe(true)
     expect(await keys()).toEqual(before)
-    // Whole in its tip.
+    // Whole in its tip: the open one.
     await portNote(page, 2).locator("[data-cut]").hover()
-    await expect(page.locator("[data-whole]")).toHaveText(line)
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(line)
   })
 
   test("two tracks on one port move no row either (P2)", async ({ page }) => {
