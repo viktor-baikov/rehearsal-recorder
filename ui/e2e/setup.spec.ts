@@ -911,6 +911,62 @@ test.describe("the tracks during the check", () => {
     await expect(notices(page)).toHaveCount(0)
   })
 
+  // A double click on a bin takes off its track and the one that moves up
+  // under the pointer: each says so with an Undo of its own (B1).
+  test("two tracks taken off at once each come back, with Ctrl+Z twice", async ({ page }) => {
+    await openFour(page, { Drums: [0.0004], Bass: [0.62], Guitar: [0.0004], Vocals: [0.62] })
+    await page.getByRole("button", { name: "Check signal" }).click()
+    const row = (n: number) => rows(page).nth(n - 1)
+    await expect(heard(row(2), "signal")).toBeVisible()
+
+    await page.getByRole("button", { name: "Remove track Bass" }).dblclick()
+    await expect(rows(page)).toHaveCount(2)
+    expect(await namesOf(page)).toEqual(["Drums", "Vocals"])
+    await expect(said(page, "Bass was taken off.")).toHaveCount(1)
+    await expect(said(page, "Guitar was taken off.")).toHaveCount(1)
+
+    await page.keyboard.press("Control+z")
+    await expect(rows(page)).toHaveCount(3)
+    expect(await namesOf(page)).toEqual(["Drums", "Guitar", "Vocals"])
+    await page.keyboard.press("Control+z")
+    await expect(rows(page)).toHaveCount(4)
+    expect(await namesOf(page)).toEqual(["Drums", "Bass", "Guitar", "Vocals"])
+    await expect(notices(page)).toHaveCount(0)
+    // Each with what its own input sends.
+    await polls(page, 3)
+    for (const [n, word] of [[1, "silent"], [2, "signal"], [3, "silent"], [4, "signal"]] as const)
+      await expect(heard(row(n), word)).toBeVisible()
+    expect(await reach(row(2))).toBeGreaterThan(0.8)
+    expect(await reach(row(3))).toBeLessThan(0.05)
+  })
+
+  test("the older of two Undos puts its track back in its own place", async ({ page }) => {
+    await openFour(page, { Drums: [0.0004], Bass: [0.62], Guitar: [0.0004], Vocals: [0.62] })
+    await page.getByRole("button", { name: "Check signal" }).click()
+    const row = (n: number) => rows(page).nth(n - 1)
+    await expect(heard(row(2), "signal")).toBeVisible()
+    await page.getByRole("button", { name: "Remove track Bass" }).click()
+    await page.getByRole("button", { name: "Remove track Guitar" }).click()
+    expect(await namesOf(page)).toEqual(["Drums", "Vocals"])
+
+    // Bass's Undo first, though Guitar's is the newer.
+    await said(page, "Bass was taken off.").getByRole("button", { name: "Undo" }).click()
+    expect(await namesOf(page)).toEqual(["Drums", "Bass", "Vocals"])
+    await said(page, "Guitar was taken off.").getByRole("button", { name: "Undo" }).click()
+    expect(await namesOf(page)).toEqual(["Drums", "Bass", "Guitar", "Vocals"])
+    await polls(page, 3)
+    for (const [n, word] of [[1, "silent"], [2, "signal"], [3, "silent"], [4, "signal"]] as const)
+      await expect(heard(row(n), word)).toBeVisible()
+
+    // Leaving the screen takes every Undo it offered with it.
+    await page.getByRole("button", { name: "Remove track Drums" }).click()
+    await page.getByRole("button", { name: "Remove track Vocals" }).click()
+    await expect(notices(page)).toHaveCount(2)
+    await startButton(page).click()
+    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+    await expect(notices(page)).toHaveCount(0)
+  })
+
   test("taking a track off during the check keeps the others' meters", async ({ page }) => {
     await openFour(page, { Drums: [0.62], Bass: [0.0004], Guitar: [0.62], Vocals: [0.0004] })
     await page.getByRole("button", { name: "Check signal" }).click()
@@ -1334,6 +1390,22 @@ test.describe("the left part behind a button in a narrow window", () => {
     await expect(panel(page)).toBeVisible()
     await expect(palyn(panel(page), "Pause")).toBeVisible()
     expect((await playerNow(page)).playing).toBe(true)
+  })
+
+  test("Undo in the notice puts the track back and leaves the panel open", async ({ page }) => {
+    await openApp(page)
+    await page.getByRole("button", { name: "Remove track Vocals" }).click()
+    await expect(rows(page)).toHaveCount(1)
+    await lastTimeButton(page).click()
+    await expect(panel(page)).toBeVisible()
+
+    // The notices are over the panel's veil, and a click on one is not a
+    // click outside the panel (C4).
+    await said(page, "Vocals was taken off.").getByRole("button", { name: "Undo" }).click()
+    await expect(rows(page)).toHaveCount(2)
+    expect(await namesOf(page)).toEqual(["Guitar", "Vocals"])
+    await expect(panel(page)).toBeVisible()
+    await expect(lastTimeButton(page)).toHaveAttribute("aria-expanded", "true")
   })
 
   test("with no rehearsal before there is no Last time button and no panel", async ({ page }) => {

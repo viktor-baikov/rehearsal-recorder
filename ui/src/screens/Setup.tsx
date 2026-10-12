@@ -1,4 +1,12 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react"
 import {
   Activity,
   AudioLines,
@@ -65,7 +73,8 @@ const MONITOR_HEALTH_MS = 2000
  *  plugged in or pulled out shows on the rows by itself (spec P4). */
 const MIDI_PORTS_POLL_MS = 1000
 
-/** The notices' slot this screen says things in: a track taken off. */
+/** The notices' slots this screen says things in, a track taken off in each:
+ *  one of its own per track, so each keeps its Undo (`setup-track:{n}`). */
 const SAID = "setup-track"
 
 /** What a track's band entry keeps across interfaces: what is on screen when
@@ -392,31 +401,61 @@ export function Setup({
       : []
   })
 
+  // The tracks as last drawn, for an Undo that runs later: the place its
+  // track is put back in is worked out from the band as it is then.
+  const tracksNow = useRef(tracks)
+  useLayoutEffect(() => {
+    tracksNow.current = tracks
+  })
+  // The notices this screen has raised, one per track taken off, so that
+  // two taken off one after the other (a double click on a bin) each keep
+  // their Undo, and leaving the screen takes all of them with it.
+  const saidKeys = useRef(new Set<string>())
+  const saidCount = useRef(0)
+
   /**
    * Takes a track off at once, and says so with an Undo (B1) that puts it
-   * back in its place. What the check opened and heard goes by place: those
-   * after it move up with their tracks, and it comes back with its own.
+   * back in its place: before the track that came after it, wherever that
+   * is now, so Undos run in any order put each where it was; at its old
+   * place when that one has gone or changed. What the check opened and
+   * heard is kept by place: those after it move up with their tracks, and
+   * it comes back with its own.
    */
   const removeTrack = (i: number) => {
     const gone = tracks[i]
+    const next = tracks[i + 1] ?? null
     const port = checkedPorts[i] ?? null
     const heardAs = checkedNames[i] ?? null
     const run = checkRun.current
     setTracks((prev) => prev.filter((_, j) => j !== i))
     setCheckedPorts((prev) => prev.filter((_, j) => j !== i))
     setCheckedNames((prev) => prev.filter((_, j) => j !== i))
-    const put = <T,>(list: T[], v: T) => [...list.slice(0, i), v, ...list.slice(i)]
+    // What the check opened, into place `at`: these lists are padded out to
+    // it, as they are shorter than the band when a track was added since the
+    // check began.
+    const put = <T,>(list: (T | null)[], at: number, v: T | null) => {
+      const out = [...list]
+      while (out.length < at) out.push(null)
+      out.splice(at, 0, v)
+      return out
+    }
+    const key = `${SAID}:${++saidCount.current}`
+    saidKeys.current.add(key)
     notify({
-      key: SAID,
+      key,
       kind: "done",
       text: `${named(gone.name)} was taken off.`,
       action: {
         label: "Undo",
         run: () => {
+          saidKeys.current.delete(key)
+          const band = tracksNow.current
+          const after = next ? band.indexOf(next) : -1
+          const at = after >= 0 ? after : Math.min(i, band.length)
           const same = checkRun.current === run
-          setTracks((prev) => put(prev, gone))
-          setCheckedPorts((prev) => put(prev, same ? port : null))
-          setCheckedNames((prev) => put(prev, same ? heardAs : null))
+          setTracks((prev) => [...prev.slice(0, at), gone, ...prev.slice(at)])
+          setCheckedPorts((prev) => put(prev, at, same ? port : null))
+          setCheckedNames((prev) => put(prev, at, same ? heardAs : null))
         },
       },
     })
@@ -643,10 +682,11 @@ export function Setup({
   // Turn the check off when leaving the screen. A track taken off can be put
   // back only here: its Undo goes with the screen.
   useEffect(() => {
+    const said = saidKeys.current
     return () => {
       checkingRef.current = false
       void stopMonitorQuietly()
-      dismiss(SAID)
+      for (const key of said) dismiss(key)
     }
   }, [])
 
