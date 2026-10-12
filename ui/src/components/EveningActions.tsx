@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useId, useState } from "react"
 import { CloudUpload, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type Take } from "@/lib/api"
 import { falseStarts, starredToSend } from "@/lib/evening"
 import { wentTo } from "@/lib/deletion"
@@ -9,7 +10,7 @@ import { endedByPython, offerUndo } from "@/lib/trash"
 import { pollSoon } from "@/lib/activity"
 
 /** Off, but still saying why under the mouse: a disabled button takes no
- *  pointer events, so its title would never be read. */
+ *  pointer events, so its tip would never be shown. */
 const OFF =
   "aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-background " +
   "dark:aria-disabled:hover:bg-input/30"
@@ -19,10 +20,11 @@ const OFF =
  * take not yet in the cloud folder, as Settings' What gets published says;
  * Clear false starts moves the takes too short to be anything to the Trash,
  * at once, with Undo. Each says how many it would act on, and when that is
- * none, why, under the mouse.
+ * none, why: in a tip under the mouse, and as the button's description for
+ * a screen reader, which never sees the tip.
  *
- * The rehearsal screen and History both put it in the overview's row of
- * figures, so an evening sorted later looks and works as it did on the night.
+ * The rehearsal screen and History both put it in the head of the overview's
+ * group, so an evening sorted later looks and works as it did on the night.
  */
 export function EveningActions({
   folder,
@@ -45,6 +47,8 @@ export function EveningActions({
 }) {
   const [sending, setSending] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const sendWhyId = useId()
+  const clearWhyId = useId()
 
   const toSend = starredToSend(takes, waiting)
   const onTheWay = takes.some((t) => t.starred && t.take_number in (waiting ?? {}))
@@ -142,30 +146,46 @@ export function EveningActions({
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="row"
-        aria-disabled={sendOff || undefined}
-        title={sendWhy}
-        onClick={() => void send()}
-        className={OFF}
-      >
-        <CloudUpload />
-        Send starred
-        {toSend.length > 0 && <span className="tnum text-muted-foreground">{toSend.length}</span>}
-      </Button>
-      <Button
-        variant="outline"
-        size="row"
-        aria-disabled={clearOff || undefined}
-        title={clearWhy}
-        onClick={() => void clear(starts)}
-        className={OFF}
-      >
-        <Trash2 />
-        Clear false starts
-        {starts.length > 0 && <span className="tnum text-muted-foreground">{starts.length}</span>}
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="row"
+            aria-disabled={sendOff || undefined}
+            aria-describedby={sendWhyId}
+            onClick={() => void send()}
+            className={OFF}
+          >
+            <CloudUpload />
+            Send starred
+            {toSend.length > 0 && <span className="tnum text-muted-foreground">{toSend.length}</span>}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{sendWhy}</TooltipContent>
+      </Tooltip>
+      <span id={sendWhyId} className="sr-only">
+        {sendWhy}
+      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="row"
+            aria-disabled={clearOff || undefined}
+            aria-describedby={clearWhyId}
+            onClick={() => void clear(starts)}
+            className={OFF}
+          >
+            <Trash2 />
+            Clear false starts
+            {starts.length > 0 && <span className="tnum text-muted-foreground">{starts.length}</span>}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{clearWhy}</TooltipContent>
+      </Tooltip>
+      <span id={clearWhyId} className="sr-only">
+        {clearWhy}
+      </span>
     </>
   )
 }

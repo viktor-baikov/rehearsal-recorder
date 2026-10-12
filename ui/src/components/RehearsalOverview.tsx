@@ -1,22 +1,19 @@
-import {
-  CloudCheck,
-  CloudUpload,
-  Loader2,
-  Pause,
-  Pencil,
-  Play,
-  Trash2,
-} from "lucide-react"
-import { Fragment, useRef, type ReactNode } from "react"
+import { CloudCheck, CloudUpload, Pencil, Trash2 } from "lucide-react"
+import { Fragment, useId, useRef, type ReactNode } from "react"
 import { StarButton } from "@/components/StarButton"
 import { SongPills } from "@/components/SongPills"
 import { useSongChoices } from "@/hooks/useSongChoices"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LabelDot, MarkLine, MarkTick } from "@/components/ui/mark"
+import { PlayButton } from "@/components/ui/play-button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { playLook } from "@/lib/playLook"
 import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
-import { labelCounts, labelLook, labelOf, markText, useLabels } from "@/lib/labels"
+import { labelCounts, labelOf, useLabels } from "@/lib/labels"
 import { isFalseStart } from "@/lib/evening"
-import { scrollBehavior } from "@/lib/motion"
+import { rise, scrollBehavior } from "@/lib/motion"
 import { TakeTitle } from "@/components/TakeTitle"
 import { SongName } from "@/components/SongName"
 import { SetPlayedCard } from "@/components/SetPlayed"
@@ -35,6 +32,8 @@ export type OverviewPlayback = {
   take: number
   playing: boolean
   loading: boolean
+  /** The take could not be loaded: its ▶ says so, and pressing it tries again. */
+  failed?: boolean
   position: number
   duration: number
 }
@@ -47,9 +46,14 @@ function inCloud(take: Take): boolean {
  * What an open rehearsal shows before a take is picked: every song, every go
  * at it, and every note left while listening.
  *
- * It used to be a line of small chips per song and a list of notes under
- * them. Each go is now a row: a bar drawn to scale — so the go that ran long
- * or stopped short is plain before anything is read — with its marks where
+ * The songs are one group: the label legend at its head on the left, the
+ * screen's `actions` (Send starred, Clear false starts) on the right, then
+ * each song under a 1 px line, a take nobody named last of them. The evening's
+ * figures are not here: the header says them, and it is in view with a take
+ * open too.
+ *
+ * Each go is a row: a bar drawn to scale — so the go that ran long or
+ * stopped short is plain before anything is read — with its marks where
  * they fell, and every one of them listed under it: its label's name, then
  * its comment when it has one. The comments are usually why the rehearsal
  * was opened again at all: "this one is the take", "guitar drifts here".
@@ -66,10 +70,8 @@ function inCloud(take: Take): boolean {
  *
  * It is where an evening is sorted, too, on the night or later in History:
  * a false start (shorter than `falseStartSec`, no ★, no marks) is drawn
- * grey with a dashed bar where it stands; a take nobody named has the song
- * pills under it, one click naming it (`onName`); and the screen's
- * `actions`, Send starred and Clear false starts, sit in the row of figures,
- * the legend of marks moving to a line of its own under them.
+ * grey with a dashed bar where it stands; and a take nobody named has the song
+ * pills under it, one click naming it (`onName`).
  */
 export function RehearsalOverview({
   takes,
@@ -110,7 +112,7 @@ export function RehearsalOverview({
   folder?: string
   /** Names a take after a song from its pills; left out, there are none. */
   onName?: (take: Take, title: string) => void
-  /** Drawn on the right of the row of figures. */
+  /** Drawn on the right of the group's head. */
   actions?: ReactNode
   /** The set it was played by, as History has it: a card of what was
    *  played over the songs. */
@@ -126,21 +128,18 @@ export function RehearsalOverview({
         .filter((t): t is Take => t !== undefined),
     }))
     .filter((r) => r.takes.length > 0)
-  const songCount = rows.length
   const grouped = new Set(rows.flatMap((r) => r.takes.map((t) => t.take_number)))
   const unnamed = takes.filter((t) => !grouped.has(t.take_number))
   if (unnamed.length > 0) rows.push({ name: NOT_NAMED, takes: unnamed })
 
-  const total = takes.reduce((sum, t) => sum + (t.duration_sec || 0), 0)
   const longest = Math.max(1, ...takes.map((t) => t.duration_sec || 0))
-  const shared = takes.filter(inCloud).length
   // Every mark counts, a plain one with nothing written included (spec D2).
   const counts = labelCounts(labels, takes.flatMap((t) => t.markers ?? []))
   const legend = counts.length > 0 && (
-    <div className="ml-auto flex flex-wrap justify-end gap-x-3.5 gap-y-1 text-xs text-muted-foreground">
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
       {counts.map(({ label, n }) => (
-        <span key={label.id} className="flex items-center gap-1.5">
-          <span className={cn("size-2 rounded-full", labelLook(label.colour).dot)} />
+        <span key={label.id} className="flex items-center gap-2">
+          <LabelDot colour={label.colour} />
           {n} {label.name}
         </span>
       ))}
@@ -155,29 +154,20 @@ export function RehearsalOverview({
   // Each song's group, for the set card to go to.
   const groups = useRef(new Map<string, HTMLElement>())
 
-  return (
-    <section aria-label="Rehearsal overview" className="flex flex-col gap-3.5">
-      <div className="flex flex-col gap-2 px-1 pb-1">
-        <div className="flex flex-wrap items-end gap-x-9 gap-y-3">
-          <Stat value={formatMMSS(total)} label="played" />
-          <Stat value={String(takes.length)} label={takes.length === 1 ? "take" : "takes"} />
-          {songCount > 0 && (
-            <Stat value={String(songCount)} label={songCount === 1 ? "song" : "songs"} />
-          )}
-          {shared > 0 && (
-            <Stat value={`${shared} of ${takes.length}`} label="in the cloud" />
-          )}
-          {/* Too narrow for both, the buttons go to a line of their own,
-              still on the right. */}
-          {actions ? (
-            <div className="ml-auto flex flex-wrap justify-end gap-2 self-center">{actions}</div>
-          ) : (
-            legend
-          )}
-        </div>
-        {actions && legend}
-      </div>
+  // The legend on the left and the buttons on the right; too narrow for both,
+  // the buttons go to a line of their own, still on the right.
+  const head = (actions || legend) && (
+    <div
+      data-overview-head
+      className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 pt-6 pb-4"
+    >
+      {legend || <span />}
+      {actions && <div className="flex flex-wrap justify-end gap-2">{actions}</div>}
+    </div>
+  )
 
+  return (
+    <section aria-label="Rehearsal overview" className="flex flex-col gap-12">
       {set && (
         <SetPlayedCard
           set={set}
@@ -190,60 +180,67 @@ export function RehearsalOverview({
         />
       )}
 
-      {rows.map((row) => {
-        const isUnnamed = row.name === NOT_NAMED
-        return (
-          <div
-            key={row.name}
-            ref={(el) => {
-              if (el) groups.current.set(row.name, el)
-              else groups.current.delete(row.name)
-            }}
-            role="group"
-            aria-label={row.name}
-            className={cn(
-              "flex flex-col gap-2.5 rounded-xl border px-4 pt-3.5 pb-3",
-              isUnnamed ? "border-dashed" : "bg-card"
-            )}
-          >
-            <div className="flex items-baseline gap-2.5">
-              <h3
-                className={cn(
-                  "text-base",
-                  isUnnamed ? "text-muted-foreground" : "font-semibold"
-                )}
-              >
-                <SongName title={isUnnamed ? null : row.name} onOpen={onOpenSong} />
-              </h3>
-              <span className="text-xs text-muted-foreground">
-                {takesLabel(row.takes.length)}
-              </span>
+      <div data-songs-group className="flex animate-rise flex-col rounded-xl bg-card" style={rise(0)}>
+        {head}
+        {rows.map((row, i) => {
+          const isUnnamed = row.name === NOT_NAMED
+          return (
+            <div
+              key={row.name}
+              ref={(el) => {
+                if (el) groups.current.set(row.name, el)
+                else groups.current.delete(row.name)
+              }}
+              role="group"
+              aria-label={row.name}
+              data-song-group
+              // A line above each song, under the head or the song before.
+              className={cn(
+                "flex flex-col gap-3 px-6 py-4",
+                (i > 0 || head) && "border-t",
+                i === rows.length - 1 && "pb-6",
+                i === 0 && !head && "pt-6"
+              )}
+            >
+              <div className="flex items-baseline gap-2">
+                <h3
+                  className={cn(
+                    "text-base",
+                    isUnnamed ? "text-muted-foreground" : "font-semibold"
+                  )}
+                >
+                  <SongName title={isUnnamed ? null : row.name} onOpen={onOpenSong} />
+                </h3>
+                <span className="text-xs text-muted-foreground">
+                  {takesLabel(row.takes.length)}
+                </span>
+              </div>
+              {row.takes.map((t) => (
+                <Fragment key={t.take_number}>
+                  <TakeRow
+                    take={t}
+                    unnamed={isUnnamed}
+                    falseStart={falseStartSec !== undefined && isFalseStart(t, falseStartSec)}
+                    longest={longest}
+                    cloudState={cloudStates?.[t.take_number]}
+                    here={playback?.take === t.take_number ? playback : null}
+                    onPlay={onPlay}
+                    onOpen={onOpen}
+                    onOpenAt={onOpenAt}
+                    onRename={onRename}
+                    onStar={onStar}
+                    onShare={onShare}
+                    onDelete={onDelete}
+                  />
+                  {isUnnamed && onName && nameChoices && (
+                    <NamePills take={t} choices={nameChoices} onName={onName} />
+                  )}
+                </Fragment>
+              ))}
             </div>
-            {row.takes.map((t) => (
-              <Fragment key={t.take_number}>
-                <TakeRow
-                  take={t}
-                  unnamed={isUnnamed}
-                  falseStart={falseStartSec !== undefined && isFalseStart(t, falseStartSec)}
-                  longest={longest}
-                  cloudState={cloudStates?.[t.take_number]}
-                  here={playback?.take === t.take_number ? playback : null}
-                  onPlay={onPlay}
-                  onOpen={onOpen}
-                  onOpenAt={onOpenAt}
-                  onRename={onRename}
-                  onStar={onStar}
-                  onShare={onShare}
-                  onDelete={onDelete}
-                />
-                {isUnnamed && onName && nameChoices && (
-                  <NamePills take={t} choices={nameChoices} onName={onName} />
-                )}
-              </Fragment>
-            ))}
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </section>
   )
 }
@@ -264,7 +261,7 @@ function NamePills({
 }) {
   if (choices.here.length + choices.other.length === 0) return null
   return (
-    <div data-name-pills={take.take_number} className="-mt-1.5 ml-11 flex items-center gap-2.5">
+    <div data-name-pills={take.take_number} className="-mt-1 ml-11 flex items-center gap-2">
       <span className="shrink-0 text-xs text-muted-foreground">Name:</span>
       <div className="min-w-0 flex-1">
         <SongPills
@@ -279,14 +276,24 @@ function NamePills({
   )
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="tnum text-[22px] leading-tight">{value}</span>
-      <span className="text-xs text-muted-foreground">{label}</span>
-    </div>
-  )
-}
+/**
+ * What a bar is filled with, solid in every state: the take's number and
+ * name sit on a backing that takes the bar's own fill (`[background:inherit]`),
+ * and a see-through fill would show the marks' ticks under it. Under the
+ * pointer a bar goes to the accent, in the dark theme too, where Button's ghost
+ * hover is half strength.
+ *   at rest        the muted fill
+ *   starred        the card's, with the signal tint over it as a flat gradient
+ *   false start    the card's, with its dashed frame
+ *   not on disk    the same
+ */
+const FILLS = {
+  rest: "border-transparent bg-muted hover:bg-accent dark:hover:bg-accent",
+  starred:
+    "border-signal/50 bg-card bg-linear-to-r from-signal/10 to-signal/10 hover:bg-card hover:from-signal/15 hover:to-signal/15 dark:hover:bg-card",
+  quiet:
+    "border-dashed border-muted-foreground/45 bg-card hover:bg-accent dark:hover:bg-accent",
+} as const
 
 /**
  * One take as a row: ▶, its bar to scale with its marks, its length, and the
@@ -334,8 +341,11 @@ export function TakeRow({
   onDelete?: (take: Take) => void
 }) {
   const labels = useLabels()
+  const why = useId()
   const open = onOpen ?? onPlay
   const status = takeCloudStatus(take, cloudState)
+  // Why the copy failed, when it did and nothing is on its way.
+  const error = status && !cloudState ? take.cloud_error : undefined
   const shared = inCloud(take)
   const starred = take.starred ?? false
   const length = take.duration_sec || here?.duration || 0
@@ -367,54 +377,63 @@ export function TakeRow({
           here && "bg-accent/60"
         )}
       >
-        {missing ? (
-          <span
-            title="Not found on disk"
-            className="size-8 rounded-full border border-dashed"
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => onPlay(take)}
-            aria-label={`${playing ? "Pause" : "Play"} ${take.name}`}
-            aria-keyshortcuts={here ? "Space" : undefined}
-            className={cn(
-              "flex size-8 items-center justify-center rounded-full border transition-colors",
-              here
-                ? "border-primary bg-primary text-primary-foreground"
-                : "hover:bg-accent"
-            )}
-          >
-            {here?.loading ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : playing ? (
-              <Pause className="size-3.5 fill-current" />
-            ) : (
-              <Play className="size-3.5 fill-current" />
-            )}
-          </button>
-        )}
+        <PlayButton
+          look={playLook({
+            loaded: here !== null,
+            playing,
+            loading: here?.loading ?? false,
+            failed: here?.failed ?? false,
+            missing,
+          })}
+          name={take.name}
+          onClick={() => onPlay(take)}
+          aria-keyshortcuts={here ? "Space" : undefined}
+        />
 
         <div className="flex min-w-0 items-center gap-2.5">
-          <button
+          <Button
             type="button"
+            variant="ghost"
             aria-label={takeButtonLabel(take, status)}
-            title={missing ? "Not found on disk" : onOpen ? "Open it in the player" : "Play it here"}
+            aria-describedby={error ? why : undefined}
             onClick={() => open(take)}
             disabled={missing}
             data-starred={starred || undefined}
             className={cn(
-              "relative flex h-8 min-w-24 shrink items-center gap-2 overflow-hidden rounded-lg border px-2.5 text-left whitespace-nowrap transition-colors",
-              missing
-                ? "border-dashed border-muted-foreground/45 bg-transparent"
-                : starred
-                  ? "border-signal/50 bg-signal/10 hover:bg-signal/15"
-                  : falseStart
-                    ? "border-dashed border-muted-foreground/45 bg-transparent hover:bg-accent"
-                    : "bg-muted hover:bg-accent"
+              "relative h-8 min-w-24 shrink justify-start gap-2 overflow-hidden rounded-sm px-2.5 py-0 text-left whitespace-nowrap disabled:opacity-100",
+              missing || falseStart ? FILLS.quiet : starred ? FILLS.starred : FILLS.rest
             )}
             style={{ width: `${(take.duration_sec / longest) * BAR_SHARE}%` }}
           >
+            {/* In this order, so each is over the one before: the ticks, then
+                the number and the name on their backing, which a mark in a
+                take's first seconds would otherwise strike out, then the part
+                played, which washes over the name, and the playhead, over
+                everything. */}
+            {(take.markers ?? []).map((m) => (
+              <MarkTick
+                key={m.at}
+                colour={labelOf(labels, m.label_id).colour}
+                at={along(m.at)}
+                className="inset-y-[5px]"
+              />
+            ))}
+            <span
+              data-bar-title
+              className="relative -mx-1 flex min-w-0 items-center gap-2 rounded-sm px-1 [background:inherit]"
+            >
+              <span className="tnum text-xs text-muted-foreground">
+                {String(take.take_number).padStart(2, "0")}
+              </span>
+              <span
+                className={cn(
+                  "flex min-w-0 text-sm",
+                  (unnamed || falseStart) && "text-muted-foreground"
+                )}
+              >
+                <TakeTitle take={take} cut />
+              </span>
+            </span>
             {played !== null && (
               <span
                 aria-hidden
@@ -422,32 +441,6 @@ export function TakeRow({
                 style={{ width: `${played}%` }}
               />
             )}
-            {/* Under the number and the name, which are drawn after them: a
-                mark in a take's first seconds otherwise struck its number
-                out. The playhead, last, stays over everything. */}
-            {(take.markers ?? []).map((m) => {
-              const label = labelOf(labels, m.label_id)
-              return (
-                <span
-                  key={m.at}
-                  aria-hidden
-                  data-mark-colour={label.colour}
-                  className={cn("absolute inset-y-[5px] w-[3px] rounded-sm", labelLook(label.colour).dot)}
-                  style={{ left: `${along(m.at)}%` }}
-                />
-              )
-            })}
-            <span className="tnum relative text-[11px] text-muted-foreground">
-              {String(take.take_number).padStart(2, "0")}
-            </span>
-            <span
-              className={cn(
-                "relative flex min-w-0 text-[13px]",
-                (unnamed || falseStart) && "text-muted-foreground"
-              )}
-            >
-              <TakeTitle take={take} cut />
-            </span>
             {played !== null && (
               <span
                 aria-hidden
@@ -455,22 +448,27 @@ export function TakeRow({
                 style={{ left: `${played}%` }}
               />
             )}
-          </button>
+          </Button>
 
-          <span className={cn("tnum shrink-0 text-[13px]", falseStart && "text-muted-foreground")}>
-            {here && (
-              <>
-                <span className="text-primary">{formatMMSS(here.position)}</span>
-                {" / "}
-              </>
-            )}
-            {formatMMSS(take.duration_sec)}
-          </span>
-          {falseStart && (
-            <span className="shrink-0 rounded-full border border-warn/50 px-2 text-[11px] leading-[18px] whitespace-nowrap text-warn">
-              false start
+          {/* Nothing jumps (B4): the time played has its room kept before
+              the length, so the bar keeps its width and the length its place
+              while the take plays here. */}
+          <span className={cn("tnum grid shrink-0 justify-items-end text-sm", falseStart && "text-muted-foreground")}>
+            <span aria-hidden className="invisible col-start-1 row-start-1">
+              {formatMMSS(here ? here.duration || take.duration_sec : take.duration_sec)} /{" "}
+              {formatMMSS(take.duration_sec)}
             </span>
-          )}
+            <span className="col-start-1 row-start-1">
+              {here && (
+                <>
+                  <span className="text-primary">{formatMMSS(here.position)}</span>
+                  {" / "}
+                </>
+              )}
+              {formatMMSS(take.duration_sec)}
+            </span>
+          </span>
+          {falseStart && <Badge variant="warn">false start</Badge>}
           {shared && (
             <CloudCheck
               data-in-cloud
@@ -479,15 +477,23 @@ export function TakeRow({
             />
           )}
           {status && !missing && (
-            <span
-              className={cn(
-                "truncate text-[11px]",
-                cloudState ? "text-muted-foreground" : "text-destructive"
-              )}
-              title={cloudState ? undefined : take.cloud_error}
-            >
-              {status}
-            </span>
+            error ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="truncate text-xs text-destructive">{status}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>{error}</TooltipContent>
+                </Tooltip>
+                {/* The bar's description: the status in its name is the
+                    reason's heading. */}
+                <span id={why} className="sr-only">
+                  {error}
+                </span>
+              </>
+            ) : (
+              <span className="truncate text-xs text-muted-foreground">{status}</span>
+            )
           )}
           {/* Its rehearsal is what tells it from the others here, so the
               bar gives way to it rather than it to the bar. */}
@@ -497,7 +503,7 @@ export function TakeRow({
             </span>
           )}
           {missing && (
-            <span className="shrink-0 text-[11px] text-destructive">Not found on disk</span>
+            <span className="shrink-0 text-xs text-destructive">Not found on disk</span>
           )}
         </div>
 
@@ -518,22 +524,9 @@ export function TakeRow({
               />
             )}
             {/* On the row under the mouse, or reached with Tab. Hidden, they
-                still hold their place, so the rows do not shift as it moves. */}
+                still hold their place, so the rows do not shift as it moves.
+                Delete is set apart from the others. */}
             <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-              {onShare && (
-                <Button
-                  variant="ghost"
-                  size="icon-row"
-                  aria-label={
-                    shared ? `Cloud copies of ${take.name}` : `Copy ${take.name} to the cloud`
-                  }
-                  title={shared ? "In the cloud folder" : "Copy this take to the cloud folder"}
-                  onClick={() => onShare(take)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <CloudUpload />
-                </Button>
-              )}
               {onRename && (
                 <Button
                   variant="ghost"
@@ -545,13 +538,33 @@ export function TakeRow({
                   <Pencil />
                 </Button>
               )}
+              {onShare && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-row"
+                      aria-label={
+                        shared ? `Cloud copies of ${take.name}` : `Copy ${take.name} to the cloud`
+                      }
+                      onClick={() => onShare(take)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <CloudUpload />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {shared ? "In the cloud folder" : "Copy this take to the cloud folder"}
+                  </TooltipContent>
+                </Tooltip>
+              )}
               {onDelete && (
                 <Button
                   variant="ghost"
                   size="icon-row"
                   aria-label={`Delete take ${take.name}`}
                   onClick={() => onDelete(take)}
-                  className="text-muted-foreground hover:text-destructive"
+                  className="ml-2 text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 />
                 </Button>
@@ -563,22 +576,18 @@ export function TakeRow({
 
       {/* Every mark has its line, a plain one with nothing written included
           (spec D2): its label's name, then its comment. */}
-      {!missing && (take.markers ?? []).map((m) => {
-        const label = labelOf(labels, m.label_id)
-        return (
-          <button
-            key={m.at}
-            type="button"
-            data-note
-            onClick={() => onOpenAt(take, m.at)}
-            className="ml-11 flex max-w-[calc(100%-2.75rem)] items-center gap-2.5 self-start rounded-md px-1.5 py-0.5 text-left text-[13px] transition-colors hover:bg-accent/50"
-          >
-            <span className={cn("size-[7px] shrink-0 rounded-full", labelLook(label.colour).dot)} />
-            <span className="tnum text-xs text-muted-foreground">{formatMMSS(m.at)}</span>
-            <span className="truncate">{markText(label, m.note)}</span>
-          </button>
-        )
-      })}
+      {!missing && (take.markers ?? []).map((m) => (
+        <Button
+          key={m.at}
+          type="button"
+          variant="ghost"
+          size="row"
+          onClick={() => onOpenAt(take, m.at)}
+          className="ml-10 h-7 max-w-[calc(100%-2.5rem)] justify-start self-start px-2 text-left"
+        >
+          <MarkLine label={labelOf(labels, m.label_id)} at={m.at} note={m.note} className="text-sm" />
+        </Button>
+      ))}
     </div>
   )
 }

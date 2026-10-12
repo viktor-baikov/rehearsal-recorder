@@ -200,6 +200,10 @@ async function openEvening(page: Page) {
 
 const current = (page: Page) => page.locator("[data-tab][aria-current='true']")
 
+const facts = (page: Page) => page.getByRole("group", { name: "About this rehearsal" })
+const fact = (page: Page, label: string) =>
+  facts(page).locator("div", { has: page.locator("dt", { hasText: label }) }).locator("dd")
+
 test("an open rehearsal with no take picked shows the evening", async ({ page }) => {
   // It used to be one lonely "Pick a take" under the strip. What was played,
   // how many goes each song got and every note left while listening are all
@@ -207,10 +211,6 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
   const overview = await openEvening(page)
   const said = await overview.innerText()
   for (const part of [
-    "11:50\nplayed",
-    "4\ntakes",
-    "2\nsongs",
-    "1 of 4\nin the cloud",
     "Pałyn",
     "2 takes",
     "Viasna",
@@ -243,6 +243,14 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
   expect(widths["1"]).toBeGreaterThan(widths["3"])
   // And no strip of pills repeating it.
   await expect(page.getByRole("group", { name: "Take strip" })).toHaveCount(0)
+  // The evening's figures are the header's, not the overview's: they are in
+  // view with a take open, which the overview is not.
+  expect(said).not.toMatch(/\bplayed\b/)
+  await overview.getByRole("button", { name: /^Take 1 / }).click()
+  await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
+  await expect(fact(page, "Length")).toHaveText("12 min")
+  await expect(fact(page, "Takes")).toHaveText("4, 2 songs")
+  await expect(fact(page, "In the cloud")).toHaveText("1 of 4")
 })
 
 test("a note opens its take at the spot it was left", async ({ page }) => {

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react"
 import { GoTitle } from "@/components/TakeTitle"
+import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { SongChoice, SongChoices } from "@/lib/api"
 import { songFor, songNamed } from "@/lib/goes"
@@ -9,9 +10,15 @@ import { cn } from "@/lib/utils"
 
 /** The gap between pills, as `gap-1.5` draws it. */
 const GAP = 6
+// A pill's shape, which the copies that measure the pills have too. It is a
+// block of text cut at the end of the room, so the button's own flex box and
+// its height are put back to a plain one.
 const PILL =
-  "max-w-full truncate rounded-full border px-3 py-1 text-[13px] font-medium transition-colors " +
+  "inline-block h-auto max-w-full truncate rounded-full border px-3 py-1 text-sm font-medium transition-colors " +
   "hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+// On a Button: the frame a pill has and the full-strength hover the dark theme
+// takes from the ghost one.
+const PILL_BUTTON = cn(PILL, "border-border dark:hover:bg-accent")
 
 /**
  * The songs under a take's name, in two rows at most (`rows` says
@@ -118,24 +125,25 @@ export function SongPills({
     <div className="relative min-w-0">
       <div ref={row} className="flex flex-wrap gap-1.5">
         {visible.map((c) => (
-          <button
+          <Button
             key={c.song}
             type="button"
+            variant="ghost"
             data-song-choice={c.song}
             aria-current={isChoice(c) ? "true" : undefined}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onPick(c.song)}
-            className={cn(PILL, isChoice(c) && "border-primary bg-primary/15 hover:bg-primary/20")}
+            className={cn(PILL_BUTTON, isChoice(c) && "bg-selected hover:bg-selected dark:hover:bg-selected")}
           >
             <GoTitle title={c.song} go={goes ? c.go : null} />
-          </button>
+          </Button>
         ))}
         <AllSongsPill
           choices={all}
           isChoice={isChoice}
           onPick={onPick}
           goes={goes}
-          className={PILL}
+          className={PILL_BUTTON}
         />
       </div>
       {/* The same pills, out of sight, to measure. In a box of no height
@@ -185,8 +193,9 @@ function AllSongsPill({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
           data-all-songs
           onMouseDown={(e) => e.preventDefault()}
           className={cn(
@@ -196,7 +205,7 @@ function AllSongsPill({
           )}
         >
           All songs…
-        </button>
+        </Button>
       </PopoverTrigger>
       <PopoverContent
         side="top"
@@ -208,14 +217,15 @@ function AllSongsPill({
         onCloseAutoFocus={(e) => e.preventDefault()}
         className="max-h-[min(22rem,55vh)] w-[min(44rem,calc(100vw-2rem))] overflow-y-auto p-3"
       >
-        <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+        <div className="text-xs font-semibold text-muted-foreground">
           All songs
         </div>
         <div className="mt-2 columns-[9rem] gap-4">
           {sorted.map((c) => (
-            <button
+            <Button
               key={c.song}
               type="button"
+              variant="ghost"
               data-song-choice={c.song}
               aria-current={isChoice(c) ? "true" : undefined}
               onMouseDown={(e) => e.preventDefault()}
@@ -223,17 +233,19 @@ function AllSongsPill({
                 onPick(c.song)
                 setOpen(false)
               }}
-              // The ring and the focus outline are drawn inside the song's
-              // box: the window is WebKit on a Mac, which carried anything
-              // under the last song of a column to the top of the next.
+              // The focus outline is drawn inside the song's box, and the
+              // button's ring and frame are left out, the outline put back
+              // where the button takes it away: the window is WebKit on a
+              // Mac, which carried anything under the last song of a column
+              // to the top of the next.
               className={cn(
-                "block w-full truncate rounded-md px-1.5 py-0.5 text-left text-sm break-inside-avoid hover:bg-accent",
-                "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
-                isChoice(c) && "bg-primary/15 ring-1 ring-primary ring-inset"
+                "block h-auto w-full truncate rounded-md border-0 px-1.5 py-0.5 text-left break-inside-avoid hover:bg-accent dark:hover:bg-accent",
+                "focus-visible:ring-0 focus-visible:ring-transparent focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring",
+                isChoice(c) && "bg-selected hover:bg-selected dark:hover:bg-selected"
               )}
             >
               <GoTitle title={c.song} go={goes ? c.go : null} />
-            </button>
+            </Button>
           ))}
         </div>
       </PopoverContent>

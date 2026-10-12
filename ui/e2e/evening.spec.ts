@@ -71,14 +71,14 @@ test("Send starred sends the starred takes not in the cloud", async ({ page }) =
   expect((await calls(page, "send_starred"))[0].args).toEqual([await folderOf(page)])
   await expect(send).toHaveText(/^\s*Send starred\s*$/)
   await expect(send).toBeDisabled()
-  await expect(send).toHaveAttribute("title", "Every ★ take is in the cloud folder")
+  await expect(send).toHaveAccessibleDescription("Every ★ take is in the cloud folder")
 })
 
 test("Send starred says why it is off when nothing has a star", async ({ page }) => {
   const overview = await openEvening(page, "", [{ name: "Pałyn", duration_sec: 200 }])
   const send = overview.getByRole("button", { name: /Send starred/ })
   await expect(send).toBeDisabled()
-  await expect(send).toHaveAttribute("title", "No take has ★")
+  await expect(send).toHaveAccessibleDescription("No take has ★")
   await send.click({ force: true })
   expect(await callCount(page, "send_starred")).toBe(0)
 })
@@ -87,7 +87,7 @@ test("Send starred is off with no cloud folder, and says where to choose one", a
   const overview = await openEvening(page, "window.__CLOUD_DIR__ = null;")
   const send = overview.getByRole("button", { name: /Send starred/ })
   await expect(send).toBeDisabled()
-  await expect(send).toHaveAttribute("title", "Choose a cloud folder in Settings")
+  await expect(send).toHaveAccessibleDescription("Choose a cloud folder in Settings")
 })
 
 test("a cloud folder chosen from a take's cloud button turns Send starred on", async ({ page }) => {
@@ -169,12 +169,18 @@ test("Not named goes once its last take is cleared", async ({ page }) => {
   await expect(overview.getByRole("group", { name: "Pałyn" })).toBeVisible()
 })
 
-test("the buttons sit on their own line in a 960 px window", async ({ page }) => {
+test("the buttons and the legend share the songs group's head in a 960 px window", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 680 })
   const overview = await openEvening(page)
-  const played = await overview.getByText("played", { exact: true }).boundingBox()
-  const send = await overview.getByRole("button", { name: /Send starred/ }).boundingBox()
-  expect(send!.y).toBeGreaterThan(played!.y + played!.height)
+  const head = (await overview.locator("[data-overview-head]").boundingBox())!
+  const send = (await overview.getByRole("button", { name: /Send starred/ }).boundingBox())!
+  const clear = (await overview.getByRole("button", { name: /Clear false starts/ }).boundingBox())!
+  for (const [what, at] of [["Send starred", send], ["Clear false starts", clear]] as const) {
+    expect(at.x, `${what} inside the head, left`).toBeGreaterThanOrEqual(head.x)
+    expect(at.x + at.width, `${what} inside the head, right`).toBeLessThanOrEqual(head.x + head.width)
+    expect(at.y, `${what} inside the head, top`).toBeGreaterThanOrEqual(head.y)
+    expect(at.y + at.height, `${what} inside the head, bottom`).toBeLessThanOrEqual(head.y + head.height)
+  }
   expect(await overview.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
 })
 
@@ -202,8 +208,7 @@ async function openPast(page: Page, name: string, before = "") {
 test("in History a rehearsal has its false starts and both buttons", async ({ page }) => {
   const overview = await openPast(page, "Tuesday jam")
   await expect(row(overview, 1)).toHaveAttribute("data-false-start")
-  await expect(overview.getByRole("button", { name: /Send starred/ })).toHaveAttribute(
-    "title",
+  await expect(overview.getByRole("button", { name: /Send starred/ })).toHaveAccessibleDescription(
     "No take has ★"
   )
   await overview.getByRole("button", { name: /Clear false starts/ }).click()
@@ -235,7 +240,7 @@ test("in History a starred take on its way says so, in its row and in the toolti
   // It asks after the copy at once, not at the next look in two seconds.
   await expect.poll(polls, { timeout: 400 }).toBeGreaterThan(before)
   await expect(row(overview, 1)).toContainText("Waiting for the cloud")
-  await expect(send).toHaveAttribute("title", "Every ★ take is in the cloud folder or on its way")
+  await expect(send).toHaveAccessibleDescription("Every ★ take is in the cloud folder or on its way")
 })
 
 test("in History a pill under an unnamed take names it there", async ({ page }) => {

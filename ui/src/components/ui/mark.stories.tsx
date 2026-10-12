@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import { LabelDot, MarkLine } from "./mark"
+import { LabelDot, MarkLine, MarkTick } from "./mark"
 import { LABEL_COLOURS } from "@/lib/labels"
 import type { Label } from "@/lib/api"
 
@@ -52,6 +52,23 @@ export const Dots: Story = {
     <div className="flex items-center gap-3">
       {LABEL_COLOURS.map((colour) => (
         <LabelDot key={colour} colour={colour} />
+      ))}
+    </div>
+  ),
+}
+
+/** On a take's bar, where the marks fell: the caller says how far up and
+ *  down they run, and the bar is what they are placed in. */
+export const Ticks: Story = {
+  render: () => (
+    <div className="relative h-8 w-80 overflow-hidden rounded-sm border border-transparent bg-muted">
+      {LABEL_COLOURS.map((colour, i) => (
+        <MarkTick
+          key={colour}
+          colour={colour}
+          at={8 + (i * 84) / LABEL_COLOURS.length}
+          className="inset-y-[5px]"
+        />
       ))}
     </div>
   ),
