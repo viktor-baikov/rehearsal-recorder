@@ -2,7 +2,6 @@
   "src/components/ActivityButton.tsx": ["uppercase"],
   "src/components/EveningFacts.tsx": ["px-text", "uppercase"],
   "src/components/HistorySwitch.tsx": ["raw-button"],
-  "src/components/IconPicker.tsx": ["px-text", "raw-button"],
   "src/components/LabelList.tsx": ["raw-button"],
   "src/components/MarksPage.tsx": ["px-text", "uppercase", "raw-button"],
   "src/components/MarksSettings.tsx": ["raw-button"],
@@ -31,11 +30,8 @@
   "src/components/TrackTile.tsx": ["px-text", "raw-colour"],
   "src/components/UnderTheHood.tsx": ["px-text"],
   "src/components/midi/MidiTile.tsx": ["raw-colour"],
-  "src/components/midi/ModeSwitch.tsx": ["raw-button"],
-  "src/components/midi/NotesCheck.tsx": ["px-text"],
   "src/components/midi/NotesLane.tsx": ["px-text"],
   "src/components/midi/NotesPlate.tsx": ["px-text"],
-  "src/components/midi/PortPicker.tsx": ["px-text", "raw-colour"],
   "src/screens/Recording.tsx": ["uppercase"],
   "src/screens/Settings.tsx": ["raw-colour", "raw-button"]
 }

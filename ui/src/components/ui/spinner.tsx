@@ -1,6 +1,7 @@
 import * as React from "react"
 import { Loader2Icon } from "lucide-react"
 
+import { useAfter } from "@/hooks/useAfter"
 import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import { cn } from "@/lib/utils"
 
@@ -22,12 +23,7 @@ function Spinner({
   /** How long to stay invisible, in ms. */
   after?: number
 }) {
-  const [late, setLate] = React.useState(after <= 0)
-  React.useEffect(() => {
-    if (after <= 0) return
-    const timer = setTimeout(() => setLate(true), after)
-    return () => clearTimeout(timer)
-  }, [after])
+  const late = useAfter(true, after)
 
   return (
     <Loader2Icon

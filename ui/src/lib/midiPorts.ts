@@ -82,3 +82,28 @@ export function portBusyText(port: string): string {
 export function portGoneText(port: string, track: string): string {
   return `“${port}” is not connected. ${track} records its notes from the moment it is plugged in.`
 }
+
+/** How a track's port stands, for the line beside its picker: null for a
+ *  track that takes no notes, "none" while none is picked (P3), "missing"
+ *  for one not there (P1, D7) and "in_use" for one another app holds (P5). */
+export type PortStanding = "none" | "ok" | "missing" | "in_use" | null
+
+/**
+ * What a track's own port line says beside its picker (D7, P2, P3, P5, P8),
+ * or null when there is nothing to say: the first of these that holds. No
+ * port picked; another track on the same port (`sharing`); the port held by
+ * another app; the port not connected; the same notes heard as from another
+ * track (`echo`). The other track is named as the line is to say it now.
+ */
+export function portLine(
+  standing: PortStanding,
+  { sharing, echo }: { sharing?: string; echo?: string } = {}
+): string | null {
+  if (standing === null) return null
+  if (standing === "none") return "Pick a port, or set it to Audio."
+  if (sharing !== undefined) return `${sharing} takes notes from this port too.`
+  if (standing === "in_use") return "In use by another app. Records its notes from the moment it is free."
+  if (standing === "missing") return "Not connected. Records its notes from the moment it is plugged in."
+  if (echo !== undefined) return `Same notes as ${echo}. Plugged in twice?`
+  return null
+}

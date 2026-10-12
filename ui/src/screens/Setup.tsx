@@ -11,33 +11,24 @@ import {
   RefreshCw,
   Mic,
   Settings as SettingsIcon,
-  Trash2,
   TriangleAlert,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
+import { Spinner } from "@/components/ui/spinner"
 import { FigureLine, Figures, WholeTip, useCut } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
-import { IconPicker } from "@/components/IconPicker"
 import { LastTime } from "@/components/LastTime"
-import { NameField } from "@/components/NameField"
-import { END_COLUMN, ModeSwitch } from "@/components/midi/ModeSwitch"
-import { NotesCheck } from "@/components/midi/NotesCheck"
-import { PortPicker } from "@/components/midi/PortPicker"
 import { NewDot } from "@/components/NewDot"
 import { NewSetDialog, SetPicker } from "@/components/SetPicker"
 import { Shell } from "@/components/Shell"
+import { TrackRow } from "@/components/TrackRow"
+import { useAfter } from "@/hooks/useAfter"
 import { chosenSet, useSets } from "@/hooks/useSets"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
@@ -47,9 +38,10 @@ import { dismiss, notify } from "@/lib/notices"
 import { useUpdate } from "@/lib/update"
 import { useWide } from "@/lib/wide"
 import { aboutDuration, inputsLabel, notConnected } from "@/lib/format"
-import { QUIET_THRESHOLD, fallBack, meterReach } from "@/lib/levels"
+import { QUIET_THRESHOLD, fallBack } from "@/lib/levels"
 import { modeOf, notesProblem, recordsAudio, recordsNotes } from "@/lib/midi"
-import { findPort } from "@/lib/midiPorts"
+import { findPort, portLine, type PortStanding } from "@/lib/midiPorts"
+import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import {
   api,
   type Device,
@@ -202,6 +194,7 @@ export function Setup({
   const [makingSet, setMakingSet] = useState(false)
   const songChoices = useSongChoices(makingSet, null, null)
   const [rescanning, setRescanning] = useState(false)
+  const slowLook = useAfter(rescanning, SPINNER_AFTER_MS)
   const [stillMissing, setStillMissing] = useState(false)
 
   /**
@@ -373,7 +366,7 @@ export function Setup({
    * nothing tells apart count as not there. Before the list is first read,
    * nothing is said against a port.
    */
-  const portStanding = (t: Track, i: number): "none" | "ok" | "missing" | "in_use" | null => {
+  const portStanding = (t: Track, i: number): PortStanding => {
     if (!recordsNotes(t)) return null
     if (!t.midi_port || portName(t) === null) return "none"
     const state = heardFrom(t, i)?.state
@@ -453,6 +446,31 @@ export function Setup({
       })
     )
 
+  /**
+   * A track in stereo or back to mono. Turning stereo on claims the input
+   * after this one. Where that input is somebody else's, or past the end of
+   * the card, the track is left waiting for one rather than quietly
+   * recording the same signal twice.
+   */
+  const setStereo = (i: number) =>
+    setTracks((prev) =>
+      prev.map((t, j) => {
+        if (j !== i) return t
+        const stereo = !t.stereo
+        const clash =
+          stereo &&
+          t.channel !== null &&
+          (t.channel + 1 > maxChannels ||
+            prev.some(
+              (o, k) =>
+                k !== i &&
+                o.channel !== null &&
+                (o.channel === t.channel! + 1 || (!!o.stereo && o.channel + 1 === t.channel! + 1))
+            ))
+        return { ...t, stereo, channel: clash ? null : t.channel }
+      })
+    )
+
   // PortAudio lists the interfaces once, when the app starts, so a desk
   // switched on afterwards is found only by looking again.
   const lookAgain = async () => {
@@ -517,22 +535,27 @@ export function Setup({
     uncue()
     setError(null)
     setCheckProblem(null)
-    const res = await api().start_monitor(deviceIndex, samplerate, tracks)
+    // What this check opens, by each track's place, is set down before
+    // Python is asked, from the tracks it is given. A track taken off, added
+    // or put back while it opens then takes its own along, as it does while
+    // the check runs; one put back from before the check has nothing in it.
+    const band = tracks
+    checkRun.current += 1
+    setCheckedNames(band.map((t) => (recordsAudio(t) ? t.name : null)))
+    setCheckedPorts(
+      band.map((t) =>
+        recordsNotes(t) ? { name: t.name, mode: modeOf(t), port: portName(t) } : null
+      )
+    )
+    const res = await api().start_monitor(deviceIndex, samplerate, band)
     if (!res.ok) {
       setError(res.error ?? "Could not open the input for checking")
       return
     }
-    checkRun.current += 1
     setSeen({})
     setHeard({})
     setNotesShown({})
-    setCheckedNames(tracks.map((t) => (recordsAudio(t) ? t.name : null)))
-    const noted = tracks.filter(recordsNotes)
-    setCheckedPorts(
-      tracks.map((t) =>
-        recordsNotes(t) ? { name: t.name, mode: modeOf(t), port: portName(t) } : null
-      )
-    )
+    const noted = band.filter(recordsNotes)
     setChecking(true)
     checkingRef.current = true
 
@@ -749,8 +772,18 @@ export function Setup({
               disabled={rescanning}
               className="shrink-0"
             >
-              <RefreshCw className={cn(rescanning && "animate-spin")} />
-              {rescanning ? "Looking…" : "Look again"}
+              {/* A look that takes a second turns a spinner in its icon's
+                  place (B5). */}
+              {slowLook ? <Spinner after={0} /> : <RefreshCw />}
+              {/* As wide whichever it says, so nothing beside it moves. */}
+              <span className="grid">
+                <span className={cn("col-start-1 row-start-1", rescanning && "invisible")}>
+                  Look again
+                </span>
+                <span className={cn("col-start-1 row-start-1", !rescanning && "invisible")}>
+                  Looking…
+                </span>
+              </span>
             </Button>
           </div>
           {stillMissing && !rescanning && (
@@ -779,17 +812,14 @@ export function Setup({
         <Warning>
           {tooManyTracks ? (
             <>
-              “{device?.name}” has {maxChannels}{" "}
-              {maxChannels === 1 ? "input" : "inputs"} — not enough for{" "}
-              {soundTracks} tracks. Record fewer at once, or use an
-              interface with more inputs.
+              “{device?.name}” has {inputsLabel(maxChannels)} — not enough for {soundTracks}{" "}
+              tracks. Record fewer at once, or use an interface with more inputs.
             </>
           ) : (
             <>
-              {needInput.map((t) => t.name || "An unnamed track").join(", ")}
-              {needInput.length === 1 ? " has" : " have"} no input on “
-              {device?.name}” — it has {maxChannels}{" "}
-              {maxChannels === 1 ? "input" : "inputs"}. Pick one below.
+              {needInput.map((t) => named(t.name)).join(", ")}
+              {needInput.length === 1 ? " has" : " have"} no input on “{device?.name}” — it
+              has {inputsLabel(maxChannels)}. Pick one below.
             </>
           )}
         </Warning>
@@ -817,17 +847,22 @@ export function Setup({
   )
 
   const tracksHead = (
-    <div className="flex flex-col gap-1.5 px-6 pt-5 pb-4">
+    <div className="flex flex-col gap-1 px-6 pt-6 pb-4">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-sm font-semibold">Tracks</h2>
         <div className="flex shrink-0 items-center gap-2">
-          {/* Grey while it runs, not the accent: on is grey (F2). */}
+          {/* It says what pressing it does, so it is a button, not a
+              toggle; grey while it runs, as what is on is (F2), under the
+              pointer too. A running check can always be stopped, even with
+              every track taken off. */}
           <Button
             variant="outline"
             size="row"
             onClick={checking ? stopCheck : startCheck}
-            disabled={!tracks.length || deviceIndex === null}
-            className={cn(checking && "bg-selected dark:bg-selected")}
+            disabled={!checking && (!tracks.length || deviceIndex === null)}
+            className={cn(
+              checking && "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected"
+            )}
           >
             <Activity />
             {/* As wide whichever it says, so nothing beside it moves. */}
@@ -852,212 +887,64 @@ export function Setup({
 
   const trackRows = tracks.map((track, i) => {
     const standing = portStanding(track, i)
-    const away = standing === "missing" || standing === "in_use"
     const ear = heardFrom(track, i)
-    const listed = track.midi_port && midiPorts
-      ? findPort(track.midi_port, midiPorts.ports).port
-      : null
+    const listed =
+      track.midi_port && midiPorts ? findPort(track.midi_port, midiPorts.ports).port : null
     // The name the check hears this track's input by, while it runs.
     const heardAs = checking ? (checkedNames[i] ?? null) : null
     // What is the matter with its port, said in its own line beside the
-    // picker (D7, P2, P3, P5, P8), naming any other track as it is called now.
+    // picker, naming any other track as it is called now.
     const sharing =
       recordsNotes(track) && portName(track) !== null
         ? tracks.find((o, j) => j !== i && recordsNotes(o) && portName(o) === portName(track))
         : undefined
     const echo = echoes.find((e) => e.track === track)?.echo
-    const portNote = !recordsNotes(track)
-      ? null
-      : standing === "none"
-        ? "Pick a port, or set it to Audio."
-        : sharing
-          ? `${named(sharing.name)} takes notes from this port too.`
-          : standing === "in_use"
-            ? "In use by another app. Records its notes from the moment it is free."
-            : standing === "missing"
-              ? "Not connected. Records its notes from the moment it is plugged in."
-              : echo
-                ? `Same notes as ${named(echo.name)}. Plugged in twice?`
-                : null
     return (
-      <div key={i} data-track-row className="flex flex-col gap-2 border-t px-6 py-4">
-        {/* Who it is and what it records. A long name goes onto a second
-            line rather than losing its end (D5). */}
-        <div className="flex items-start gap-3">
-          <IconPicker
-            label={`Track ${i + 1} icon`}
-            name={track.name || `track ${i + 1}`}
-            value={track.icon}
-            onChange={(icon) => setTrack(i, { icon })}
-          />
-          <NameField
-            label={`Track ${i + 1} name`}
-            placeholder="Track name"
-            value={track.name}
-            onChange={(name) => setTrack(i, { name })}
-          />
-          <ModeSwitch
-            label={`Track ${i + 1} records`}
-            value={modeOf(track)}
-            onChange={(mode) => setMode(i, mode)}
-          />
-          <Button
-            variant="ghost"
-            size="icon-row"
-            aria-label={`Remove track ${track.name}`}
-            onClick={() => removeTrack(i)}
-            className="shrink-0 text-muted-foreground hover:text-destructive"
-          >
-            <Trash2 />
-          </Button>
-        </div>
-
-        {/* Under the name, a line for each thing it records, the check's
-            meter at the end. The meter's place is kept while nothing is
-            checked, so a check moves nothing. */}
-        {recordsAudio(track) && (
-          <div className="flex items-center gap-3 px-11">
-            <Select
-              value={waiting(track) ? "" : String(track.channel ?? "")}
-              onValueChange={(v) => setTrack(i, { channel: Number(v) })}
-            >
-              <SelectTrigger
-                size="sm"
-                aria-label={`Track ${i + 1} input`}
-                className={cn("w-32", waiting(track) && "border-warn/60 text-muted-foreground")}
-              >
-                <SelectValue placeholder="No input" />
-              </SelectTrigger>
-              <SelectContent>
-                {Array.from({ length: maxChannels }, (_, c) => c + 1)
-                  // A stereo track takes the input after its own, so the
-                  // last input is not somewhere it can start.
-                  .filter((c) => !track.stereo || c < maxChannels)
-                  .map((c) => (
-                    <SelectItem key={c} value={c.toString()}>
-                      {track.stereo ? `Inputs ${c}–${c + 1}` : `Input ${c}`}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-
-            <Button
-              type="button"
-              size="row"
-              variant="outline"
-              aria-pressed={!!track.stereo}
-              aria-label={`Track ${i + 1} in stereo`}
-              title="Two adjacent inputs, written as one stereo file"
-              className={cn(track.stereo && "bg-selected dark:bg-selected")}
-              onClick={() =>
-                setTracks((prev) =>
-                  prev.map((t, j) => {
-                    if (j !== i) return t
-                    const stereo = !t.stereo
-                    // Turning stereo on claims the input after this one.
-                    // Where that input is somebody else's, or past the end
-                    // of the card, the track is left waiting for one rather
-                    // than quietly recording the same signal twice.
-                    const clash =
-                      stereo &&
-                      t.channel !== null &&
-                      (t.channel + 1 > maxChannels ||
-                        prev.some(
-                          (o, k) =>
-                            k !== i &&
-                            o.channel !== null &&
-                            (o.channel === t.channel! + 1 ||
-                              (!!o.stereo && o.channel + 1 === t.channel! + 1))
-                        ))
-                    return { ...t, stereo, channel: clash ? null : t.channel }
-                  })
-                )
+      <TrackRow
+        key={i}
+        n={i + 1}
+        track={track}
+        inputs={maxChannels}
+        waiting={waiting(track)}
+        checking={checking}
+        level={(heardAs !== null && levels[heardAs]) || [0]}
+        signal={heardAs !== null && !!seen[heardAs]}
+        ports={midiPorts}
+        portWarn={standing === "none" || standing === "missing" || standing === "in_use"}
+        portNote={portLine(standing, {
+          sharing: sharing && named(sharing.name),
+          echo: echo && named(echo.name),
+        })}
+        notes={
+          checkOpened(track, i)
+            ? {
+                seen: (ear?.notes ?? 0) > 0 || (listed?.notes ?? 0) > 0,
+                vel: ear ? (notesShown[checkedName(track, i)!] ?? 0) : 0,
               }
-            >
-              Stereo
-            </Button>
-
-            <div data-check-slot="signal" className={cn("ml-auto flex shrink-0", END_COLUMN)}>
-              <div className={cn("flex flex-1 items-center gap-2", !checking && "invisible")}>
-                {/* One bar of the usual height, split along its length for a
-                    stereo track: left above, right below. A dead half of a
-                    pair has to be visible here or the check has not done its
-                    job. In dB, as on the recording screen and the desk. */}
-                <div
-                  data-meter={track.name}
-                  className="relative h-2 flex-1 overflow-hidden rounded-full border bg-background"
-                >
-                  {((heardAs !== null && levels[heardAs]) || [0]).map((side, k, all) => (
-                    <div
-                      key={k}
-                      className="absolute left-0 bg-signal transition-[width] duration-75"
-                      style={{
-                        width: `${meterReach(side) * 100}%`,
-                        top: all.length > 1 && k === 1 ? "50%" : 0,
-                        bottom: all.length > 1 && k === 0 ? "50%" : 0,
-                      }}
-                    />
-                  ))}
-                </div>
-                {heardAs !== null && seen[heardAs] ? (
-                  <span
-                    className="flex w-12 items-center gap-1 text-xs text-signal"
-                    title="Signal has arrived on this input"
-                  >
-                    <Check className="size-3" />
-                    signal
-                  </span>
-                ) : (
-                  <span className="w-12 text-xs text-muted-foreground">silent</span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {recordsNotes(track) && (
-          <div className="flex items-center gap-3 px-11">
-            <PortPicker
-              label={`Track ${i + 1} MIDI port`}
-              value={track.midi_port}
-              ports={midiPorts}
-              counting={checking}
-              warn={standing === "none" || away}
-              onChange={(port) => setTrack(i, { midi_port: port })}
-            />
-            {/* Two lines of it fit in the picker's height, so it moves no
-                row as it comes or goes. */}
-            {portNote && (
-              <p
-                role="status"
-                data-port-note
-                className="flex min-w-0 flex-1 items-start gap-1.5 text-xs"
-              >
-                <TriangleAlert className="mt-px size-3.5 shrink-0 text-warn" />
-                <span>{portNote}</span>
-              </p>
-            )}
-            {/* A note has the end column's room too: two lines beside even a
-                long port name. What the check hears from the port is said
-                only for a port it opened: one picked since says nothing
-                until the next check. */}
-            {!portNote && (
-              <div
-                data-check-slot="notes"
-                className={cn("ml-auto grid shrink-0 items-center", END_COLUMN)}
-              >
-                <NotesCheck
-                  seen={(ear?.notes ?? 0) > 0 || (listed?.notes ?? 0) > 0}
-                  vel={ear ? (notesShown[checkedName(track, i)!] ?? 0) : 0}
-                  className={cn("col-start-1 row-start-1", !checkOpened(track, i) && "invisible")}
-                />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+            : null
+        }
+        onChange={(patch) => setTrack(i, patch)}
+        onMode={(mode) => setMode(i, mode)}
+        onStereo={() => setStereo(i)}
+        onRemove={() => removeTrack(i)}
+      />
     )
   })
+
+  // A band with nobody in it says what goes here and how (B7): Add track is
+  // under it, in the group's foot.
+  const noTracks = (
+    <div className="border-t px-6 py-8">
+      <Empty className="p-0 md:p-0">
+        <EmptyHeader>
+          <EmptyTitle className="text-sm">No tracks yet</EmptyTitle>
+          <EmptyDescription>
+            Add one per musician, then pick the input they plug into.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    </div>
+  )
 
   const tracksFoot = (
     <div className="flex items-center justify-between gap-4 border-t px-6 py-4">
@@ -1083,7 +970,7 @@ export function Setup({
       {disk?.ok && disk.minutes !== undefined && channelCount > 0 && (
         <span
           className={cn(
-            "flex items-center gap-1.5 text-xs",
+            "flex items-center gap-1 text-xs",
             disk.low ? "text-destructive" : "text-muted-foreground"
           )}
         >
@@ -1225,7 +1112,7 @@ export function Setup({
             {tracksHead}
             {recordingWith}
             <div className="flex flex-col gap-3 px-6 pb-4 empty:hidden">{warnings}</div>
-            <div className="flex flex-col">{trackRows}</div>
+            <div className="flex flex-col">{tracks.length ? trackRows : noTracks}</div>
             {tracksFoot}
           </section>
         </div>

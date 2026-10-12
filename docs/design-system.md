@@ -308,7 +308,9 @@ The other shared components, each with its stories:
   `default` and `outline`, sized as Button's `row` (32 px) and `icon-row`.
   On is the grey `selected` fill, never the accent (F2), and it has the same
   weight and 1 px frame on or off, so pressing it moves nothing. C8's on/off
-  buttons: Check signal, Stereo.
+  buttons: Stereo. Check signal says what pressing it does ("Check signal",
+  "Stop checking"), and a toggle's name must not change with it, so it is a
+  Button, grey while the check runs.
 - **ToggleGroup**, `toggle-group.tsx`: pick one or several, with the arrow
   keys moving along the group and Tab leaving it. `default` and `outline` are
   Toggles joined into a bar; `switch` is History's switch, a grey track with
@@ -322,7 +324,10 @@ The other shared components, each with its stories:
   and named Loading. It is there from the start but invisible for the first
   second (`SPINNER_AFTER_MS`, or its `after` in ms), so a quick answer does
   not flash it and nothing moves when it shows (B4, B5). It stands still
-  under Reduce motion and while a take records (F11). C8's loading signs.
+  under Reduce motion and while a take records (F11). C8's loading signs. A
+  control that keeps its own icon until the spinner takes its place, as the
+  small player and Look again do, counts the second with `useAfter`
+  (`hooks/useAfter.ts`), the hook the Spinner counts with.
 - **Empty**, `empty.tsx`: an empty list that says what will be here and how it
   gets here (B7): a title, a line, and the button that fills it. C8's empty
   states.

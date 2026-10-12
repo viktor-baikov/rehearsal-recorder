@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { MidiPort } from "@/lib/api"
-import { bareName, findPort, portBusyText, portGoneText, portRef } from "@/lib/midiPorts"
+import { bareName, findPort, portBusyText, portGoneText, portLine, portRef } from "@/lib/midiPorts"
 
 // The same cases as tests/test_midi.py section [2]: the picker says a saved
 // port is there, or not connected, exactly when Python finds it or does not.
@@ -88,5 +88,43 @@ describe("portRef: a listed port as a band keeps it", () => {
 
   it("leaves out what says nothing", () => {
     expect(portRef({ name: "TD-17", device: "", maker: " ", notes: 0 })).toEqual({ name: "TD-17" })
+  })
+})
+
+describe("portLine: what a track's own port line says (D7, P2, P3, P5, P8)", () => {
+  it("asks for a port while none is picked", () => {
+    expect(portLine("none")).toBe("Pick a port, or set it to Audio.")
+    // Before anything else: a track with no port shares none.
+    expect(portLine("none", { sharing: "Bass", echo: "Keys" })).toBe("Pick a port, or set it to Audio.")
+  })
+
+  it("names the other track on the same port", () => {
+    expect(portLine("ok", { sharing: "Bass" })).toBe("Bass takes notes from this port too.")
+    // Before the port's own state: two on one port stops Start.
+    expect(portLine("in_use", { sharing: "Bass" })).toBe("Bass takes notes from this port too.")
+    expect(portLine("missing", { sharing: "Bass", echo: "Keys" })).toBe("Bass takes notes from this port too.")
+  })
+
+  it("says another app holds it", () => {
+    expect(portLine("in_use")).toBe("In use by another app. Records its notes from the moment it is free.")
+    expect(portLine("in_use", { echo: "Keys" })).toBe(
+      "In use by another app. Records its notes from the moment it is free."
+    )
+  })
+
+  it("says it is not connected", () => {
+    expect(portLine("missing")).toBe("Not connected. Records its notes from the moment it is plugged in.")
+    expect(portLine("missing", { echo: "Keys" })).toBe(
+      "Not connected. Records its notes from the moment it is plugged in."
+    )
+  })
+
+  it("asks whether one instrument is plugged in twice", () => {
+    expect(portLine("ok", { echo: "Synth" })).toBe("Same notes as Synth. Plugged in twice?")
+  })
+
+  it("says nothing of a port that is fine, or of a track that takes no notes", () => {
+    expect(portLine("ok")).toBeNull()
+    expect(portLine(null, { sharing: "Bass", echo: "Keys" })).toBeNull()
   })
 })

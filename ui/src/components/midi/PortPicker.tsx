@@ -1,3 +1,4 @@
+import { Check } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MidiGlyph } from "@/components/midi/MidiGlyph"
 import type { MidiPort, MidiPortRef, MidiPorts } from "@/lib/api"
@@ -32,9 +33,10 @@ function PortName({ name }: { name: string }) {
 /**
  * The port a track's notes come from: the ports the system lists now, in
  * Python's order (a device's playing port first, P7). The saved port, when it
- * is not plugged in, is listed too and marked "not connected" (D7); two ports
- * it could equally be are both listed and neither is taken for it (P1).
- * During the check, a port notes have come from is marked "✓ notes", which
+ * is not plugged in, is listed too and marked "Not connected" (D7), in the
+ * quiet look every status has; two ports it could equally be are both listed
+ * and neither is taken for it (P1). During the check, a port notes have come
+ * from is marked "notes" with the check's tick, in the text's colour, which
  * tells a keyboard's playing port from its DAW port.
  *
  * The list drops below the picker rather than over it, as the app's other
@@ -57,7 +59,7 @@ export function PortPicker({
   ports: MidiPorts | null
   /** During the check: mark the ports that notes have come from. */
   counting: boolean
-  /** An amber edge: no port picked yet, or the one picked is not there. */
+  /** The warning edge: no port picked yet, or the one picked is not there. */
   warn: boolean
   onChange: (port: MidiPortRef) => void
 }) {
@@ -84,9 +86,12 @@ export function PortPicker({
         aria-label={label}
         className={cn(
           // Grows to a second line for a long name instead of cutting it.
-          "h-auto min-h-8 max-w-sm min-w-0 py-1 text-left whitespace-normal data-[size=sm]:h-auto",
+          // It leaves its line 15rem: two lines of a note about the port
+          // (B4), or the check's meter while there is none, so it is as wide
+          // with the note as without.
+          "h-auto min-h-8 max-w-[min(24rem,calc(100%-15rem))] min-w-0 py-1 text-left whitespace-normal data-[size=sm]:h-auto",
           "*:data-[slot=select-value]:line-clamp-none",
-          warn && "border-amber-500/60"
+          warn && "border-warn/60"
         )}
       >
         <SelectValue placeholder={none ?? "No port"}>
@@ -101,8 +106,8 @@ export function PortPicker({
         {missing && (
           <SelectItem value={SAVED} className={ITEM}>
             <PortName name={value.name} />
-            <span className="ml-auto shrink-0 pl-2 text-[11px] text-muted-foreground">
-              not connected
+            <span className="ml-auto shrink-0 pl-2 text-xs text-muted-foreground">
+              Not connected
             </span>
           </SelectItem>
         )}
@@ -110,7 +115,11 @@ export function PortPicker({
           <SelectItem key={keyOf(port, at)} value={keyOf(port, at)} className={ITEM}>
             <PortName name={port.name} />
             {counting && port.notes > 0 && (
-              <span className="ml-auto shrink-0 pl-2 text-[11px] text-primary">✓ notes</span>
+              <span className="ml-auto flex shrink-0 items-center gap-1 pl-2 text-xs text-foreground">
+                {/* In the words' colour: the list greys an icon otherwise. */}
+                <Check className="size-3 text-current" />
+                notes
+              </span>
             )}
           </SelectItem>
         ))}

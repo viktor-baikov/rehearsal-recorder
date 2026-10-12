@@ -1,6 +1,7 @@
 import { useRef, useState, type KeyboardEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { INSTRUMENTS, instrument } from "@/lib/instruments"
 import { cn } from "@/lib/utils"
@@ -12,9 +13,11 @@ const COLUMNS = 5
  * it opens to choose another.
  *
  * Every icon in the grid carries its name under it: at 16 px a bass and a
- * guitar are close, and the words settle it. Choosing one closes the grid;
- * from the keys it opens on the one chosen, the arrows move through it by
- * row and column, Enter takes one and Escape takes none.
+ * guitar are close, and the words settle it. The chosen one has the grey
+ * fill of a thing that is on (F2). Choosing one closes the grid; from the
+ * keys it opens on the one chosen, the arrows move through it by row and
+ * column, Enter takes one and Escape takes none. The button at the row's
+ * start names its icon in the shared tip.
  */
 export function IconPicker({
   label,
@@ -52,19 +55,23 @@ export function IconPicker({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-row"
-          aria-label={label}
-          title={current.label}
-          data-icon={current.key}
-          className="shrink-0"
-        >
-          <InstrumentIcon icon={current.key} className="size-4" />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-row"
+              aria-label={label}
+              data-icon={current.key}
+              className="shrink-0"
+            >
+              <InstrumentIcon icon={current.key} className="size-4" />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{current.label}</TooltipContent>
+      </Tooltip>
       <PopoverContent
         aria-label={`Icon for ${name}`}
         // Onto the one chosen, not the first in the grid.
@@ -81,26 +88,28 @@ export function IconPicker({
           {INSTRUMENTS.map((it, i) => {
             const on = it.key === current.key
             return (
-              <button
+              <Button
                 key={it.key}
                 ref={(el) => {
                   cells.current[i] = el
                 }}
                 type="button"
+                variant="ghost"
                 aria-pressed={on}
                 onClick={() => {
                   onChange(it.key)
                   setOpen(false)
                 }}
                 className={cn(
-                  "flex flex-col items-center gap-1.5 rounded px-1 pt-2.5 pb-2 text-[11px] leading-tight text-muted-foreground transition-colors",
-                  "hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-                  on && "bg-accent text-foreground ring-1 ring-primary ring-inset"
+                  // A cell of the grid: the icon over its name, which may
+                  // take two lines.
+                  "h-auto flex-col gap-1 px-1 py-2 text-xs leading-tight whitespace-normal text-muted-foreground has-[>svg]:px-1",
+                  on && "bg-selected text-foreground hover:bg-selected dark:hover:bg-selected"
                 )}
               >
                 <InstrumentIcon icon={it.key} className="size-5 text-foreground" />
                 {it.label}
-              </button>
+              </Button>
             )
           })}
         </div>

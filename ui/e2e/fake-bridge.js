@@ -966,6 +966,7 @@ window.__MAKE_API__ = () => ({
     {index:0, name:'Universal Audio Thunderbolt', host_api:'Core Audio',
      max_input_channels:18, max_output_channels:0, default_samplerate:48000}])),
   rescan_devices: track('rescan_devices', async () => {
+    await held('rescan_devices');
     rescans += 1;
     if (window.__PLUGGED_IN_LATE__ && !pluggedIn && rescans >= 2) {
       pluggedIn = true;
@@ -1052,6 +1053,7 @@ window.__MAKE_API__ = () => ({
   // A check opens the ports of the tracks that take notes, and counts again
   // from nothing (api.start_monitor).
   start_monitor: track('start_monitor', async (_dev, _rate, tracks) => {
+    await held('start_monitor');
     midiCheck = {tracks: (tracks || []).filter(takesNotes), since: clock(), ended: null, read: {}};
     return {ok:true};
   }),

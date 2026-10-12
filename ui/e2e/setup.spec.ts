@@ -289,7 +289,10 @@ test.describe("an interface switched on after the app", () => {
     await expect(box).toContainText("not connected")
 
     await page.getByRole("button", { name: "Look again" }).click()
-    await expect(box.locator("[data-shown]")).toContainText("18 inputs")
+    // The figures as they show beside its name, not only as they are read.
+    const shown = box.locator("[data-shown]")
+    await expect(shown).toBeVisible()
+    await expect(shown).toContainText("18 inputs")
     await expect(box).toHaveText(/^X18\/XR18/)
     await expect(page.getByRole("button", { name: "Look again" })).toHaveCount(0)
     await expect(page.getByText("Still not there")).toHaveCount(0)
@@ -392,6 +395,259 @@ test.describe("a track's icon", () => {
       "other"
     )
   })
+
+  test("the chosen one in the grid is grey, and the icon's name is its tip", async ({ page }) => {
+    await openApp(page, { before: "window.__BAND_ICONS__ = {Guitar: 'bass'};" })
+    const icon = page.getByRole("button", { name: "Track 1 icon" })
+    // Its name in the shared tip, not the browser's own.
+    await expect(icon).not.toHaveAttribute("title")
+    await icon.hover()
+    await expect(tooltip(page)).toHaveText("Bass")
+    await icon.click()
+    const grid = page.getByRole("dialog", { name: "Icon for Guitar" })
+    const chosen = grid.getByRole("button", { name: "Bass" })
+    await expect(chosen).toHaveAttribute("aria-pressed", "true")
+    // On is the grey fill, with no ring in the accent round it (F2): looked
+    // at with the focus and the pointer elsewhere.
+    await expect(chosen).toBeFocused()
+    await page.keyboard.press("ArrowRight")
+    await expect(chosen).not.toBeFocused()
+    await page.mouse.move(0, 0)
+    await expect.poll(() => chosen.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+      await colourOf(page, "selected")
+    )
+    await expect(chosen).toHaveCSS("box-shadow", "none")
+    // Each one the shared button, its name at 12 px.
+    await expect(grid.locator("button:not([data-slot='button'])")).toHaveCount(0)
+    await expect(chosen).toHaveCSS("font-size", "12px")
+  })
+})
+
+/** A theme colour, as the browser draws it for a background. */
+const colourOf = (page: Page, token: string) =>
+  page.evaluate((t) => {
+    const probe = document.createElement("i")
+    probe.style.backgroundColor = `var(--${t})`
+    document.body.append(probe)
+    const out = getComputedStyle(probe).backgroundColor
+    probe.remove()
+    return out
+  }, token)
+
+/** The shared tooltip's words, as a screen reader is given them. */
+const tooltip = (page: Page) => page.getByRole("tooltip")
+
+/** Holds the fake's answer to `name` until `letGo` lets it through. */
+async function hold(page: Page, name: string) {
+  await page.evaluate((n) => {
+    const w = window as unknown as {
+      __HOLD__?: Record<string, Promise<void>>
+      __RELEASE__?: Record<string, () => void>
+    }
+    w.__HOLD__ = w.__HOLD__ || {}
+    w.__RELEASE__ = w.__RELEASE__ || {}
+    w.__HOLD__[n] = new Promise<void>((r) => (w.__RELEASE__![n] = r))
+  }, name)
+}
+async function letGo(page: Page, name: string) {
+  await page.evaluate((n) => {
+    const w = window as unknown as {
+      __HOLD__: Record<string, Promise<void>>
+      __RELEASE__: Record<string, () => void>
+    }
+    delete w.__HOLD__[n]
+    w.__RELEASE__[n]()
+  }, name)
+}
+
+// A track's row on the shared pieces (C8): Stereo a Toggle, Audio · Both ·
+// MIDI a ToggleGroup, the name a field with the shared ring, Look again's
+// Spinner, and Empty for a band with nobody in it (B7).
+test.describe("the track rows on the shared pieces", () => {
+  test("an empty band says how to add tracks", async ({ page }) => {
+    await openApp(page)
+    // Emptied while the check runs: Stop checking still stops it.
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+    for (const name of ["Guitar", "Vocals"])
+      await page.getByRole("button", { name: `Remove track ${name}` }).click()
+    await expect(rows(page)).toHaveCount(0)
+
+    const empty = page.locator("section[data-tracks] [data-slot='empty']")
+    await expect(empty.getByText("No tracks yet", { exact: true })).toBeVisible()
+    await expect(
+      empty.getByText("Add one per musician, then pick the input they plug into.", { exact: true })
+    ).toBeVisible()
+    await expect(startButton(page)).toBeDisabled()
+
+    const stop = page.getByRole("button", { name: "Stop checking" })
+    await expect(stop).toBeEnabled()
+    const stops = await callCount(page, "stop_monitor")
+    await stop.click()
+    await expect(page.getByRole("button", { name: "Check signal" })).toBeDisabled()
+    expect(await callCount(page, "stop_monitor")).toBe(stops + 1)
+
+    await page.getByRole("button", { name: "Add track" }).click()
+    await expect(rows(page)).toHaveCount(1)
+    await expect(empty).toHaveCount(0)
+    await expect(page.getByRole("textbox", { name: "Track 1 name" })).toHaveValue("")
+    await expect(page.locator("[aria-label='Track 1 input']")).toHaveText("Input 1")
+    await expect(page.getByRole("button", { name: "Check signal" })).toBeEnabled()
+  })
+
+  test("Stereo is a toggle with aria-pressed", async ({ page }) => {
+    await openApp(page)
+    const stereo = page.getByRole("button", { name: "Track 1 in stereo" })
+    await expect(stereo).toHaveAttribute("data-slot", "toggle")
+    await expect(stereo).toHaveAttribute("aria-pressed", "false")
+    // What it does, in the shared tip rather than the browser's own.
+    await expect(stereo).not.toHaveAttribute("title")
+    await stereo.hover()
+    await expect(tooltip(page)).toHaveText("Two adjacent inputs, written as one stereo file")
+
+    await stereo.click()
+    await expect(stereo).toHaveAttribute("aria-pressed", "true")
+    await expect(stereo).toHaveAttribute("data-state", "on")
+    // On is grey, never the accent (F2), under the pointer as well.
+    const background = () => stereo.evaluate((el) => getComputedStyle(el).backgroundColor)
+    await expect.poll(background).toBe(await colourOf(page, "selected"))
+    expect(await background()).not.toBe(await colourOf(page, "primary"))
+    await page.mouse.move(0, 0)
+    await expect.poll(background).toBe(await colourOf(page, "selected"))
+
+    await stereo.click()
+    await expect(stereo).toHaveAttribute("aria-pressed", "false")
+  })
+
+  test("arrow keys move along Audio Both MIDI", async ({ page }) => {
+    await openApp(page)
+    const group = page.getByRole("radiogroup", { name: "Track 1 records" })
+    const mode = (name: string) => group.getByRole("radio", { name, exact: true })
+    await expect(mode("Audio")).toHaveAttribute("aria-checked", "true")
+
+    // Tab comes into the group on the one chosen; the arrows move along it.
+    await page.getByRole("textbox", { name: "Track 1 name" }).focus()
+    await page.keyboard.press("Tab")
+    await expect(mode("Audio")).toBeFocused()
+    await page.keyboard.press("ArrowRight")
+    await expect(mode("Both")).toBeFocused()
+    await page.keyboard.press("ArrowRight")
+    await expect(mode("MIDI")).toBeFocused()
+    await page.keyboard.press("ArrowLeft")
+    await expect(mode("Both")).toBeFocused()
+    // Moving chooses nothing; Space does.
+    await expect(mode("Audio")).toHaveAttribute("aria-checked", "true")
+    await page.keyboard.press("Space")
+    await expect(mode("Both")).toHaveAttribute("aria-checked", "true")
+    await expect(page.getByRole("combobox", { name: "Track 1 MIDI port" })).toBeVisible()
+    expect(await callCount(page, "start_rehearsal")).toBe(0)
+    // Tab leaves the group at once.
+    await page.keyboard.press("Tab")
+    await expect(page.getByRole("button", { name: "Remove track Guitar" })).toBeFocused()
+
+    // One is always chosen: pressing the chosen one again leaves it so.
+    await mode("Both").click()
+    await expect(mode("Both")).toHaveAttribute("aria-checked", "true")
+    await expect(group.locator("[aria-checked='true']")).toHaveCount(1)
+    await expect(page.getByRole("combobox", { name: "Track 1 MIDI port" })).toBeVisible()
+  })
+
+  test("Look again shows a spinner only after one second", async ({ page }) => {
+    await openApp(page, { before: "window.__PLUGGED_IN_LATE__ = true;" })
+    const look = page.getByRole("button", { name: "Look again" })
+    await expect(look).toBeVisible()
+    await settled(page)
+    const box = await look.boundingBox()
+    // The fake is slow to look: it holds the answer until it is let go.
+    await hold(page, "rescan_devices")
+    const looking = page.getByRole("button", { name: "Looking…" })
+    const spinner = looking.getByRole("status", { name: "Loading" })
+    const since = Date.now()
+    const at = (ms: number) => page.waitForTimeout(Math.max(0, ms - (Date.now() - since)))
+    await look.click()
+    await expect(looking).toBeDisabled()
+    await at(500)
+    expect(await spinner.isVisible(), "a spinner at 0.5 s").toBe(false)
+    await at(1500)
+    expect(await spinner.isVisible(), "a spinner at 1.5 s").toBe(true)
+    // The button keeps its box, its words and its spinner changing in it.
+    expect(await looking.boundingBox()).toEqual(box)
+
+    await letGo(page, "rescan_devices")
+    await expect(page.getByText("Still not there")).toBeVisible()
+    await expect(look).toBeEnabled()
+    await expect(page.getByRole("status", { name: "Loading" })).toHaveCount(0)
+  })
+
+  test("the device name keeps its width and the figures give way", async ({ page }) => {
+    // Beside Last time at 1180 px, the stress data's interface leaves its
+    // figures too little room for all of them.
+    await openBandApp(page, { stress: true })
+    const row = page.locator("[data-recording-with]")
+    const name = row.getByText("Universal Audio Apollo Twin X DUO Heritage Edition", { exact: true })
+    await expect(name).toBeVisible()
+    await expect(name).not.toHaveAttribute("data-cut")
+    const whole = (el: Element) => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight
+    expect(await name.evaluate(whole)).toBe(true)
+    const figures = row.locator("[data-figures]")
+    await expect(figures).toHaveAttribute("data-dropped")
+    // The least needed first: the depth, then the rate; the inputs last.
+    const shown = (await figures.locator("[data-shown]").innerText()).trim()
+    expect(["18 inputs · 48 kHz", "18 inputs", ""]).toContain(shown)
+    await expect(figures.locator(".sr-only")).toHaveText("18 inputs · 48 kHz · 24 bit")
+  })
+
+  test("a track's name is bare at rest, filled under the pointer, ringed while typing", async ({
+    page,
+  }) => {
+    await openApp(page)
+    const field = page.getByRole("textbox", { name: "Track 1 name" })
+    const place = field.locator("xpath=..")
+    const look = () =>
+      place.evaluate((el) => {
+        const s = getComputedStyle(el)
+        return { fill: s.backgroundColor, ring: s.boxShadow }
+      })
+    await page.mouse.move(0, 0)
+    await expect.poll(look).toEqual({ fill: "rgba(0, 0, 0, 0)", ring: "none" })
+    await field.hover()
+    await expect.poll(async () => (await look()).fill).not.toBe("rgba(0, 0, 0, 0)")
+    await field.focus()
+    await page.mouse.move(0, 0)
+    // The shared focus ring, as every field has.
+    await expect.poll(async () => (await look()).ring).not.toBe("none")
+    await expect.poll(async () => (await look()).fill).toBe("rgba(0, 0, 0, 0)")
+  })
+
+  test("signal and notes are said with the one tick, notes in the text's colour", async ({ page }) => {
+    await openApp(page, { before: "window.__MONITOR_LEVELS__ = {Drums: [0.62], Vocals: [0.0004]};" })
+    await page.getByRole("textbox", { name: "Track 1 name" }).fill("Drums")
+    await page
+      .getByRole("radiogroup", { name: "Track 1 records" })
+      .getByRole("radio", { name: "Both", exact: true })
+      .click()
+    await page.getByRole("combobox", { name: "Track 1 MIDI port" }).click()
+    await page.getByRole("option", { name: "TD-17" }).click()
+    await page.getByRole("button", { name: "Check signal" }).click()
+
+    const drums = rows(page).first()
+    const signal = drums.locator("[data-check-slot='signal']").getByText("signal", { exact: true })
+    const notes = drums.locator("[data-check-slot='notes']").getByText("notes", { exact: true })
+    await expect(signal).toBeVisible()
+    await expect(notes).toBeVisible({ timeout: 3000 })
+    // The same drawn tick before each word, not a character.
+    for (const word of [signal, notes]) {
+      await expect(word.locator("svg.lucide-check")).toHaveCount(1)
+      await expect(word).not.toContainText("✓")
+    }
+    // Notes are grey, in the text's colour, not the accent; their bar too.
+    const text = await drums.evaluate((el) => getComputedStyle(el).color)
+    await expect(notes).toHaveCSS("color", text)
+    const bar = drums.locator("[data-check-slot='notes'] [data-slot='meter'] > div")
+    await expect(bar).toHaveClass(/bg-foreground\/60/)
+    // One meter for both: the level's and the notes'.
+    await expect(drums.locator("[data-slot='meter']")).toHaveCount(2)
+  })
 })
 
 // The start screen in three groups (Alex, Q1): the past on the left, the
@@ -449,8 +705,8 @@ test.describe("the start screen's groups", () => {
     // notes' own notes, empty while none was said.
     await openApp(page)
     await page
-      .getByRole("group", { name: "Track 1 records" })
-      .getByRole("button", { name: "Both", exact: true })
+      .getByRole("radiogroup", { name: "Track 1 records" })
+      .getByRole("radio", { name: "Both", exact: true })
       .click()
     await expect(page.getByRole("combobox", { name: "Track 1 MIDI port" })).toBeVisible()
     await settled(page)
@@ -565,8 +821,8 @@ test.describe("the tracks during the check", () => {
     await openApp(page)
     await page.getByRole("textbox", { name: "Track 2 name" }).fill("Keys")
     await page
-      .getByRole("group", { name: "Track 2 records" })
-      .getByRole("button", { name: "MIDI", exact: true })
+      .getByRole("radiogroup", { name: "Track 2 records" })
+      .getByRole("radio", { name: "MIDI", exact: true })
       .click()
     await page.getByRole("combobox", { name: "Track 2 MIDI port" }).click()
     await page.getByRole("option", { name: "Launchkey Mini MK3" }).click()
@@ -576,34 +832,128 @@ test.describe("the tracks during the check", () => {
     await expect(keys.getByText("no notes")).toBeVisible({ timeout: 3000 })
     await page.mouse.move(0, 0)
     await settled(page)
-
-    /** Every row's top and bottom, Add track's box and the footer's. */
-    const layout = () =>
-      page.evaluate(() => {
-        const box = (el: Element | null) => {
-          const b = el!.getBoundingClientRect()
-          return [b.x, b.y, b.width, b.height].map((v) => Math.round(v * 2) / 2)
-        }
-        const add = [...document.querySelectorAll("button")].find((b) =>
-          b.textContent?.includes("Add track")
-        )
-        return {
-          rows: [...document.querySelectorAll("[data-track-row]")].map((r) => {
-            const b = r.getBoundingClientRect()
-            return [b.top, b.bottom].map((v) => Math.round(v * 2) / 2)
-          }),
-          add: box(add ?? null),
-          footer: box(document.querySelector("footer")),
-        }
-      })
-    const before = await layout()
+    const before = await layout(page)
 
     await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
-    const gone = "Not connected. Records its notes from the moment it is plugged in."
-    await expect(keys.getByRole("status").filter({ hasText: gone })).toBeVisible({ timeout: 3000 })
-    expect(await layout()).toEqual(before)
+    await expect(keys.getByRole("status").filter({ hasText: GONE })).toBeVisible({ timeout: 3000 })
+    expect(await layout(page)).toEqual(before)
+  })
+
+  // Review Focus 5: the stress data's band, the keys' track under a name
+  // that takes two lines, beside Last time at 1180 px and alone at 960.
+  for (const width of [1180, 960]) {
+    test(`a port pulled out of a long-named track during the check moves nothing at ${width} px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 820 })
+      await openBandApp(page, { stress: true })
+      await expect(rows(page)).toHaveCount(5)
+      const long = "Keys and the string pads (Hanna's second keyboard, the one by the window)"
+      await page.getByRole("textbox", { name: "Track 5 name" }).fill(long)
+      await page.getByRole("button", { name: "Check signal" }).click()
+      const keys = rows(page).nth(4)
+      const notes = keys.locator("[data-check-slot='notes']").getByText("notes", { exact: true })
+      await expect(notes).toBeVisible({ timeout: 3000 })
+      await page.mouse.move(0, 0)
+      await settled(page)
+      const before = await layout(page)
+
+      await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
+      // Said in the keys' own line, beside its picker, and nowhere else.
+      await expect(keys.locator("[data-port-note]")).toHaveText(GONE, { timeout: 3000 })
+      await expect(page.locator("[data-port-note]")).toHaveCount(1)
+      await expect(page.getByRole("combobox", { name: "Track 5 MIDI port" })).toHaveText("Launchkey Mini MK3")
+      expect(await layout(page)).toEqual(before)
+    })
+  }
+
+  test("a track put back after a new check began reads silent", async ({ page }) => {
+    // What the first check heard from Drums is not the second's: the second
+    // never opened its input.
+    await openFour(page, { Drums: [0.62], Bass: [0.0004], Guitar: [0.0004], Vocals: [0.0004] })
+    await page.getByRole("button", { name: "Check signal" }).click()
+    const drums = rows(page).first()
+    await expect(heard(drums, "signal")).toBeVisible()
+    await page.getByRole("button", { name: "Remove track Drums" }).click()
+    await page.getByRole("button", { name: "Stop checking" }).click()
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+
+    await said(page, "Drums was taken off.").getByRole("button", { name: "Undo" }).click()
+    expect(await namesOf(page)).toEqual(["Drums", "Bass", "Guitar", "Vocals"])
+    await polls(page, 3)
+    await expect(heard(rows(page).first(), "silent")).toBeVisible()
+    expect(await reach(rows(page).first())).toBe(0)
+  })
+
+  test("a track put back while the check opens reads its own input", async ({ page }) => {
+    await openFour(page, { Drums: [0.0004], Bass: [0.0004], Guitar: [0.62], Vocals: [0.0004] })
+    await page.getByRole("button", { name: "Remove track Bass" }).click()
+    await expect(rows(page)).toHaveCount(3)
+    // The check is slow to open, and Bass comes back meanwhile.
+    await hold(page, "start_monitor")
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await said(page, "Bass was taken off.").getByRole("button", { name: "Undo" }).click()
+    expect(await namesOf(page)).toEqual(["Drums", "Bass", "Guitar", "Vocals"])
+    await letGo(page, "start_monitor")
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+
+    // The check opened the three that were there: Bass, put back, is silent
+    // and has no meter of anybody else's; Guitar keeps its own.
+    await polls(page, 3)
+    const row = (n: number) => rows(page).nth(n - 1)
+    await expect(heard(row(2), "silent")).toBeVisible()
+    expect(await reach(row(2))).toBe(0)
+    await expect(heard(row(3), "signal")).toBeVisible()
+    expect(await reach(row(3))).toBeGreaterThan(0.8)
+  })
+
+  test("a track taken off while the check opens leaves the others theirs", async ({ page }) => {
+    await openFour(page, { Drums: [0.0004], Bass: [0.0004], Guitar: [0.62], Vocals: [0.0004] })
+    await hold(page, "start_monitor")
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await page.getByRole("button", { name: "Remove track Bass" }).click()
+    expect(await namesOf(page)).toEqual(["Drums", "Guitar", "Vocals"])
+    await letGo(page, "start_monitor")
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+
+    await polls(page, 3)
+    const row = (n: number) => rows(page).nth(n - 1)
+    await expect(heard(row(2), "signal")).toBeVisible()
+    expect(await reach(row(2))).toBeGreaterThan(0.8)
+    await expect(heard(row(3), "silent")).toBeVisible()
+    expect(await reach(row(3))).toBeLessThan(0.05)
+
+    // And Undo puts Bass back with what the check opened for it.
+    await said(page, "Bass was taken off.").getByRole("button", { name: "Undo" }).click()
+    expect(await namesOf(page)).toEqual(["Drums", "Bass", "Guitar", "Vocals"])
+    await polls(page, 3)
+    await expect(heard(row(2), "silent")).toBeVisible()
+    await expect(heard(row(3), "signal")).toBeVisible()
   })
 })
+
+/** What a track's line says of a port that is not plugged in. */
+const GONE = "Not connected. Records its notes from the moment it is plugged in."
+
+/** Every row's top and bottom, Add track's box and the footer's, to the half
+ *  pixel. */
+const layout = (page: Page) =>
+  page.evaluate(() => {
+    const box = (el: Element | null) => {
+      const b = el!.getBoundingClientRect()
+      return [b.x, b.y, b.width, b.height].map((v) => Math.round(v * 2) / 2)
+    }
+    const add = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("Add track"))
+    return {
+      rows: [...document.querySelectorAll("[data-track-row]")].map((r) => {
+        const b = r.getBoundingClientRect()
+        return [b.top, b.bottom].map((v) => Math.round(v * 2) / 2)
+      }),
+      add: box(add ?? null),
+      footer: box(document.querySelector("footer")),
+    }
+  })
 
 // Narrower than 68.75rem (1100 px at 100 %, 1430 at 130 %) the left part
 // waits behind a Last time button in the header, before History, and opens
