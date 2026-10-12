@@ -27,8 +27,8 @@ const open = (
   </Button>
 )
 
-/** Hover the button, or Tab to it: the tip comes after 400 ms and goes with
- *  Esc or the pointer. */
+/** Hover the button and the tip comes after 400 ms; Tab to it and the tip is
+ *  there at once. Esc or the pointer leaving puts it away. */
 export const Closed: Story = {
   render: (args) => (
     <Tooltip {...args}>
@@ -79,7 +79,12 @@ function Undo({ system }: { system: System }) {
   return (
     <Tooltip defaultOpen>
       <TooltipTrigger asChild>
-        <Button variant="outline" size="icon-row" aria-label="Undo" aria-keyshortcuts="Meta+Z">
+        <Button
+          variant="outline"
+          size="icon-row"
+          aria-label="Undo"
+          aria-keyshortcuts={system === "mac" ? "Meta+Z" : "Control+Z"}
+        >
           <Undo2 />
         </Button>
       </TooltipTrigger>

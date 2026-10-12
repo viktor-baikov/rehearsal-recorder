@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FigureLine, Figures, WholeTip, useCut } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
 import { LastTime } from "@/components/LastTime"
@@ -1019,7 +1020,7 @@ export function Setup({
       // The one screen that says the app's name, so the logo goes with it —
       // the small drawing, the one that still reads at this size.
       title={
-        <span className="flex items-center gap-2.5">
+        <span className="flex items-center gap-2">
           <img src="./favicon.svg" alt="" className="size-6 shrink-0" />
           РЭХА
         </span>
@@ -1047,17 +1048,23 @@ export function Setup({
             <History />
             History
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onOpenSettings}
-            aria-label={update.latest ? "Settings, a new version is out" : "Settings"}
-            title={update.latest ? `${update.latest.version} is out` : undefined}
-            className="relative"
-          >
-            <SettingsIcon />
-            {update.latest && <NewDot />}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onOpenSettings}
+                aria-label={update.latest ? "Settings, a new version is out" : "Settings"}
+                className="relative"
+              >
+                <SettingsIcon />
+                {update.latest && <NewDot />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {update.latest ? `${update.latest.version} is out` : "Settings"}
+            </TooltipContent>
+          </Tooltip>
         </div>
       }
       // In a wide window the screen is two columns, each scrolling on its

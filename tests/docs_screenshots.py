@@ -142,7 +142,7 @@ KIT_ON_BOTH = """
 # How tall the window is for each picture: tall enough for all four tracks
 # where there is a player, and no taller than the screen needs elsewhere,
 # so a picture is not half empty.
-HEIGHT = {"unsaved-takes": 420, "setup": 910, "settings": 760, "marks": 420, "sets": 720,
+HEIGHT = {"unsaved-takes": 420, "setup": 930, "settings": 760, "marks": 420, "sets": 720,
           "rehearsal": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
           "history": 820, "history-songs": 940, "history-marks": 820,
@@ -314,7 +314,7 @@ def main():
         shoot(page, "history-marks")
         page.close()
 
-        # The drummer on Both: the setup screen's card while the kit is
+        # The drummer on Both: the setup screen's track rows while the kit is
         # checked, and the player with the kit's notes under its audio.
         page = browser.new_page(viewport=VIEWPORT)
         page.add_init_script(MOCK + BAND + COUNTED + KIT_ON_BOTH)
@@ -322,10 +322,12 @@ def main():
         page.wait_for_selector("text=Start rehearsal")
         page.fill("#rehearsal-name", "Tuesday jam")
         page.click("text=Check signal")
-        page.wait_for_selector("text=✓ notes")
+        # "notes" alone, with the check's tick before it, once a note has come
+        # (before that it says "no notes").
+        page.wait_for_selector('text="notes"')
         page.wait_for_timeout(600)
-        cards = page.locator("[data-track-row]")
-        shoot(page, "midi-card", around([cards.nth(0), cards.nth(1)]))
+        rows = page.locator("[data-track-row]")
+        shoot(page, "midi-card", around([rows.nth(0), rows.nth(1)]))
         page.click("text=Stop checking")
 
         page.click("[data-set-picker]")

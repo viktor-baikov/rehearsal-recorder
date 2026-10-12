@@ -9,8 +9,9 @@ import { cn } from "@/lib/utils"
   tokens, so it is there at once under Reduce motion). It is for a name a
   row had to cut, shown whole (B6), and for what an icon button does.
 
-  Every Tooltip has a provider of its own, so one needs nothing round it, and
-  waits 400 ms: a pointer on its way across the screen is not asking.
+  Every Tooltip has a provider of its own, so one needs nothing round it. It
+  waits 400 ms for a pointer, which on its way across the screen is not
+  asking; keyboard focus opens it at once.
 */
 
 function TooltipProvider({

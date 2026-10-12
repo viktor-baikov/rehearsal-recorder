@@ -117,7 +117,7 @@ function slotGone(at: Awaited<ReturnType<typeof places>>, n: number) {
 }
 
 test.describe("setup", () => {
-  test("each card says what it records, and its lines follow", async ({ page }) => {
+  test("each row says what it records, and its lines follow", async ({ page }) => {
     await openApp(page)
     for (const n of [1, 2]) {
       await expect(modes(page, n).getByRole("radio")).toHaveText(["Audio", "Both", "MIDI"])
@@ -142,7 +142,7 @@ test.describe("setup", () => {
     await setMode(page, 1, "Audio")
     await expect(input(page, 1)).toHaveText("Input 1")
     await expect(picker(page, 1)).toHaveCount(0)
-    // The other card was never touched.
+    // The other row was never touched.
     await expect(input(page, 2)).toHaveText("Input 2")
   })
 
@@ -388,7 +388,7 @@ test.describe("setup", () => {
       await expect(note(page, "Same notes as")).toHaveCount(0)
     })
 
-    test("the question moves no card while it is the only note (P8)", async ({ page }) => {
+    test("the question moves no row while it is the only note (P8)", async ({ page }) => {
       await page.setViewportSize({ width: 960, height: 900 })
       const ports = [
         "Launchkey Mini MK3 MIDI Port (DAW In) on the second USB hub",
@@ -458,7 +458,7 @@ test.describe("setup", () => {
       await pickPort(page, 2, "TD-17")
       await page.getByRole("button", { name: "Check signal" }).click()
       await expect(card(page, 2).getByText("notes", { exact: true })).toBeVisible({ timeout: 3000 })
-      // The kit's card is the first now, and still says what its port sent.
+      // The kit's row is the first now, and still says what its port sent.
       await page.getByRole("button", { name: "Remove track Guitar" }).click()
       await expect(page.locator("[data-track-row]")).toHaveCount(1)
       await expect(card(page, 1).getByText("notes", { exact: true })).toBeVisible()
@@ -542,7 +542,7 @@ test.describe("setup", () => {
     expect(await places(page)).toEqual(before)
   })
 
-  test("a long note alone moves no card either, with D5's names at 960 px (D7, P8)", async ({
+  test("a long note alone moves no row either, with D5's names at 960 px (D7, P8)", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 960, height: 900 })
@@ -686,7 +686,7 @@ test.describe("setup", () => {
     await expect(page.locator("[data-whole]")).toHaveText(line)
   })
 
-  test("two tracks on one port move no card either (P2)", async ({ page }) => {
+  test("two tracks on one port move no row either (P2)", async ({ page }) => {
     // Two kits whose names take the same room, so that only the note can
     // move anything: a picker is as wide as the port it shows.
     await openApp(page, { before: "window.__MIDI_PORTS__ = ['TD-17', 'TD-71'];" })
@@ -706,7 +706,7 @@ test.describe("setup", () => {
     expect(await cards()).toEqual(before)
   })
 
-  test("a second notes track leaves a card's port as wide as it was", async ({ page }) => {
+  test("a second notes track leaves a row's port as wide as it was", async ({ page }) => {
     // At 1180 px, where Last time takes the side and the cards are narrower.
     await page.setViewportSize({ width: 1180, height: 900 })
     const port = "Launchkey Mini MK3 MIDI Port"

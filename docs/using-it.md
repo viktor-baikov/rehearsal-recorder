@@ -39,17 +39,20 @@ The setup screen has one track per musician: a name and the input it comes
 in on. The line under **Recording with** shows the interface, how many inputs
 it has and the recording quality. Click it to open Settings.
 
-- Type a name for the rehearsal, or keep the date.
+- Type a name for the rehearsal, at the bottom beside the set and
+  **Start rehearsal**, or keep the date.
 - Name the tracks and choose each one's input.
 - **The icon** at the start of a row says what the track is. Click it and
   choose one: vocals, electric or acoustic guitar, bass, drums, keys and
   more. It is shown on the recording screen and in the player. A new track
   has a plain one until you choose.
-- **Add track** adds a musician, and the bin icon removes one.
+- **Add track** adds a musician, and the bin icon removes one. A notice says
+  which track was taken off, and for 10 seconds **Undo**, or ⌘Z on a Mac
+  (Ctrl+Z elsewhere), puts it back in its place.
 - **Stereo** records an input and the next one together as one stereo track,
   for a keyboard or a pair of overhead microphones. See
   [Stereo instruments](#stereo-instruments).
-- **Audio, Both and MIDI**, at the top right of each card, say what the
+- **Audio, Both and MIDI**, at the top right of each track, say what the
   track records: its input, its input and a MIDI port, or a MIDI port alone,
   for an electronic kit or a keyboard. See [Recording MIDI](#recording-midi).
 
@@ -70,13 +73,15 @@ recording quality into account.
 
 ### Last time
 
-Left of the tracks, or under them in a narrow window, is the rehearsal before
-this one, song by song: how many goes each song got and how long they ran,
-with the notes you left while listening. ▶ on a song plays its newest
-starred take (★), wherever you played it, and says which and when if it is
-not last time's last go. A song with no star plays its last go, which is
-usually the version you settled on. Listen to where you left off before you
-start.
+Left of the tracks is the rehearsal before this one, song by song: how many
+goes each song got and how long they ran, with the notes you left while
+listening. In a window narrower than 1100 px (wider as the Appearance size
+grows) it is behind the **Last time** button in the header, which opens it
+from the left and shows when something from it plays. ▶ on a song plays its
+newest starred take (★), wherever you played it, and says which and when if
+it is not last time's last go. A song with no star plays its last go, which
+is usually the version you settled on. Listen to where you left off before
+you start.
 
 Under it are the songs you did not play last time, each with the day it was
 last played and its newest starred take, or its last go, to listen to, and
@@ -689,7 +694,7 @@ sounds on later. The app draws the notes in the player and never plays them.
 
 ### The switch and the port
 
-At the top right of every track card is a switch.
+At the top right of every track is a switch.
 
 - **Audio** records the input, as always. Every track starts on it.
 - **Both** records the input and a MIDI port, on a second line under the
@@ -712,12 +717,12 @@ until a note has arrived, and then "✓ notes".
 ### A port that is not plugged in
 
 A port that was picked and is not there does not stop the rehearsal. Its
-line gets an amber edge, and an amber note says "“TD-17” is not connected.
-Drums records its notes from the moment it is plugged in." The track waits,
-and its notes start when the port appears, even in the middle of a take; the
-list notices a port plugged in within a couple of seconds. A port pulled out
-during a take stops nothing, and if it comes back, its notes go on in the
-same file.
+picker gets an amber edge, and the track says in its own line "Not
+connected. Records its notes from the moment it is plugged in." The track
+waits, and its notes start when the port appears, even in the middle of a
+take; the list notices a port plugged in within a couple of seconds. A port
+pulled out during a take stops nothing, and if it comes back, its notes go
+on in the same file.
 
 ### On the recording screen, and in the player
 

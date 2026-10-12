@@ -17,18 +17,19 @@ shows the app as it is; the site keeps its own big headings and layout
 ## Where things stand
 
 The foundation is in: the theme values, the shared components, Undo, the
-showcase and the check. The screens are redone on it one at a time, a pull
-request each, in this order: the start screen, the rehearsal screen,
-recording, Review, History, Drafts, and Settings. Until its turn a screen is
-on the check's [allow-list](#the-check) and may still break the rules it is
-listed for. Where a rule below says "as each screen is redone", the screens'
-pull requests carry it out and nothing does it yet. On reha.stream the
-pieces of the app are the real components and follow the theme already, but
-the page itself takes only the accent from it so far
-(`--page-accent: var(--primary)` in `site/src/page/page.css`); its own
-background, text colours and font (Instrument Sans) take the shared ones in
-the same release as the screens. The new look goes out in that one release,
-once every screen is done.
+showcase and the check. The start screen is redone on it: its pieces are the
+shared ones, and its files are off the check's [allow-list](#the-check). The
+other screens follow, one pull request each, in this order: the rehearsal
+screen, recording, Review, History, Drafts, and Settings. Until its turn a
+screen is on the allow-list and may still break the rules it is listed for.
+Where a rule below says "as each screen is redone", the screens' pull
+requests carry it out, and so far only the start screen's has. On
+reha.stream the pieces of the app are the real components and follow the
+theme already, but the page itself takes only the accent from it so far
+(`--page-accent: var(--primary)` in `site/src/page/page.css`). After the
+last screen, reha.stream's own background, text colours and font
+(Instrument Sans) take the shared ones, and the release comes when the
+allow-list is empty: the new look goes out in that one release.
 
 ## The foundation
 
@@ -292,11 +293,12 @@ The other shared components, each with its stories:
 - **Progress**, `progress.tsx`: a thin bar in the accent for how far along a
   job is, where it was started (the take being saved under Stop, a crop, a
   draft) and in the background work list.
-- **Tooltip**, `tooltip.tsx`: a small tip in the text's colour, on hover and
-  on keyboard focus after 400 ms, gone with Esc or the pointer. It is for a
-  name a row had to cut, shown whole (B6), and for what an icon button does:
-  C8's native `title` tooltips. Each `Tooltip` has its own provider, so it
-  needs nothing round it.
+- **Tooltip**, `tooltip.tsx`: a small tip in the text's colour. On hover it
+  comes after 400 ms, so a pointer on its way across the screen is not
+  asking; on keyboard focus it comes at once. It is gone with Esc or the
+  pointer leaving. It is for a name a row had to cut, shown whole (B6), and
+  for what an icon button does: C8's native `title` tooltips. Each `Tooltip`
+  has its own provider, so it needs nothing round it.
 - **Sheet**, `sheet.tsx`: a panel that slides in from the left or the right
   over the window's full height, 28 rem wide and never wider than the window
   less 3 rem. It is a dialog on the Dialog's veil and z-index, so the notices
@@ -343,12 +345,14 @@ The other shared components, each with its stories:
   75 ms and keeps doing so under Reduce motion and while a take records: a
   meter is a reading, not motion. It is a picture, hidden from a screen
   reader, unless given a `label`, and then a `meter` at its largest side.
-- **Whole**, `whole.tsx`: B6's pieces for a long name. `Whole` is a text that
-  shows whole in a tip when it is cut; `useCut` and `WholeTip` do the same
-  round a button or a link, the tip also showing on keyboard focus and
-  staying while focus is there, even when focusing scrolled the panel. The
-  tip is for the eyes: what it says is in the page already, so it is not
-  read out again as the control's description.
+- **Whole**, `whole.tsx`: B6's pieces for a long name. `Whole` is a plain
+  text that shows whole in a tip on hover when it is cut; the keys do not
+  reach a plain text, so it has no keyboard focus to show on. `useCut` and
+  `WholeTip` do the same round a button, a link or anything with a
+  `tabindex`, the tip also showing on keyboard focus and staying while focus
+  is there, even when focusing scrolled the panel. The tip is for the eyes:
+  what it says is in the page already, so it is not read out again as the
+  control's description.
   `Figures` is the line of figures beside a name: it takes the room the name
   leaves, drops whole figures, the least needed first (`lib/figures.ts`), and
   shows them all on hover once it has dropped some; a screen reader reads
@@ -438,10 +442,11 @@ as the `cn` import.
   copy. `offerUndo()` in `lib/trash.ts` raises the notice. Python keeps what
   went in `<recordings>/_deleting/` (`src/rehearsal_recorder/holding.py`)
   and sends it on to the Trash when the notice ends, when the app quits, or
-  at the next start after a crash; nothing is destroyed either way. Three
-  more removals that happen at once get the same notice as their screens are
-  redone: a song taken out of a set, a song's old name forgotten, and a
-  track taken off the start screen.
+  at the next start after a crash; nothing is destroyed either way. A track
+  taken off the start screen has it too ("{name} was taken off."), and puts
+  the track back in its place with its readings; two more removals that
+  happen at once get the same notice as their screens are redone: a song
+  taken out of a set and a song's old name forgotten.
 - **B2. A question only where nothing can be undone**: finishing a rehearsal
   by Esc, removing a rehearsal from history, deleting a label that has
   marks, deleting a set, and merging two songs. Each is a `ConfirmDialog`,
@@ -467,10 +472,11 @@ as the `cn` import.
 - **B6. Long names.** A name never gives way to a secondary figure: the name
   is what tells one thing from another. The figure wraps, goes first, or
   hides and shows on hover, as the MIDI tile's count does; a cut name shows
-  whole on hover and on keyboard focus (`Whole`, or `useCut` and `WholeTip`);
-  where a name has room for a second line, it wraps; the figures beside it
-  are `Figures`, which drop whole, least needed first. As each screen is
-  redone.
+  whole on hover, and on keyboard focus when it is a button, a link or has a
+  `tabindex` (`useCut` and `WholeTip` round it; `Whole` is a plain text and
+  shows on hover only); where a name has room for a second line, it wraps;
+  the figures beside it are `Figures`, which drop whole, least needed first.
+  As each screen is redone.
 - **B7. Empty states.** An empty list that only says it is empty leaves the
   person to guess what to do next: "This set has no songs." under Next take
   does not say how a song gets there. So an empty list says, in its own
@@ -552,7 +558,7 @@ says what each broken rule is for. The rules are in
 
 ```json
 {
-  "src/screens/Setup.tsx": ["px-text", "raw-colour", "raw-button"]
+  "src/screens/Settings.tsx": ["raw-colour", "raw-button"]
 }
 ```
 

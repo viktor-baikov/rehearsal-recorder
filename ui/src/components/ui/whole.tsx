@@ -14,9 +14,10 @@ import { fitFigures, joinFigures, joinsOf, type Part } from "@/lib/figures"
 import { cn } from "@/lib/utils"
 
 /*
-  B6's pieces for a long name: a cut name shows whole on hover and on
-  keyboard focus (`useCut` and `WholeTip`; `Whole` is both for a plain text),
-  and the figures beside a name give way to it, whole figure by whole figure
+  B6's pieces for a long name: a cut name shows whole on hover and, when it
+  is a button or a link, on keyboard focus (`useCut` and `WholeTip`; `Whole`
+  puts both round a plain text, which only a pointer reaches), and the
+  figures beside a name give way to it, whole figure by whole figure
   (`Figures`, the arithmetic in lib/figures.ts). The figures' own tip is for
   the pointer; the name's tip, which a keyboard reaches too, says the line
   whole as well once any of it has given way (Q3).
