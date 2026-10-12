@@ -1017,6 +1017,10 @@ test.describe("the tracks during the check", () => {
   // under the pointer: each says so with an Undo of its own (B1).
   test("two tracks taken off at once each come back, with Ctrl+Z twice", async ({ page }) => {
     await openFour(page, { Drums: [0.0004], Bass: [0.62], Guitar: [0.0004], Vocals: [0.62] })
+    // Clicked while the screen still rises, Check signal can be scrolled to,
+    // and a screen scrolled down moves its rows down when one goes: the
+    // second click would then land between them.
+    await settled(page)
     await page.getByRole("button", { name: "Check signal" }).click()
     const row = (n: number) => rows(page).nth(n - 1)
     await expect(heard(row(2), "signal")).toBeVisible()
