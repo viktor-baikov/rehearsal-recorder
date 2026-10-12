@@ -64,19 +64,19 @@ opening.
   it is playing, and the sound carries on if the panel is closed. A song in
   *Last time* keeps its takes as columns at the end of its row, each as tall
   as the take ran: every starred take is green, and the one its ▶ plays is
-  at full strength. A long name keeps
-  its width: the figures beside it drop, whole and the least needed first,
-  and show whole on hover, and a name longer than its whole row wraps to a
-  second line; a name that is cut shows whole on hover and when a key
-  reaches it. A track taken off can be put back: the notice that says so
-  has **Undo** for 10 seconds, which returns the track to its place with its
-  meter, and **Check signal** keeps a renamed track's meter too. Smaller
-  things: a MIDI port's note (not connected, in use by another app, or
-  shared with another track) is said in that track's own line, where
-  nothing moves; **Stereo** is a button that stays pressed; the arrow keys reach **Audio**,
-  **Both** and **MIDI**, and Space picks one; **Check signal** and **Start
-  rehearsal** show a spinner when they take more than a second; an empty
-  list of tracks says how to add one; and every screen's title is 20 px.
+  at full strength. A long name keeps its width: the figures beside it drop,
+  whole and the least needed first, and show whole on hover, and a name
+  longer than its whole row wraps to a second line; a name that is cut shows
+  whole on hover and when a key reaches it. A track taken off can be put
+  back: the notice that says so has **Undo** for 10 seconds, which returns
+  the track to its place with its meter, and **Check signal** keeps a
+  renamed track's meter too. Smaller things: a MIDI port's note (not
+  connected, in use by another app, or shared with another track) is said in
+  that track's own line, where nothing moves; **Stereo** is a button that
+  stays pressed; the arrow keys reach **Audio**, **Both** and **MIDI**, and
+  Space picks one; **Check signal** and **Start rehearsal** show a spinner
+  when they take more than a second; an empty list of tracks says how to add
+  one; and every screen's title is 20 px.
 
 ## 0.11.1
 

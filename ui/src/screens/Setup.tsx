@@ -419,18 +419,23 @@ export function Setup({
   // their Undo, and leaving the screen takes all of them with it.
   const saidKeys = useRef(new Set<string>())
   const saidCount = useRef(0)
+  // Each track taken off, with the one that came after it then (null when
+  // it was the last): an Undo follows this chain to find its place.
+  const nextOf = useRef(new WeakMap<Track, Track | null>())
 
   /**
    * Takes a track off at once, and says so with an Undo (B1) that puts it
-   * back in its place: before the track that came after it, wherever that
-   * is now, so Undos run in any order put each where it was; at its old
-   * place when that one has gone or changed. What the check opened and
-   * heard is kept by place: those after it move up with their tracks, and
-   * it comes back with its own.
+   * back in its place: before the first track after it that is on screen,
+   * passing those taken off too, or last when none of them is; so Undos
+   * run in any order put each where it was. At its old place when the track
+   * after it has changed or the band was read again. What the check opened
+   * and heard is kept by place: those after it move up with their tracks,
+   * and it comes back with its own.
    */
   const removeTrack = (i: number) => {
     const gone = tracks[i]
     const next = tracks[i + 1] ?? null
+    nextOf.current.set(gone, next)
     const port = checkedPorts[i] ?? null
     const heardAs = checkedNames[i] ?? null
     const run = checkRun.current
@@ -457,8 +462,20 @@ export function Setup({
         run: () => {
           saidKeys.current.delete(key)
           const band = tracksNow.current
-          const after = next ? band.indexOf(next) : -1
-          const at = after >= 0 ? after : Math.min(i, band.length)
+          // Past each track after it that is taken off too, once each.
+          let after: Track | null = next
+          const passed = new Set<Track>()
+          const off = (t: Track) => !band.includes(t) && nextOf.current.has(t) && !passed.has(t)
+          while (after && off(after)) {
+            passed.add(after)
+            after = nextOf.current.get(after) ?? null
+          }
+          const at =
+            after === null
+              ? band.length
+              : band.includes(after)
+                ? band.indexOf(after)
+                : Math.min(i, band.length)
           const same = checkRun.current === run
           setTracks((prev) => [...prev.slice(0, at), gone, ...prev.slice(at)])
           setCheckedPorts((prev) => put(prev, at, same ? port : null))

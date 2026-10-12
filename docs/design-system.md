@@ -18,19 +18,20 @@ shows the app as it is; the site keeps its own big headings and layout
 
 The foundation is in: the theme values, the shared components, Undo, the
 showcase and the check. The start screen is redone on it: its pieces are the
-shared ones, all but the song list in New set, which it shares with Settings'
-Sets and which is redone with Settings, and its files are off the check's
-[allow-list](#the-check). The other screens follow, one pull request each, in this order: the rehearsal
-screen, recording, Review, History, Drafts, and Settings. Until its turn a
-screen is on the allow-list and may still break the rules it is listed for.
-Where a rule below says "as each screen is redone", the screens' pull
-requests carry it out, and so far only the start screen's has. On
-reha.stream the pieces of the app are the real components and follow the
-theme already, but the page itself takes only the accent from it so far
-(`--page-accent: var(--primary)` in `site/src/page/page.css`). After the
-last screen, reha.stream's own background, text colours and font
-(Instrument Sans) take the shared ones, and the release comes when the
-allow-list is empty: the new look goes out in that one release.
+shared ones, all but the song list in New set, which it shares with
+Settings' Sets and which is redone with Settings, and its files are off the
+check's [allow-list](#the-check). The other screens follow, one pull request
+each, in this order: the rehearsal screen, recording, Review, History,
+Drafts, and Settings. Until its turn a screen is on the allow-list and may
+still break the rules it is listed for. Where a rule below says "as each
+screen is redone", the screens' pull requests carry it out, and so far only
+the start screen's has. On reha.stream the pieces of the app are the real
+components and follow the theme already, but the page itself takes only the
+accent from it so far (`--page-accent: var(--primary)` in
+`site/src/page/page.css`). After the last screen, reha.stream's own
+background, text colours and font (Instrument Sans) take the shared ones,
+and the release comes when the allow-list is empty: the new look goes out in
+that one release.
 
 ## The foundation
 

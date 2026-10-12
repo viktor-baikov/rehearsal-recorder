@@ -1065,6 +1065,60 @@ test.describe("the tracks during the check", () => {
     await expect(notices(page)).toHaveCount(0)
   })
 
+  // An Undo puts its track back before the first track after it that is on
+  // screen, through those still taken off, so the band keeps its order
+  // whichever Undo is clicked first.
+  test("the Undo of a track whose next one is off too puts it back above that one", async ({
+    page,
+  }) => {
+    await openFour(page, { Drums: [0.0004], Bass: [0.0004], Guitar: [0.62], Vocals: [0.0004] })
+    await page.getByRole("button", { name: "Check signal" }).click()
+    const row = (n: number) => rows(page).nth(n - 1)
+    await expect(heard(row(3), "signal")).toBeVisible()
+    await page.getByRole("button", { name: "Remove track Guitar" }).click()
+    await page.getByRole("button", { name: "Remove track Vocals" }).click()
+    await expect.poll(() => namesOf(page)).toEqual(["Drums", "Bass"])
+
+    await said(page, "Guitar was taken off.").getByRole("button", { name: "Undo" }).click()
+    await expect.poll(() => namesOf(page)).toEqual(["Drums", "Bass", "Guitar"])
+    await said(page, "Vocals was taken off.").getByRole("button", { name: "Undo" }).click()
+    await expect.poll(() => namesOf(page)).toEqual(["Drums", "Bass", "Guitar", "Vocals"])
+    // Each with what its own input sends.
+    await polls(page, 3)
+    for (const [n, word] of [[1, "silent"], [2, "silent"], [3, "signal"], [4, "silent"]] as const)
+      await expect(heard(row(n), word)).toBeVisible()
+  })
+
+  test("three tracks taken off and put back oldest first keep the band's order", async ({
+    page,
+  }) => {
+    await openFour(page)
+    for (const name of ["Bass", "Guitar", "Vocals"])
+      await page.getByRole("button", { name: `Remove track ${name}` }).click()
+    await expect.poll(() => namesOf(page)).toEqual(["Drums"])
+
+    await said(page, "Bass was taken off.").getByRole("button", { name: "Undo" }).click()
+    await expect.poll(() => namesOf(page)).toEqual(["Drums", "Bass"])
+    await said(page, "Guitar was taken off.").getByRole("button", { name: "Undo" }).click()
+    await expect.poll(() => namesOf(page)).toEqual(["Drums", "Bass", "Guitar"])
+    await said(page, "Vocals was taken off.").getByRole("button", { name: "Undo" }).click()
+    await expect.poll(() => namesOf(page)).toEqual(["Drums", "Bass", "Guitar", "Vocals"])
+  })
+
+  test("the last track's Undo first, then the one above it, keep the band's order", async ({
+    page,
+  }) => {
+    await openFour(page)
+    await page.getByRole("button", { name: "Remove track Bass" }).click()
+    await page.getByRole("button", { name: "Remove track Vocals" }).click()
+    await expect.poll(() => namesOf(page)).toEqual(["Drums", "Guitar"])
+
+    await said(page, "Vocals was taken off.").getByRole("button", { name: "Undo" }).click()
+    await expect.poll(() => namesOf(page)).toEqual(["Drums", "Guitar", "Vocals"])
+    await said(page, "Bass was taken off.").getByRole("button", { name: "Undo" }).click()
+    await expect.poll(() => namesOf(page)).toEqual(["Drums", "Bass", "Guitar", "Vocals"])
+  })
+
   test("taking a track off during the check keeps the others' meters", async ({ page }) => {
     await openFour(page, { Drums: [0.62], Bass: [0.0004], Guitar: [0.62], Vocals: [0.0004] })
     await page.getByRole("button", { name: "Check signal" }).click()
