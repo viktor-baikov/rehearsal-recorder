@@ -391,8 +391,12 @@ test.describe("the footer", () => {
     const long =
       "The interface is gone, and with it every input the rehearsal was recording from, " +
       "so nothing more can be recorded here until it is plugged back in and the app is opened again"
+    // The words go in as data, not as code.
+    await page.addInitScript((error) => {
+      ;(window as unknown as { __START_ERROR__: string }).__START_ERROR__ = error
+    }, long)
     await openApp(page, {
-      after: `window.pywebview.api.start_take = async () => ({ok: false, error: ${JSON.stringify(long)}});`,
+      after: `window.pywebview.api.start_take = async () => ({ok: false, error: window.__START_ERROR__});`,
     })
     await startRehearsal(page)
     await settled(page)
