@@ -8,6 +8,7 @@ import {
   settled,
   style,
   test,
+  themed,
   TONIGHT,
 } from "./app.ts"
 
@@ -16,8 +17,6 @@ import {
 // a 1 px line, and the take row on the shared pieces. Tonight is TONIGHT, in
 // app.ts: take 1 Pałyn 3:20 (starred), take 2 Pałyn 0:12 (starred), take 3
 // Viasna 0:12 with a mark at 4 s, take 4 Pałyn 0:12 (a false start).
-
-const light = "window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'light', ui_scale:1}));"
 
 const row = (overview: Locator, n: number) => overview.locator(`[data-take="${n}"]`)
 /** The take's bar: the button that opens it, and the way in by the keys. */
@@ -369,7 +368,7 @@ test.describe("the bar of a short take", () => {
 
   for (const theme of ["dark", "light"] as const) {
     test(`a starred short take's title keeps the bar's fill in the ${theme} theme`, async ({ page }) => {
-      const overview = await openEvening(page, theme === "light" ? light : "")
+      const overview = await openEvening(page, themed(theme))
       const starred = bar(overview, 2)
       await expect(starred).toHaveAttribute("data-starred", "true")
       const fill = ["background-color", "background-image"]

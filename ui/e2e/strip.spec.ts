@@ -10,6 +10,7 @@ import {
   startRehearsal,
   style,
   test,
+  themed,
 } from "./app.ts"
 
 // The take strip on the shared pieces (owner, 2026-10-12): Songs a Toggle, a
@@ -30,9 +31,6 @@ const away = (page: Page) => page.mouse.move(0, 0, { steps: 8 })
 
 const THEMES = ["dark", "light"] as const
 type Theme = (typeof THEMES)[number]
-/** The theme Settings stores, set before the fake reads it. */
-const themed = (theme: Theme) =>
-  `window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'${theme}', ui_scale:1}));`
 
 /** Tonight's rehearsal with take `n` open in the player, under its strip. */
 async function openTake(page: Page, n: number, theme: Theme = "dark") {

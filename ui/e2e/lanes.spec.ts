@@ -13,6 +13,7 @@ import {
   startRehearsal,
   style,
   test,
+  themed,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -48,8 +49,6 @@ const BOTH = {
     ];
     window.__BAND_ICONS__ = {Drums: 'drums', Gtr: 'guitar-electric', Keys: 'keys'};`,
 }
-
-const light = "window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'light', ui_scale:1}));"
 
 /** The first take of a band up for review. */
 async function review(page: Page, setup: { before?: string; after?: string }, theme = "") {
@@ -357,11 +356,11 @@ test.describe("track lanes", () => {
     })
   }
 
-  for (const theme of ["dark", "light"]) {
+  for (const theme of ["dark", "light"] as const) {
     test(`the lanes are one group with the card's fill and no frame, in the ${theme} theme`, async ({
       page,
     }) => {
-      await review(page, band(4), theme === "light" ? light : "")
+      await review(page, band(4), themed(theme))
       expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
         theme === "dark"
       )
@@ -475,11 +474,11 @@ test.describe("track lanes", () => {
     await expect(fills("Bass")).toHaveCount(2)
   })
 
-  for (const theme of ["dark", "light"]) {
+  for (const theme of ["dark", "light"] as const) {
     test(`a Both track's audio and notes share one well split by a 1 px line, in the ${theme} theme`, async ({
       page,
     }) => {
-      await review(page, BOTH, theme === "light" ? light : "")
+      await review(page, BOTH, themed(theme))
       expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
         theme === "dark"
       )
@@ -811,9 +810,9 @@ test.describe("M and S at the fader", () => {
     await expect(tip).toHaveCount(0)
   })
 
-  for (const theme of ["dark", "light"]) {
+  for (const theme of ["dark", "light"] as const) {
     test(`M and S are grey when on, not amber or the accent, in the ${theme} theme`, async ({ page }) => {
-      await review(page, band(2), theme === "light" ? light : "")
+      await review(page, band(2), themed(theme))
       const grey = await colour(page, "--selected")
       for (const label of ["Mute", "Solo"]) {
         const button = plate(page, "Drums").getByRole("button", { name: `${label} Drums` })
@@ -833,7 +832,7 @@ test.describe("M and S at the fader", () => {
     // does not answer for: so it is read where it is drawn. A fader at its top
     // has its thumb at the right end.
     test(`the fader thumbs are in the text colour, in the ${theme} theme`, async ({ page }) => {
-      await review(page, band(2), theme === "light" ? light : "")
+      await review(page, band(2), themed(theme))
       const text = await colour(page, "--foreground")
       for (const name of ["Drums volume", "Master volume"]) {
         const fader = await box(page.getByRole("slider", { name }))

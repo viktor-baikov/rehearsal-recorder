@@ -1,4 +1,13 @@
-import { expect, openApp, openHistory, recordTake, startButton, startRehearsal, test } from "./app.ts"
+import {
+  expect,
+  openApp,
+  openHistory,
+  recordTake,
+  startButton,
+  startRehearsal,
+  test,
+  themed,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // The decided theme (spec F1-F11), as the page shows it: the values in
@@ -21,20 +30,17 @@ function expectCobalt(text: string) {
   expect(h).toBeCloseTo(266, 1)
 }
 
-const dark = "window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:1}));"
-const light = "window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'light', ui_scale:1}));"
-
 const root = (page: Page, name: string) =>
   page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n), name)
 
 test("the accent is cobalt in the light theme and in the dark one", async ({ page }) => {
-  await openApp(page, { before: light })
+  await openApp(page, { before: themed("light") })
   await expect(startButton(page)).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(false)
   expectCobalt(await root(page, "--primary"))
   expectCobalt(await root(page, "--ring"))
 
-  await openApp(page, { before: dark })
+  await openApp(page, { before: themed("dark") })
   await expect(startButton(page)).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(true)
   expectCobalt(await root(page, "--primary"))

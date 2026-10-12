@@ -78,7 +78,9 @@ test("the tiles show the app's own pieces", async ({ page }) => {
   await expect(tiles.getByText("New songs")).toBeVisible()
   await expect(tiles.getByText("Soundcheck")).toBeVisible()
   await expect(tiles.getByText("Pałyn").first()).toBeVisible()
-  await expect(tiles.getByRole("img", { name: /in the cloud/ }).getByText("1 of 1")).toBeVisible()
+  // The take kept in the cloud carries its row's cloud mark. The overview no
+  // longer says the evening's figures: in the app, the header has them.
+  await expect(tiles.getByRole("img", { name: /in the cloud/ }).locator("[data-in-cloud]")).toBeVisible()
   // Palyn typed in the Next take field: it is Pałyn now, the one song
   // under it, lit; as on the rehearsal screen, a list and no pills.
   const names = tiles.getByRole("img", { name: /Palyn is Pałyn now/ })

@@ -289,6 +289,11 @@ export const settled = (page: Page) =>
 export const scaled = (scale: number) =>
   `window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:${scale}}));`
 
+/** The theme, as Settings stores it, at the scale of 1. Run before the fake
+ *  reads it; dark is also what the fake has when nothing is stored. */
+export const themed = (theme: "dark" | "light") =>
+  `window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'${theme}', ui_scale:1}));`
+
 /** A colour the theme defines, as the browser computes it. */
 export const colour = (page: Page, token: string) =>
   page.evaluate((t) => {
