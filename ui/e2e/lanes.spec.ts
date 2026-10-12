@@ -350,9 +350,9 @@ test.describe("track lanes", () => {
       expect(await keys.evaluate((e) => e.scrollHeight - e.clientHeight)).toBeLessThanOrEqual(0)
       // Its lane is the plate less the well's 3 px above and below it, and
       // its octaves are named.
-      const lane = await box(notesLane(page, "Keys"))
-      expect(lane.y - at.y).toBeCloseTo(3, 0)
-      expect(lane.height).toBeCloseTo(at.height - 6, 0)
+      const notes = await box(notesLane(page, "Keys"))
+      expect(notes.y - at.y).toBeCloseTo(3, 0)
+      expect(notes.height).toBeCloseTo(at.height - 6, 0)
       await expect(notesLane(page, "Keys").getByText(/^C\d$/).first()).toBeVisible()
     })
   }
