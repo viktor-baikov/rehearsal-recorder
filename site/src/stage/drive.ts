@@ -17,9 +17,21 @@ export async function waitFor<T>(find: () => T | null | undefined | false, timeo
   throw new Error(`demo: waited ${timeout} ms in vain`)
 }
 
-/** A button's words, without the key some of them show ("Stop Space"). */
-const words = (b: HTMLButtonElement) =>
-  (b.textContent ?? "").replace(/\s*(Space|Esc|Enter|⏎)$/, "").trim()
+/**
+ * A button's words as they are on show, without the key some of them show
+ * ("Stop Space"). Words kept unseen are left out: a button that keeps its
+ * width by holding both of what it can say, as Check signal holds Stop
+ * checking, says only the one it shows.
+ */
+function words(b: HTMLButtonElement): string {
+  let shown = ""
+  const walk = document.createTreeWalker(b, NodeFilter.SHOW_TEXT)
+  for (let t = walk.nextNode(); t; t = walk.nextNode()) {
+    const box = t.parentElement
+    if (box && getComputedStyle(box).visibility === "visible") shown += t.textContent
+  }
+  return shown.replace(/\s*(Space|Esc|Enter|⏎)$/, "").trim()
+}
 
 export function button(text: string, exact = false): HTMLButtonElement | undefined {
   return [...document.querySelectorAll("button")].find(

@@ -1057,8 +1057,10 @@ window.__MAKE_API__ = () => ({
     midiCheck = {tracks: (tracks || []).filter(takesNotes), since: clock(), ended: null, read: {}};
     return {ok:true};
   }),
-  monitor_levels: track('monitor_levels', async () =>
-    window.__MONITOR_LEVELS__ || ({'Guitar':[0.62], 'Vocals':[0.0004]})),
+  monitor_levels: track('monitor_levels', async () => {
+    await held('monitor_levels');
+    return window.__MONITOR_LEVELS__ || ({'Guitar':[0.62], 'Vocals':[0.0004]});
+  }),
   monitor_health: async () => ({checking:true, problem: window.__CHECK_QUIET__ || null}),
   // The ports the system lists; a port a track holds open says how many notes
   // it has sent (midi.rig ports()).

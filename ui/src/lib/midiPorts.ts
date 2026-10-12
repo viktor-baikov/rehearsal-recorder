@@ -89,6 +89,18 @@ export function portGoneText(port: string, track: string): string {
 export type PortStanding = "none" | "ok" | "missing" | "in_use" | null
 
 /**
+ * A port line, in its parts: `who` is the other track's name when the line
+ * names one ("" when it does not), between the words before and after it.
+ * The name can be cut to fit, and the words round it never are (B4, B6).
+ */
+export type PortLine = { before: string; who: string; after: string }
+
+const says = (before: string, who = "", after = ""): PortLine => ({ before, who, after })
+
+/** A port line's sentence, whole. */
+export const lineText = (line: PortLine): string => line.before + line.who + line.after
+
+/**
  * What a track's own port line says beside its picker (D7, P2, P3, P5, P8),
  * or null when there is nothing to say: the first of these that holds. No
  * port picked; another track on the same port (`sharing`); the port held by
@@ -98,12 +110,12 @@ export type PortStanding = "none" | "ok" | "missing" | "in_use" | null
 export function portLine(
   standing: PortStanding,
   { sharing, echo }: { sharing?: string; echo?: string } = {}
-): string | null {
+): PortLine | null {
   if (standing === null) return null
-  if (standing === "none") return "Pick a port, or set it to Audio."
-  if (sharing !== undefined) return `${sharing} takes notes from this port too.`
-  if (standing === "in_use") return "In use by another app. Records its notes from the moment it is free."
-  if (standing === "missing") return "Not connected. Records its notes from the moment it is plugged in."
-  if (echo !== undefined) return `Same notes as ${echo}. Plugged in twice?`
+  if (standing === "none") return says("Pick a port, or set it to Audio.")
+  if (sharing !== undefined) return says("", sharing, " takes notes from this port too.")
+  if (standing === "in_use") return says("In use by another app. Records its notes from the moment it is free.")
+  if (standing === "missing") return says("Not connected. Records its notes from the moment it is plugged in.")
+  if (echo !== undefined) return says("Same notes as ", echo, ". Plugged in twice?")
   return null
 }

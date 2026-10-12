@@ -108,6 +108,35 @@ export async function callCount(page: Page, name: string): Promise<number> {
   return (await calls(page, name)).length
 }
 
+/**
+ * Holds the fake's answer to `name` where it is until `letGo` lets it
+ * through: the call is made, and counted, and waits (window.__HOLD__, which
+ * fake-bridge.js reads). Anything else held stays held.
+ */
+export async function hold(page: Page, name: string) {
+  await page.evaluate((n) => {
+    const w = window as unknown as {
+      __HOLD__?: Record<string, Promise<void>>
+      __RELEASE__?: Record<string, () => void>
+    }
+    w.__HOLD__ = w.__HOLD__ || {}
+    w.__RELEASE__ = w.__RELEASE__ || {}
+    w.__HOLD__[n] = new Promise<void>((r) => (w.__RELEASE__![n] = r))
+  }, name)
+}
+
+/** Lets the calls to `name` that `hold` held through, and the next ones. */
+export async function letGo(page: Page, name: string) {
+  await page.evaluate((n) => {
+    const w = window as unknown as {
+      __HOLD__: Record<string, Promise<void>>
+      __RELEASE__: Record<string, () => void>
+    }
+    delete w.__HOLD__[n]
+    w.__RELEASE__[n]()
+  }, name)
+}
+
 /** The key a button shows it answers to, or null when it shows none: a chip
  *  kept unseen, holding the button's width, shows none. */
 export async function keyOn(button: Locator): Promise<string | null> {

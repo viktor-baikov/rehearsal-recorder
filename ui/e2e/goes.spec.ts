@@ -3,6 +3,8 @@ import {
   callCount,
   dragRegion,
   expect,
+  hold,
+  letGo,
   nameTake,
   openApp,
   openHistory,
@@ -240,20 +242,14 @@ test("a second ↑ or ↓ before the go has opened carries the first one's place
 }) => {
   await openGo(page, "Take 1 Pałyn 1")
   await clickAt(page, 30, 192)
-  await page.evaluate(() => {
-    const w = window as unknown as {
-      __HOLD__?: Record<string, Promise<void>>
-      __LET_GO__?: () => void
-    }
-    w.__HOLD__ = { player_open: new Promise<void>((r) => (w.__LET_GO__ = r)) }
-  })
+  await hold(page, "player_open")
   const opens = await callCount(page, "player_open")
   await page.keyboard.press("ArrowDown")
   await expect.poll(() => callCount(page, "player_open")).toBe(opens + 1)
   await page.keyboard.press("ArrowUp")
   await expect.poll(() => callCount(page, "player_open")).toBe(opens + 2)
   const seeks = await callCount(page, "player_seek")
-  await page.evaluate(() => (window as unknown as { __LET_GO__: () => void }).__LET_GO__())
+  await letGo(page, "player_open")
   await expect.poll(() => callCount(page, "player_seek")).toBeGreaterThan(seeks)
   expect(await opened(page)).toBe("/rec/old/p1.wav")
   expect((await calls(page, "player_seek")).at(-1)!.args[0] as number).toBeCloseTo(30, -1)
@@ -348,24 +344,6 @@ test("a narrow window keeps the length, the takes and the button", async ({ page
 // A place on its way to a go, or a go on its way from another rehearsal,
 // is the person's last word only until they say something else.
 
-/** Holds `name` in the fake until `letGo` is called. */
-async function hold(page: Page, name: string) {
-  await page.evaluate((n) => {
-    const w = window as unknown as {
-      __HOLD__?: Record<string, Promise<void>>
-      __LET_GO__?: () => void
-    }
-    w.__HOLD__ = { [n]: new Promise<void>((r) => (w.__LET_GO__ = r)) }
-  }, name)
-}
-async function letGo(page: Page) {
-  await page.evaluate(() => {
-    const w = window as unknown as { __HOLD__?: object; __LET_GO__: () => void }
-    w.__HOLD__ = {}
-    w.__LET_GO__()
-  })
-}
-
 /** Pałyn 1 open with a loop on Repeat, then ↓ held on its way to Pałyn 2. */
 async function moveOnItsWay(page: Page) {
   await openGo(page, "Take 1 Pałyn 1")
@@ -396,7 +374,7 @@ test("a place on its way is dropped when another song's tab is picked", async ({
   await strip(page).getByRole("button", { name: /^Viasna, go 1/ }).click()
   await expect(openTab(strip(page))).toHaveAttribute("data-tab", "song:Viasna")
   const from = await everyCall(page)
-  await letGo(page)
+  await letGo(page, "player_open")
   await startsFresh(page, from)
 })
 
@@ -407,33 +385,10 @@ test("a place on its way is dropped when the take is closed", async ({ page }) =
   await expect(overview).toBeVisible()
   await overview.getByRole("button", { name: "Take 4 Viasna 1" }).click()
   const from = await everyCall(page)
-  await letGo(page)
+  await letGo(page, "player_open")
   await expect(timeline(page)).toBeVisible()
   await startsFresh(page, from)
 })
-
-/** Holds each of `names` in the fake until `release` lets that one go. */
-async function holdEach(page: Page, names: string[]) {
-  await page.evaluate((ns) => {
-    const w = window as unknown as {
-      __HOLD__?: Record<string, Promise<void>>
-      __RELEASE__?: Record<string, () => void>
-    }
-    w.__HOLD__ = {}
-    w.__RELEASE__ = {}
-    for (const n of ns) w.__HOLD__[n] = new Promise<void>((r) => (w.__RELEASE__![n] = r))
-  }, names)
-}
-async function release(page: Page, name: string) {
-  await page.evaluate((n) => {
-    const w = window as unknown as {
-      __HOLD__: Record<string, Promise<void>>
-      __RELEASE__: Record<string, () => void>
-    }
-    delete w.__HOLD__[n]
-    w.__RELEASE__[n]()
-  }, name)
-}
 
 test("the place goes to the next go a step at a time: the loop, then the seek, then Play", async ({
   page,
@@ -446,7 +401,8 @@ test("the place goes to the next go a step at a time: the loop, then the seek, t
   await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
   await transport(page).getByRole("button", { name: "Play", exact: true }).click()
   await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
-  await holdEach(page, ["player_set_loop", "player_seek"])
+  await hold(page, "player_set_loop")
+  await hold(page, "player_seek")
   const from = await everyCall(page)
   const sent = async () =>
     (await callsFrom(page, from))
@@ -457,11 +413,11 @@ test("the place goes to the next go a step at a time: the loop, then the seek, t
   await expect.poll(sent).toEqual(["player_set_loop"])
   await page.waitForTimeout(300)
   expect(await sent()).toEqual(["player_set_loop"])
-  await release(page, "player_set_loop")
+  await letGo(page, "player_set_loop")
   await expect.poll(sent).toEqual(["player_set_loop", "player_seek"])
   await page.waitForTimeout(300)
   expect(await sent()).toEqual(["player_set_loop", "player_seek"])
-  await release(page, "player_seek")
+  await letGo(page, "player_seek")
   await expect.poll(sent).toEqual(["player_set_loop", "player_seek", "player_play"])
   await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
 })
@@ -475,7 +431,7 @@ test("a place still waiting on the loop's answer is not put on a go opened since
   await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
   await transport(page).getByRole("button", { name: "Play", exact: true }).click()
   await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
-  await holdEach(page, ["player_set_loop"])
+  await hold(page, "player_set_loop")
   const loops = await callCount(page, "player_set_loop")
   await page.keyboard.press("ArrowDown")
   await expect.poll(() => callCount(page, "player_set_loop")).toBe(loops + 1)
@@ -483,7 +439,7 @@ test("a place still waiting on the loop's answer is not put on a go opened since
   await expect.poll(() => opened(page)).toBe("/rec/old/v1.wav")
   await expect(timeline(page)).toBeVisible()
   const from = await everyCall(page)
-  await release(page, "player_set_loop")
+  await letGo(page, "player_set_loop")
   await page.waitForTimeout(400)
   const after = await callsFrom(page, from)
   expect(after.filter((c) => c.name === "player_seek" || c.name === "player_play")).toEqual([])
@@ -508,7 +464,7 @@ test("a note clicked while its take opens to play in the overview opens it there
   await expect.poll(() => callCount(page, "player_open")).toBe(opens + 1)
   await note.click()
   const seeks = await callCount(page, "player_seek")
-  await letGo(page)
+  await letGo(page, "player_open")
   await expect.poll(() => callCount(page, "player_seek")).toBeGreaterThan(seeks)
   expect((await calls(page, "player_seek")).at(-1)!.args[0] as number).toBeCloseTo(72, 0)
   await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
@@ -526,7 +482,7 @@ test("↑ before a note's go has opened carries the note's place", async ({ page
   await page.keyboard.press("ArrowUp")
   await expect.poll(() => callCount(page, "player_open")).toBe(opens + 2)
   const seeks = await callCount(page, "player_seek")
-  await letGo(page)
+  await letGo(page, "player_open")
   await expect.poll(() => callCount(page, "player_seek")).toBeGreaterThan(seeks)
   expect(await opened(page)).toBe("/rec/old/p1.wav")
   expect((await calls(page, "player_seek")).at(-1)!.args[0] as number).toBeCloseTo(72, 0)
@@ -561,7 +517,7 @@ test("a go on its way from another rehearsal gives way to a later move", async (
   await expect.poll(() => callCount(page, "get_rehearsal")).toBeGreaterThan(0)
   await page.keyboard.press("ArrowDown")
   await expect.poll(() => opened(page)).toBe("/rec/old/p2.wav")
-  await letGo(page)
+  await letGo(page, "get_rehearsal")
   await page.waitForTimeout(800)
   expect(await openedFiles(page, opens)).toEqual(["/rec/old/p2.wav"])
   await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
@@ -576,7 +532,7 @@ test("a go on its way from another rehearsal is dropped by Escape", async ({ pag
   await expect.poll(() => callCount(page, "get_rehearsal")).toBe(asked + 1)
   await page.keyboard.press("Escape")
   await expect(timeline(page)).toHaveCount(0)
-  await letGo(page)
+  await letGo(page, "get_rehearsal")
   await page.waitForTimeout(800)
   await expect(timeline(page)).toHaveCount(0)
   expect(await openedFiles(page, opens)).toEqual([])

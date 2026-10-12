@@ -2,8 +2,10 @@ import {
   callCount,
   calls,
   expect,
+  hold,
   keyOn,
   lastTimeButton,
+  letGo,
   notices,
   openApp,
   openBandApp,
@@ -57,6 +59,14 @@ const reach = (row: Locator) =>
   row.locator("[data-meter]").evaluate((m) => {
     const bar = m.firstElementChild
     return bar ? bar.getBoundingClientRect().width / m.getBoundingClientRect().width : 0
+  })
+
+/** How many lines a field's text takes. */
+const linesIn = (field: Locator) =>
+  field.evaluate((el) => {
+    const s = getComputedStyle(el)
+    const text = el.clientHeight - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom)
+    return Math.round(text / parseFloat(s.lineHeight))
   })
 
 /** The notice whose words are exactly `text`. */
@@ -147,6 +157,29 @@ test.describe("the signal check", () => {
     await expect.poll(() => callCount(page, "monitor_levels")).toBeGreaterThanOrEqual(polls + 2)
     expect(await guitarReach(page)).toBeGreaterThan(0.3)
     await expect.poll(() => guitarReach(page), { timeout: 8000 }).toBeLessThan(0.05)
+  })
+
+  test("a second press while the check opens opens nothing more", async ({ page }) => {
+    await openApp(page)
+    // Python is slow to open the inputs, and the button is pressed again.
+    await hold(page, "start_monitor")
+    const check = page.getByRole("button", { name: "Check signal" })
+    await check.click()
+    await expect.poll(() => callCount(page, "start_monitor")).toBe(1)
+    await check.click()
+    await page.waitForTimeout(300)
+    expect(await callCount(page, "start_monitor")).toBe(1)
+
+    // One chain of reads: each waits for the one before it to be answered,
+    // so with the answers held there is one read out, not one per press.
+    await hold(page, "monitor_levels")
+    await letGo(page, "start_monitor")
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+    await expect.poll(() => callCount(page, "monitor_levels")).toBe(1)
+    await page.waitForTimeout(500)
+    expect(await callCount(page, "monitor_levels")).toBe(1)
+    await letGo(page, "monitor_levels")
+    await expect(page.getByText("signal", { exact: true })).toHaveCount(1)
   })
 
   test("Space after clicking Check signal starts the rehearsal, not the check again", async ({
@@ -423,42 +456,20 @@ test.describe("a track's icon", () => {
   })
 })
 
-/** A theme colour, as the browser draws it for a background. */
-const colourOf = (page: Page, token: string) =>
-  page.evaluate((t) => {
+/** A colour, as the browser draws it for a background: a theme colour by its
+ *  name ("selected"), or any CSS colour. */
+const colourOf = (page: Page, colour: string) =>
+  page.evaluate((c) => {
     const probe = document.createElement("i")
-    probe.style.backgroundColor = `var(--${t})`
+    probe.style.backgroundColor = /^[a-z-]+$/.test(c) ? `var(--${c})` : c
     document.body.append(probe)
     const out = getComputedStyle(probe).backgroundColor
     probe.remove()
     return out
-  }, token)
+  }, colour)
 
 /** The shared tooltip's words, as a screen reader is given them. */
 const tooltip = (page: Page) => page.getByRole("tooltip")
-
-/** Holds the fake's answer to `name` until `letGo` lets it through. */
-async function hold(page: Page, name: string) {
-  await page.evaluate((n) => {
-    const w = window as unknown as {
-      __HOLD__?: Record<string, Promise<void>>
-      __RELEASE__?: Record<string, () => void>
-    }
-    w.__HOLD__ = w.__HOLD__ || {}
-    w.__RELEASE__ = w.__RELEASE__ || {}
-    w.__HOLD__[n] = new Promise<void>((r) => (w.__RELEASE__![n] = r))
-  }, name)
-}
-async function letGo(page: Page, name: string) {
-  await page.evaluate((n) => {
-    const w = window as unknown as {
-      __HOLD__: Record<string, Promise<void>>
-      __RELEASE__: Record<string, () => void>
-    }
-    delete w.__HOLD__[n]
-    w.__RELEASE__[n]()
-  }, name)
-}
 
 // A track's row on the shared pieces (C8): Stereo a Toggle, Audio · Both ·
 // MIDI a ToggleGroup, the name a field with the shared ring, Look again's
@@ -517,6 +528,41 @@ test.describe("the track rows on the shared pieces", () => {
 
     await stereo.click()
     await expect(stereo).toHaveAttribute("aria-pressed", "false")
+  })
+
+  test("Check signal is a button that says what it does, grey while the check runs", async ({
+    page,
+  }) => {
+    await openApp(page)
+    // Not a toggle: its words change with what pressing it does, which a
+    // toggle's name must not, so it says nothing of being pressed.
+    const check = page.getByRole("button", { name: "Check signal" })
+    await expect(check).toHaveAttribute("data-slot", "button")
+    await expect(check).not.toHaveAttribute("aria-pressed")
+    expect(await check.evaluate((el) => (el as HTMLElement).innerText.trim())).toBe("Check signal")
+
+    await check.click()
+    const stop = page.getByRole("button", { name: "Stop checking" })
+    await expect(stop).toBeVisible()
+    await expect(stop).not.toHaveAttribute("aria-pressed")
+    expect(await stop.evaluate((el) => (el as HTMLElement).innerText.trim())).toBe("Stop checking")
+    await expect(page.getByRole("button", { name: "Check signal" })).toHaveCount(0)
+
+    // Grey while it runs, as what is on is (F2), and under the pointer too:
+    // read once its colour has stopped changing.
+    const background = async () => {
+      await page.waitForTimeout(50)
+      await expect.poll(() => stop.evaluate((el) => el.getAnimations().length)).toBe(0)
+      return stop.evaluate((el) => getComputedStyle(el).backgroundColor)
+    }
+    const grey = await colourOf(page, "selected")
+    await page.mouse.move(0, 0)
+    expect(await background()).toBe(grey)
+    await stop.hover()
+    expect(await background()).toBe(grey)
+
+    await stop.click()
+    await expect(page.getByRole("button", { name: "Check signal" })).not.toHaveAttribute("aria-pressed")
   })
 
   test("arrow keys move along Audio Both MIDI", async ({ page }) => {
@@ -644,7 +690,11 @@ test.describe("the track rows on the shared pieces", () => {
     const text = await drums.evaluate((el) => getComputedStyle(el).color)
     await expect(notes).toHaveCSS("color", text)
     const bar = drums.locator("[data-check-slot='notes'] [data-slot='meter'] > div")
-    await expect(bar).toHaveClass(/bg-foreground\/60/)
+    await expect(bar).toHaveCSS(
+      "background-color",
+      await colourOf(page, "color-mix(in oklab, var(--foreground) 60%, transparent)")
+    )
+    await expect(bar).toHaveCSS("opacity", "1")
     // One meter for both: the level's and the notes'.
     await expect(drums.locator("[data-slot='meter']")).toHaveCount(2)
   })
@@ -849,7 +899,9 @@ test.describe("the tracks during the check", () => {
       await openBandApp(page, { stress: true })
       await expect(rows(page)).toHaveCount(5)
       const long = "Keys and the string pads (Hanna's second keyboard, the one by the window)"
-      await page.getByRole("textbox", { name: "Track 5 name" }).fill(long)
+      const name = page.getByRole("textbox", { name: "Track 5 name" })
+      await name.fill(long)
+      expect(await linesIn(name)).toBe(2)
       await page.getByRole("button", { name: "Check signal" }).click()
       const keys = rows(page).nth(4)
       const notes = keys.locator("[data-check-slot='notes']").getByText("notes", { exact: true })
@@ -909,7 +961,8 @@ test.describe("the tracks during the check", () => {
   })
 
   test("a track taken off while the check opens leaves the others theirs", async ({ page }) => {
-    await openFour(page, { Drums: [0.0004], Bass: [0.0004], Guitar: [0.62], Vocals: [0.0004] })
+    // Every other one loud: a reading one place out says the wrong word.
+    await openFour(page, { Drums: [0.0004], Bass: [0.62], Guitar: [0.0004], Vocals: [0.62] })
     await hold(page, "start_monitor")
     await page.getByRole("button", { name: "Check signal" }).click()
     await page.getByRole("button", { name: "Remove track Bass" }).click()
@@ -919,17 +972,20 @@ test.describe("the tracks during the check", () => {
 
     await polls(page, 3)
     const row = (n: number) => rows(page).nth(n - 1)
-    await expect(heard(row(2), "signal")).toBeVisible()
-    expect(await reach(row(2))).toBeGreaterThan(0.8)
-    await expect(heard(row(3), "silent")).toBeVisible()
-    expect(await reach(row(3))).toBeLessThan(0.05)
+    await expect(heard(row(2), "silent")).toBeVisible()
+    expect(await reach(row(2))).toBeLessThan(0.05)
+    await expect(heard(row(3), "signal")).toBeVisible()
+    expect(await reach(row(3))).toBeGreaterThan(0.8)
 
-    // And Undo puts Bass back with what the check opened for it.
+    // And Undo puts Bass back with what the check opened for it: its own
+    // loud input, where a track put back with nothing reads silent.
     await said(page, "Bass was taken off.").getByRole("button", { name: "Undo" }).click()
     expect(await namesOf(page)).toEqual(["Drums", "Bass", "Guitar", "Vocals"])
     await polls(page, 3)
-    await expect(heard(row(2), "silent")).toBeVisible()
-    await expect(heard(row(3), "signal")).toBeVisible()
+    await expect(heard(row(2), "signal")).toBeVisible()
+    expect(await reach(row(2))).toBeGreaterThan(0.8)
+    await expect(heard(row(3), "silent")).toBeVisible()
+    await expect(heard(row(4), "signal")).toBeVisible()
   })
 })
 

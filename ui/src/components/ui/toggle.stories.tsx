@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import { Mic, Radio } from "lucide-react"
+import { Mic } from "lucide-react"
 import { useState } from "react"
 import { Toggle } from "./toggle"
 
@@ -68,15 +68,17 @@ function Pressing() {
   return (
     <div className="flex items-center gap-4">
       <Toggle variant="outline" pressed={on} onPressedChange={setOn}>
-        <Radio />
-        {on ? "Stop checking" : "Check signal"}
+        Stereo
       </Toggle>
       <span className="text-sm text-muted-foreground">{on ? "on" : "off"}</span>
     </div>
   )
 }
 
-/** Controlled, with its words changing as the Check signal button's do. */
+/** Controlled: what is on or off is the page's, and the toggle's words stay
+ *  the same either way, as a toggle's name must. A button whose words say
+ *  what pressing it does, as Check signal and Stop checking do, is a Button,
+ *  not a Toggle. */
 export const Controlled: Story = { render: () => <Pressing /> }
 
 /** Pressing one changes nothing beside it: both states have the same frame

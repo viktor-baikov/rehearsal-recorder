@@ -19,6 +19,7 @@ import { PortPicker } from "@/components/midi/PortPicker"
 import type { MidiPorts, RecordMode, Track } from "@/lib/api"
 import { meterReach } from "@/lib/levels"
 import { modeOf, recordsAudio, recordsNotes } from "@/lib/midi"
+import { lineText, type PortLine } from "@/lib/midiPorts"
 import { cn } from "@/lib/utils"
 
 /**
@@ -67,7 +68,7 @@ export function TrackRow({
   /** The picker's warning edge: no port picked, or the one picked is away. */
   portWarn: boolean
   /** What its port line says beside the picker, or null for nothing. */
-  portNote: string | null
+  portNote: PortLine | null
   /** What the check hears from its port; null while it has not opened it. */
   notes: { seen: boolean; vel: number } | null
   onChange: (patch: Partial<Track>) => void
@@ -188,7 +189,9 @@ export function TrackRow({
             onChange={(port) => onChange({ midi_port: port })}
           />
           {portNote ? (
-            <PortNote text={portNote} />
+            // Drawn afresh when a name comes into it or leaves it, so that
+            // what is cut is measured on what is there.
+            <PortNote key={portNote.who ? "who" : "words"} line={portNote} />
           ) : (
             // What the check hears from the port is said only for a port it
             // opened: one picked since says nothing until the next check.
@@ -213,14 +216,17 @@ export function TrackRow({
  * What is the matter with a track's port, beside its picker. It takes the
  * check's room at the line's end too, and keeps to the two lines the
  * picker's height has room for, so it moves no row as it comes or goes (B4).
- * The picker leaves it room for its own words in two lines; a long name in
- * it can take more, and is cut then, the sentence whole in its tip on hover
+ * The picker leaves it room for its own words in two lines. Another track's
+ * name in it has at most half a line, and gives way there, so the words
+ * round it are always read; cut, the sentence is whole in its tip on hover
  * and keyboard focus (B6). A screen reader reads it whole either way.
  */
-function PortNote({ text }: { text: string }) {
-  const [words, cut] = useCut<HTMLSpanElement>()
+function PortNote({ line }: { line: PortLine }) {
+  const [words, cutWords] = useCut<HTMLSpanElement>()
+  const [who, cutWho] = useCut<HTMLSpanElement>()
+  const cut = cutWords || cutWho
   return (
-    <WholeTip cut={cut} text={text}>
+    <WholeTip cut={cut} text={lineText(line)}>
       <p
         role="status"
         data-port-note
@@ -228,8 +234,19 @@ function PortNote({ text }: { text: string }) {
         className="flex min-w-0 flex-1 items-start gap-1 rounded-sm text-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         <TriangleAlert className="mt-px size-3.5 shrink-0 text-warn" />
-        <span ref={words} data-cut={cut || undefined} className="line-clamp-2 min-w-0">
-          {text}
+        <span ref={words} data-cut={cutWords || undefined} className="line-clamp-2 min-w-0">
+          {line.before}
+          {line.who && (
+            <span
+              ref={who}
+              data-who
+              data-cut={cutWho || undefined}
+              className="inline-block max-w-1/2 truncate align-top"
+            >
+              {line.who}
+            </span>
+          )}
+          {line.after}
         </span>
       </p>
     </WholeTip>

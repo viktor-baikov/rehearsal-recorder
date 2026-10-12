@@ -26,9 +26,10 @@ describe("useAfter: true once something has been so for a while (B5)", () => {
     expect(atFirst(true, 0)).toBe("true")
   })
 
-  it("is true at once when its wait is taken away while it counts", () => {
-    // Drawn again with no wait, what it counted kept: a spinner told to
-    // wait for nothing shows, though it had been waiting.
+  it("is true at once when drawn again with no wait, after it was drawn waiting", () => {
+    // Drawn first with a wait, then at once again with none, its own state
+    // kept from the first time (no timer or effect runs on the server): a
+    // spinner told to wait for nothing shows, whatever it was waiting for.
     function Probe() {
       const [ms, setMs] = useState(1000)
       const late = useAfter(true, ms)

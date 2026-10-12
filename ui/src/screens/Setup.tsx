@@ -145,6 +145,9 @@ export function Setup({
   // check heard from it only into the check that heard it: one begun since
   // never opened its input or its port.
   const checkRun = useRef(0)
+  // Python is opening the inputs for a check: a press meanwhile opens no
+  // second one, nor a second chain of reads.
+  const opening = useRef(false)
   // What the check hears from each track's port (P5, P8) and where its bar
   // stands, by the names the tracks had when it began, as Python has them;
   // and, by each track's place in the band, that name and what the track
@@ -529,7 +532,7 @@ export function Setup({
   }
 
   const startCheck = async () => {
-    if (deviceIndex === null || !tracks.length) return
+    if (deviceIndex === null || !tracks.length || opening.current) return
     // Listening to last time and to the inputs at once is one sound too
     // many to tell which track is which.
     uncue()
@@ -547,7 +550,12 @@ export function Setup({
         recordsNotes(t) ? { name: t.name, mode: modeOf(t), port: portName(t) } : null
       )
     )
-    const res = await api().start_monitor(deviceIndex, samplerate, band)
+    opening.current = true
+    const res = await api()
+      .start_monitor(deviceIndex, samplerate, band)
+      .finally(() => {
+        opening.current = false
+      })
     if (!res.ok) {
       setError(res.error ?? "Could not open the input for checking")
       return

@@ -31,6 +31,17 @@ async function pressed(page: Page, n: number): Promise<string[]> {
   return modes(page, n).locator("[aria-checked='true']").allInnerTexts()
 }
 
+/** A colour, as the browser draws it for text. */
+const textColour = (page: Page, colour: string) =>
+  page.evaluate((c) => {
+    const probe = document.createElement("i")
+    probe.style.color = c
+    document.body.append(probe)
+    const out = getComputedStyle(probe).color
+    probe.remove()
+    return out
+  }, colour)
+
 /** How many lines an element's text takes. */
 function lines(el: Locator): Promise<number> {
   return el.evaluate((node) => {
@@ -38,6 +49,33 @@ function lines(el: Locator): Promise<number> {
     range.selectNodeContents(node)
     return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size
   })
+}
+
+/**
+ * Whether `words`, somewhere in the element's text, are all on show: inside
+ * every box round them that cuts off what overflows it, a line clamp's too.
+ */
+function shown(el: Locator, words: string): Promise<boolean> {
+  return el.evaluate((node, w) => {
+    const walk = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+    for (let t = walk.nextNode(); t; t = walk.nextNode()) {
+      const at = t.textContent!.indexOf(w)
+      if (at < 0) continue
+      const range = document.createRange()
+      range.setStart(t, at)
+      range.setEnd(t, at + w.length)
+      const rects = [...range.getClientRects()].filter((r) => r.width > 0)
+      for (let box = t.parentElement; box && box !== node.parentElement; box = box.parentElement) {
+        if (getComputedStyle(box).overflow === "visible") continue
+        const b = box.getBoundingClientRect()
+        const out = (r: DOMRect) =>
+          r.top < b.top - 0.5 || r.bottom > b.bottom + 0.5 || r.left < b.left - 0.5 || r.right > b.right + 0.5
+        if (rects.some(out)) return false
+      }
+      return rects.length > 0
+    }
+    return false
+  }, words)
 }
 
 /** Where every row and every control on one stands, to the half pixel, each
@@ -175,9 +213,10 @@ test.describe("setup", () => {
     const options = page.getByRole("option")
     await expect(options).toHaveCount(2)
     await expect(options.nth(0)).toContainText("TD-17")
-    await expect(options.nth(0).getByText("Not connected", { exact: true })).toHaveClass(
-      /text-xs text-muted-foreground/
-    )
+    // In the quiet look every status has: small, and grey.
+    const status = options.nth(0).getByText("Not connected", { exact: true })
+    await expect(status).toHaveCSS("font-size", "12px")
+    await expect(status).toHaveCSS("color", await textColour(page, "var(--muted-foreground)"))
     await expect(options.nth(1)).toHaveText("Launchkey Mini MK3")
     await page.keyboard.press("Escape")
 
@@ -599,6 +638,9 @@ test.describe("setup", () => {
     // Read whole; shown in the two lines the picker's height has room for.
     await expect(portNote(page, 2)).toHaveText(question, { timeout: 3000 })
     expect(await places(page)).toEqual(slotGone(before, 2))
+    // The name gives way inside the sentence; the question's own words do not.
+    expect(await shown(portNote(page, 2), "Same notes as")).toBe(true)
+    expect(await shown(portNote(page, 2), "Plugged in twice?")).toBe(true)
     const words = portNote(page, 2).locator("[data-cut]")
     await expect(words).toHaveCount(1)
     // Whole in its tip, under the pointer and on keyboard focus.
@@ -611,6 +653,37 @@ test.describe("setup", () => {
     await page.keyboard.press("Tab")
     await expect(portNote(page, 2)).toBeFocused()
     await expect(tip).toHaveText(question)
+  })
+
+  test("a long name on the same port gives way in the note, and its words do not (P2)", async ({
+    page,
+  }) => {
+    // The narrowest rows, beside a long port: the note has the least room.
+    await page.setViewportSize({ width: 1100, height: 900 })
+    const port = "Launchkey Mini MK3 MIDI Port (DAW In) on the second USB hub"
+    const kit = "Drums and pads (Kastuś), the kit by the window, with its second snare and both cowbells"
+    await openApp(page, { before: `window.__MIDI_PORTS__ = ['TD-17', ${JSON.stringify(port)}];` })
+    await nameField(page, 1).fill("Kit")
+    await setMode(page, 1, "Both")
+    await pickPort(page, 1, port)
+    await nameField(page, 2).fill("Keys")
+    await setMode(page, 2, "Both")
+    await pickPort(page, 2, port)
+    await expect(portNote(page, 2)).toHaveText("Kit takes notes from this port too.")
+    await page.mouse.move(0, 0)
+    const keys = async () => (await places(page, true))[1]
+    const before = await keys()
+
+    // The kit named at length: the keys' note says so, and its row stays.
+    await nameField(page, 1).fill(kit)
+    const line = `${kit} takes notes from this port too.`
+    await expect(portNote(page, 2)).toHaveText(line)
+    await page.mouse.move(0, 0)
+    expect(await shown(portNote(page, 2), "takes notes from this port too.")).toBe(true)
+    expect(await keys()).toEqual(before)
+    // Whole in its tip.
+    await portNote(page, 2).locator("[data-cut]").hover()
+    await expect(page.locator("[data-whole]")).toHaveText(line)
   })
 
   test("two tracks on one port move no card either (P2)", async ({ page }) => {
