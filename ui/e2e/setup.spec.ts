@@ -7,6 +7,7 @@ import {
   keyOn,
   lastTimeButton,
   letGo,
+  literally,
   notices,
   openApp,
   openBandApp,
@@ -35,8 +36,11 @@ const FOUR = [
  * each, by the names Python knows them by: the names they had when it began.
  */
 async function openFour(page: Page, levels: Record<string, number[]> = {}, before = "") {
+  await page.addInitScript((heard) => {
+    ;(window as unknown as { __MONITOR_LEVELS__: unknown }).__MONITOR_LEVELS__ = heard
+  }, levels)
   await openApp(page, {
-    before: `window.__MONITOR_LEVELS__ = ${JSON.stringify(levels)}; ${before}`,
+    before,
     after: `window.pywebview.api.load_default_tracks = async () => ({tracks: ${JSON.stringify(FOUR)}});`,
   })
   await expect(rows(page)).toHaveCount(4)
@@ -72,7 +76,7 @@ const linesIn = (field: Locator) =>
 
 /** The notice whose words are exactly `text`. */
 const said = (page: Page, text: string) =>
-  notices(page).filter({ has: page.locator("p", { hasText: new RegExp(`^${text.replace(/\./g, "\\.")}$`) }) })
+  notices(page).filter({ has: page.locator("p", { hasText: new RegExp(`^${literally(text)}$`) }) })
 
 /** Until the screen's groups have risen into place: a box measured while one
  *  rises is up to 12 px off. */
@@ -1638,7 +1642,7 @@ test.describe("Last time and long names on the shared pieces", () => {
       const figures = row.locator("[data-figures]")
       await expect(figures, where).toHaveAttribute("data-dropped")
       const read = figures.locator(".sr-only")
-      await expect(read, where).toHaveText(new RegExp(`^${star.replace(/[()]/g, "\\$&")} · Sat 19 Sep, .+ ago · 4 goes$`))
+      await expect(read, where).toHaveText(new RegExp(`^${literally(star)} · Sat 19 Sep, .+ ago · 4 goes$`))
       // Dropped in order, the least needed first: how long ago, then the
       // day, then the goes, the ★ go last. The ★ is drawn, not written.
       const ago = (await read.innerText()).split(", ")[1].split(" · ")[0]

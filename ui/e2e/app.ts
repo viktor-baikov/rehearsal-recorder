@@ -218,6 +218,11 @@ export function notices(page: Page, kind?: string): Locator {
   )
 }
 
+/** `text` as a regular expression that matches it literally. */
+export function literally(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 /** Sets something on the fake while the page runs: window.__IFACE_GONE__
  *  and the rest in fake-bridge.js. */
 export async function setFake(page: Page, name: string, value: unknown) {
