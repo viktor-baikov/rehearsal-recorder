@@ -10,34 +10,45 @@ import { cn } from "@/lib/utils"
   be: the theme's warn colour on the icon and the edge, and a faint wash of
   it. `destructive` is for a failure. Both keep the text in its own colour,
   so it reads in both themes.
+
+  `box` is the alert as a block of its own. `line` is for a place that keeps
+  one line for whatever it has to say (the player's): no box and no wash,
+  the icon in the variant's colour and one line of 12 px words, cut with
+  "…" where the room ends. It is 24 px tall whatever it says, so a place can
+  hold that room before anything comes. A line cut shows whole through the
+  shared WholeTip, which the caller puts round the description.
 */
-const alertVariants = cva(
-  "relative grid w-full grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current",
-  {
-    variants: {
-      variant: {
-        default: "bg-card text-card-foreground",
-        warning: "border-warn/40 bg-warn/10 text-foreground [&>svg]:text-warn",
-        destructive:
-          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 [&>svg]:text-current",
-      },
+const alertVariants = cva("relative w-full [&>svg]:text-current", {
+  variants: {
+    variant: {
+      default: "bg-card text-card-foreground",
+      warning: "border-warn/40 bg-warn/10 text-foreground [&>svg]:text-warn",
+      destructive:
+        "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 [&>svg]:text-current",
     },
-    defaultVariants: {
-      variant: "default",
+    size: {
+      box: "grid grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5",
+      line: "flex h-6 items-center gap-x-2 bg-transparent text-xs [&>svg]:size-4 [&>svg]:shrink-0 *:data-[slot=alert-description]:block *:data-[slot=alert-description]:justify-items-normal *:data-[slot=alert-description]:min-w-0 *:data-[slot=alert-description]:truncate *:data-[slot=alert-description]:text-xs *:data-[slot=alert-description]:text-inherit",
     },
-  }
-)
+  },
+  defaultVariants: {
+    variant: "default",
+    size: "box",
+  },
+})
 
 function Alert({
   className,
   variant,
+  size,
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>) {
   return (
     <div
       data-slot="alert"
+      data-size={size ?? "box"}
       role="alert"
-      className={cn(alertVariants({ variant }), className)}
+      className={cn(alertVariants({ variant, size }), className)}
       {...props}
     />
   )

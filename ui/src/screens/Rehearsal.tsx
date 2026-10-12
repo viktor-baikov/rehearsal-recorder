@@ -572,7 +572,7 @@ export function Rehearsal({
             onRemoveMarker={(sec) => removeMarker(selected, sec)}
             onCrop={(from, to) => void cropTake(selected, from, to)}
             canCrop={!busy}
-            status={<RunningLine entry={cropping} label="Cropping" />}
+            status={cropping && <RunningLine entry={cropping} label="Cropping" />}
             spaceKey
             goKeys
           />

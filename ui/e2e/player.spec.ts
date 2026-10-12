@@ -194,7 +194,7 @@ test.describe("the review screen", () => {
     await secondTake(page)
     await page.getByRole("button", { name: "Add marker" }).click()
     await expect(page.getByText("Marker at")).toBeVisible()
-    await page.getByRole("button", { name: "Keep this" }).click()
+    await page.getByRole("radio", { name: "Keep this" }).click()
     await page.fill("input[aria-label='Marker note']", "this one is the take")
     await page.getByRole("button", { name: "Save", exact: true }).click()
     await expect(page.getByText("this one is the take")).toHaveCount(1)
@@ -215,7 +215,7 @@ async function savedTake(page: Page) {
   await page.getByRole("button", { name: /Save take/ }).click()
   await recordTake(page, 2)
   await page.getByRole("button", { name: "Add marker" }).click()
-  await page.getByRole("button", { name: "Keep this" }).click()
+  await page.getByRole("radio", { name: "Keep this" }).click()
   await page.fill("input[aria-label='Marker note']", "this one is the take")
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await page.getByRole("button", { name: /Save take/ }).click()
@@ -260,7 +260,7 @@ test.describe("a saved take", () => {
     // The thought about what just went wrong does not survive a hunt through
     // the interface.
     await expect(page.getByText("Marker at")).toBeVisible()
-    await page.getByRole("button", { name: "Went wrong" }).click()
+    await page.getByRole("radio", { name: "Went wrong" }).click()
     await page.fill("input[aria-label='Marker note']", "guitar drifts here")
     await page.getByRole("button", { name: "Save", exact: true }).click()
     await expect

@@ -20,6 +20,11 @@ function isSlider(el: Element | null): boolean {
   return el.tagName === "INPUT" && (el as HTMLInputElement).type === "range"
 }
 
+/** A radio of a group, where the arrows move along the group. */
+function inRadios(el: Element | null): boolean {
+  return el?.getAttribute("role") === "radio" && el.closest('[role="radiogroup"]') !== null
+}
+
 /** What Space presses by itself when it has focus. */
 const PRESSED_BY_SPACE =
   'button, a[href], input[type="checkbox"], input[type="radio"], ' +
@@ -346,15 +351,20 @@ export function useDialogFocusKeys() {
 
       const el = document.activeElement
       // In a name field the arrows are how you move along what you typed.
-      // Tab never is — it is how you leave the field.
-      if (arrow && (isTyping(el) || isSlider(el))) return
+      // Tab never is — it is how you leave the field. Along a group of
+      // radios (the marker's kind) they are how you move along the group.
+      if (arrow && (isTyping(el) || isSlider(el) || inRadios(el))) return
 
+      // A radio group's own box takes the Tab only to hand it on to the
+      // chosen radio, so it is no stop: as one, Shift+Tab from the radio
+      // would land on it and be handed straight back.
       const stops = Array.from(
         dialog.querySelectorAll<HTMLElement>(FOCUSABLE)
       ).filter(
         (n) =>
           !n.hasAttribute("disabled") &&
           n.tabIndex !== -1 &&
+          n.getAttribute("role") !== "radiogroup" &&
           n.getClientRects().length > 0
       )
       if (stops.length === 0) return

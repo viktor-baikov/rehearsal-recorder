@@ -52,13 +52,13 @@ test("the marker dialog's buttons are the labels, in their order, the first chos
   await page.getByRole("button", { name: "Add marker" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByText("Marker at")).toBeVisible()
-  expect(await dialog.locator("button[aria-pressed]").allInnerTexts()).toEqual([
+  expect(await dialog.locator("[role='radio'][aria-checked]").allInnerTexts()).toEqual([
     "Solo",
     "Note",
     "Went wrong",
   ])
-  await expect(dialog.getByRole("button", { name: "Solo" })).toHaveAttribute("aria-pressed", "true")
-  await dialog.getByRole("button", { name: "Went wrong" }).click()
+  await expect(dialog.getByRole("radio", { name: "Solo" })).toHaveAttribute("aria-checked", "true")
+  await dialog.getByRole("radio", { name: "Went wrong" }).click()
   await dialog.getByRole("button", { name: "Save", exact: true }).click()
   await page.getByRole("button", { name: /Save take/ }).click()
   await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
@@ -177,8 +177,8 @@ test("a label dragged to the top is the first, and a new mark gets it", async ({
   await recordTake(page)
   await page.getByRole("button", { name: "Add marker" }).click()
   const dialog = page.getByRole("dialog")
-  await expect(dialog.getByRole("button", { name: "Do again" })).toHaveAttribute("aria-pressed", "true")
-  expect((await dialog.locator("button[aria-pressed]").allInnerTexts())[0]).toBe("Do again")
+  await expect(dialog.getByRole("radio", { name: "Do again" })).toHaveAttribute("aria-checked", "true")
+  expect((await dialog.locator("[role='radio'][aria-checked]").allInnerTexts())[0]).toBe("Do again")
 })
 
 test("a label picked up and put back where it was is not moved", async ({ page }) => {
@@ -282,5 +282,5 @@ test("a folder typed in brings its library's labels to the marker dialog", async
   await page.getByRole("button", { name: "Add marker" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByText("Marker at")).toBeVisible()
-  expect(await dialog.locator("button[aria-pressed]").allInnerTexts()).toEqual(["Riff", "Tempo"])
+  expect(await dialog.locator("[role='radio'][aria-checked]").allInnerTexts()).toEqual(["Riff", "Tempo"])
 })
