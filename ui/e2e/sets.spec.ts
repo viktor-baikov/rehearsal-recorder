@@ -390,8 +390,9 @@ test.describe("on the start screen", () => {
     await expect(picker(page)).toHaveText(/No set/)
   })
 
-  /** The shared tip a cut name shows whole in (B6). */
-  const tip = (page: Page) => page.locator("[data-whole]")
+  /** The shared tip a cut name shows whole in (B6): the open one, since a tip
+   *  that has just closed fades out for 220 ms beside the next. */
+  const tip = (page: Page) => page.locator("[data-whole][data-state$='open']")
   /** The pointer off to the window's corner, as a hand moves it. */
   const away = (page: Page) => page.mouse.move(0, 0, { steps: 8 })
 

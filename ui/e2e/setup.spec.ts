@@ -2015,6 +2015,7 @@ test.describe("Last time and long names on the shared pieces", () => {
     await hold(page, "player_open")
     const button = past.locator("[data-song='Pałyn'] button[data-look]")
     const spinner = button.locator(".animate-spin")
+    await settled(page)
     const box = await button.boundingBox()
     const since = Date.now()
     const at = (ms: number) => page.waitForTimeout(Math.max(0, ms - (Date.now() - since)))
