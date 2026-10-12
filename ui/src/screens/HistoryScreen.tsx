@@ -1162,8 +1162,11 @@ export function HistoryScreen({
                   {/* With the facts beside it the name keeps its width and they
                       give way to it, as in the rehearsal screen's header. */}
                   <div className={cn("min-w-0", facts ? "flex-[0_1_auto]" : "flex-1")}>
-                    <div className="flex items-center gap-1">
-                      <h2 className="truncate text-xl leading-tight font-semibold">
+                    {/* The name wraps when it is longer than its row, through a
+                        word if need be, and is never cut (B6); the pencil stays
+                        beside its first line. */}
+                    <div className="flex items-start gap-1">
+                      <h2 className="min-w-0 pt-1 text-xl leading-tight font-semibold wrap-anywhere">
                         {summary.name}
                       </h2>
                       {!summary.missing && (

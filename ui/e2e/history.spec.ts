@@ -12,6 +12,7 @@ import {
   settled,
   startButton,
   startRehearsal,
+  style,
   test,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
@@ -255,10 +256,10 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
 // The facts in the pane's head, beside the rehearsal's name: the name has its
 // room first and they give way to it fact by fact, as in the rehearsal
 // screen's header. The stress band has a rehearsal whose name is 60 letters
-// and one of 80, and a short one.
+// and one of 80, which wrap, and a short one.
 const FACTS = ["Length", "Takes", "In the cloud", "On disk"]
 
-for (const [pick, cut] of [["New songs", false], ["Soundcheck at", true], ["Tuesday jam at", true]] as const) {
+for (const [pick, wraps] of [["New songs", false], ["Soundcheck at", true], ["Tuesday jam at", true]] as const) {
   test(`the pane head of ${pick} keeps the name's room and the facts give way at 960 px`, async ({ page }) => {
     await page.setViewportSize({ width: 960, height: 680 })
     await openBandApp(page, { stress: true })
@@ -278,7 +279,7 @@ for (const [pick, cut] of [["New songs", false], ["Soundcheck at", true], ["Tues
           .map((dt) => dt.textContent!)
       )
     expect(shown).toEqual(FACTS.slice(0, shown.length))
-    if (!cut) expect(shown.length).toBeGreaterThanOrEqual(2)
+    if (!wraps) expect(shown.length).toBeGreaterThanOrEqual(2)
 
     const at = async (it: Locator) => (await it.boundingBox())!
     const [title, row, bin] = [
@@ -291,10 +292,70 @@ for (const [pick, cut] of [["New songs", false], ["Soundcheck at", true], ["Tues
     expect(row.x + row.width).toBeLessThanOrEqual(bin.x + 0.5)
     expect(bin.x + bin.width).toBeLessThanOrEqual((await at(pane)).x + (await at(pane)).width)
     expect(await pane.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
-    // The name is whole when it can be, and when it is cut it has most of the room.
-    const whole = await name.evaluate((el) => el.scrollWidth <= el.clientWidth)
-    expect(whole).toBe(!cut)
-    if (cut) expect(title.width).toBeGreaterThanOrEqual(300)
+    // The name is never cut: one that is longer than the room it has first
+    // wraps onto a second line, and has most of the room.
+    expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    expect(title.height > 40).toBe(wraps)
+    if (wraps) expect(title.width).toBeGreaterThanOrEqual(300)
+  })
+}
+
+// A name longer than its row wraps and is never cut (B6): onto more lines, or
+// through a single word wider than the row. The pencil stays beside the name,
+// and the facts and Delete stay at the top of the head.
+const LONG_NAMES = [
+  ["many words", "Tuesday jam at the old brewery, with the horn section, the choir from upstairs and the kids"],
+  ["one word", "Mississippi".repeat(5) + "abcde"],
+] as const
+
+for (const [what, long] of LONG_NAMES) {
+  test(`a rehearsal's long name of ${what} wraps in the pane head at 960 px, its pencil beside it`, async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openApp(page)
+    await openHistory(page)
+    await page.getByRole("button", { name: "Rename rehearsal Tuesday jam" }).click()
+    const dialog = page.getByRole("dialog", { name: "Rename rehearsal" })
+    await dialog.locator("input").fill(long)
+    await dialog.getByRole("button", { name: "Rename" }).click()
+    await expect(page.getByRole("button", { name: `Delete rehearsal ${long}` })).toBeVisible()
+    await settled(page)
+
+    const group = facts(page)
+    await expect(group).toBeVisible()
+    const head = group.locator("xpath=../..")
+    const name = head.getByRole("heading", { level: 2 })
+    await expect(name).toHaveText(long)
+    const pencil = head.getByRole("button", { name: /^Rename rehearsal / })
+    const bin = head.getByRole("button", { name: /^Delete rehearsal / })
+    const at = async (it: Locator) => (await it.boundingBox())!
+    const [room, title, edit, row, trash] = [
+      await at(head),
+      await at(name),
+      await at(pencil),
+      await at(group),
+      await at(bin),
+    ]
+
+    // Not cut: it wraps, onto a second line at least, through a word if need be.
+    expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    expect(await style(name, "overflow-wrap")).toEqual({ "overflow-wrap": "anywhere" })
+    expect(title.height).toBeGreaterThan(40)
+    // The name, the pencil, the facts and Delete are inside the head, the
+    // name before the facts, and nothing scrolls sideways.
+    for (const [part, it] of [["the name", title], ["the pencil", edit], ["the facts", row], ["Delete", trash]] as const) {
+      expect(it.x, `${part} inside the head, left`).toBeGreaterThanOrEqual(room.x - 0.5)
+      expect(it.x + it.width, `${part} inside the head, right`).toBeLessThanOrEqual(room.x + room.width + 0.5)
+      expect(it.y, `${part} inside the head, top`).toBeGreaterThanOrEqual(room.y - 0.5)
+      expect(it.y + it.height, `${part} inside the head, bottom`).toBeLessThanOrEqual(room.y + room.height + 0.5)
+    }
+    expect(title.x + title.width, "the name before the facts").toBeLessThanOrEqual(row.x + 0.5)
+    expect(await head.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    // The pencil is beside the name, not alone on a line of its own under it.
+    expect(edit.y, "the pencil beside the name's first line").toBeLessThan(title.y + 32)
+    expect(edit.x, "the pencil after the name").toBeGreaterThanOrEqual(title.x + title.width - 0.5)
+    // The facts and Delete stay at the top while the name runs on.
+    expect(Math.abs(trash.y - room.y), "Delete at the top").toBeLessThan(2)
+    expect(Math.abs(row.y - room.y), "the facts at the top").toBeLessThan(2)
   })
 }
 
