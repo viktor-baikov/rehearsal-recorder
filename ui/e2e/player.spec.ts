@@ -464,8 +464,12 @@ test.describe("the region", () => {
     await page.mouse.up()
     await expect.poll(async () => (await lastLoop(page))?.[1] as number).toBeCloseTo(TAKE_SECONDS * 0.5, 0)
     expect(Math.abs(((await lastLoop(page))![0] as number) - TAKE_SECONDS * 0.25)).toBeLessThan(0.05)
-    // A six-second take across this width gets one-second steps on the ruler.
-    await expect(page.getByRole("group", { name: "Timeline clock" })).toContainText("0:05")
+    // A six-second take across this width gets two-second steps on the
+    // ruler: the axis is 476 px, which ends 12 px short of the lanes group's
+    // edge, so a second is 79 px, short of the 80 a one-second step needs.
+    const ruler = page.getByRole("group", { name: "Timeline clock" })
+    await expect(ruler).toContainText("0:04")
+    await expect(ruler).not.toContainText("0:05")
   })
 })
 

@@ -271,8 +271,8 @@ export const RULES = [
 const RULE_NAMES = new Set(RULES.map((r) => r.name))
 
 /** The interface's components and screens, and the .ts beside them (class
- *  strings live in .ts too, such as lib/laneHalf.ts and lib/labels.ts), are
- *  held to the rules; their tests are not. */
+ *  strings live in .ts too, such as lib/labels.ts), are held to the rules;
+ *  their tests are not. */
 export const isChecked = (path) => /^src\/.+\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path)
 const isShared = (path) => path.startsWith(SHARED_DIR)
 

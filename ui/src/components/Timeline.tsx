@@ -8,7 +8,6 @@ import { NotesPlate } from "@/components/midi/NotesPlate"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
-import { laneHalf } from "@/lib/laneHalf"
 import { laneOrder } from "@/lib/midi"
 import { MIN_VIEW_SEC, tickTimes } from "@/lib/timeline"
 import type { Marker, MissingNotes, NotesFile, TakeNotes } from "@/lib/api"
@@ -27,12 +26,18 @@ const GUTTER_PX = 200
  *  instead. */
 const LANE_REM = 3.5
 const RULER_PX = 44
-/** What a tick label needs to the right of its line: "10:00" at 11 px and
+/** What a tick label needs to the right of its line: "10:00" at 12 px and
  *  its padding, with a little to spare. */
 const TICK_LABEL_PX = 44
+/** Between the ruler and the lanes group under it. */
 const ROW_GAP_PX = 8
 /** Between the track controls and the waveforms; the map above keeps it. */
 const COLUMN_GAP_PX = 12
+/** The lanes group's room right of the pictures, as a plate has 12 px left of
+ *  its name. The ruler and the map above end there too, so the time axis is
+ *  the same line all the way down, and the loop band, the marks and the
+ *  playhead never reach the group's round corner. */
+const END_PX = 12
 /** How fast the wheel zooms. One notch of a mouse wheel is about 100 units,
  *  so this makes a notch a fifth of the window. */
 const ZOOM_PER_PIXEL = 0.002
@@ -40,9 +45,18 @@ const ZOOM_PER_PIXEL = 0.002
 /**
  * Every track of the take on one time axis: a ruler, a lane each, and one
  * A–B band drawn through all of them. A track that took notes has a lane of
- * them too: right under its audio, one card with it, for a Both track, and
+ * them too: right under its audio, sharing its well, for a Both track, and
  * where the band has it for a track that records MIDI only (lib/midi.ts
  * laneOrder).
+ *
+ * The lanes are one group (the owner, 2026-10-12: «и я бы дорожки сделал
+ * одной группой»): one fill for every track's lane, its plate and its picture
+ * side by side in a row, and no line between the rows. What tells one lane
+ * from the next is its picture, a waveform or a lane of notes, each on a well
+ * of its own (the page's colour, 8 px corners) with 3 px of the group's fill
+ * above and below it, so 6 px between two tracks' wells. A Both track's audio
+ * and notes share one well, split by a 1 px line. The master is its own group
+ * under them.
  *
  * This component is the only place that knows how an x position becomes a
  * second. That mapping used to be copied into every waveform, which is why
@@ -273,6 +287,11 @@ export function Timeline({
   const lanes = media.length > 0 ? laneOrder(media, notes ?? [], notesMissing ?? []) : []
   const rows = lanes.length
   const ticks = tickTimes(from, to, width)
+  // The plates' column, the time axis, and the group's room after it. The
+  // grid round the ruler and every row of the lanes group lay their columns
+  // out by this one template, over the same width, so a waveform lies exactly
+  // under the ruler and the band drawn across them.
+  const columns = `${GUTTER_PX}px minmax(0, 1fr) ${END_PX - COLUMN_GAP_PX}px`
 
   return (
     <>
@@ -289,6 +308,7 @@ export function Timeline({
           closest={span <= MIN_VIEW_SEC + 0.01}
           gutterPx={GUTTER_PX}
           gapPx={COLUMN_GAP_PX}
+          endPx={END_PX}
           controls={surfaceId}
           onMove={(a, b) => {
             // Moved by hand, the window stops chasing the playhead, as it
@@ -303,17 +323,14 @@ export function Timeline({
         <div
           className="grid min-h-0"
           style={{
-            gridTemplateColumns: `${GUTTER_PX}px 1fr`,
-            // A row per lane, and none before the first track's media
-            // arrives (never, once loadError is set). A lane of notes is as
-            // tall as its plate, which a long name or port makes taller. No
-            // row takes a share of what is left, so two tracks in a tall
-            // window are two lanes of 3.5rem and the room under them stays
-            // empty, which is honest about there being room for more tracks.
-            gridTemplateRows: [
-              `${RULER_PX}px`,
-              ...lanes.map((lane) => (lane.kind === "audio" ? `${LANE_REM}rem` : "min-content")),
-            ].join(" "),
+            gridTemplateColumns: columns,
+            // The ruler, and under it the lanes as one group, none before the
+            // first track's media arrives (never, once loadError is set). The
+            // group is as tall as its rows, and no row takes a share of what
+            // is left, so two tracks in a tall window are two lanes of 3.5rem
+            // and the room under them stays empty, which is honest about
+            // there being room for more tracks.
+            gridTemplateRows: rows > 0 ? `${RULER_PX}px auto` : `${RULER_PX}px`,
             gap: `${ROW_GAP_PX}px ${COLUMN_GAP_PX}px`,
           }}
         >
@@ -350,7 +367,7 @@ export function Timeline({
                     a sideways scrollbar appeared under the last track. */}
                 <span
                   className={cn(
-                    "tnum absolute top-0 text-[11px] text-muted-foreground",
+                    "tnum absolute top-0 text-xs text-muted-foreground",
                     ((to - t) / (to - from)) * width < TICK_LABEL_PX
                       ? "-translate-x-full pr-1.5"
                       : "pl-1.5"
@@ -478,111 +495,159 @@ export function Timeline({
             />
           </div>
 
-          {lanes.map((lane, i) => {
-            const row = i + 2
-            if (lane.kind !== "audio") {
-              // A Both track's notes are the lower half of its card: drawn up
-              // over the gap between the rows, so the two halves touch.
-              const before = lanes[i - 1]
-              const paired = before?.kind === "audio" && before.name === lane.name
-              const read = notesRead?.get(lane.name)
-              const port = lane.kind === "notes" ? lane.notes.port : lane.missing.port
-              const marginTop = paired ? -ROW_GAP_PX : 0
-              return (
-                <Fragment key={`notes:${lane.name}`}>
-                  <div style={{ gridColumn: 1, gridRow: row, marginTop }}>
-                    <NotesPlate
-                      name={lane.name}
-                      icon={read?.icon}
-                      port={port}
-                      paired={paired}
-                      missing={lane.kind === "missing"}
-                    />
-                  </div>
-                  <div className="min-w-0" style={{ gridColumn: 2, gridRow: row, marginTop }}>
-                    <NotesLane
-                      name={lane.name}
-                      data={read ?? null}
-                      missing={lane.kind === "missing"}
-                      duration={duration}
-                      view={{ from, to }}
-                      playhead={position}
-                      className={cn("h-full", laneHalf(paired ? "bottom" : undefined))}
-                    />
-                  </div>
-                </Fragment>
-              )
-            }
-            const m = lane.track
-            const after = lanes[i + 1]
-            const paired = after !== undefined && after.kind !== "audio" && after.name === m.name
-            const muted = player.isMuted(m.name)
-            const soloed = player.isSoloed(m.name)
-            const dimmed = muted || (player.hasSolo && !soloed)
-            return (
-              <Fragment key={m.name}>
-                <div
-                  className="min-h-0"
-                  style={{ gridColumn: 1, gridRow: row }}
-                >
-                  <LaneControls
-                    name={m.name}
-                    icon={m.icon}
-                    paired={paired}
-                    channels={m.peaks.length}
-                    muted={muted}
-                    soloed={soloed}
-                    dimmed={dimmed}
-                    volume={player.getVolume(m.name)}
-                    levels={player.getLevels(m.name)}
-                    onToggleMute={() => player.toggleMute(m.name)}
-                    onToggleSolo={() => player.toggleSolo(m.name)}
-                    onVolume={(v) => player.setVolume(m.name, v)}
-                    onVolumeCommit={player.persistVolumes}
-                  />
-                </div>
+          {rows > 0 && (
+            <div
+              data-lanes
+              className="flex flex-col rounded-lg bg-card"
+              style={{ gridColumn: "1 / -1", gridRow: 2 }}
+            >
+              {lanes.map((lane, i) => {
+                // A row of the group: the plate, the picture, and the group's
+                // room after it, on the grid's own columns, with no line or
+                // border. The picture's cell pads it 3 px from the row's
+                // edges, so it sits on its well with the group's fill round
+                // it. A Both track is its audio row and its notes row under
+                // it: their two pictures touch, with nothing padding them
+                // apart, and read as one well.
+                if (lane.kind !== "audio") {
+                  // A Both track's notes are the row under its audio: its
+                  // plate says MIDI and has no name, the track's name being
+                  // on the row above.
+                  const before = lanes[i - 1]
+                  const paired = before?.kind === "audio" && before.name === lane.name
+                  const read = notesRead?.get(lane.name)
+                  const port = lane.kind === "notes" ? lane.notes.port : lane.missing.port
+                  // As tall as its plate, which a long name or port makes
+                  // taller and which is never less than six drum rows' names
+                  // and the well round them need (NotesPlate).
+                  return (
+                    <div
+                      key={`notes:${lane.name}`}
+                      data-lane-row={lane.name}
+                      data-paired={paired || undefined}
+                      className="grid"
+                      style={{ gridTemplateColumns: columns, columnGap: COLUMN_GAP_PX }}
+                    >
+                      <NotesPlate
+                        name={lane.name}
+                        icon={read?.icon}
+                        port={port}
+                        paired={paired}
+                        missing={lane.kind === "missing"}
+                      />
+                      <div className={cn("min-w-0", paired ? "pb-[3px]" : "py-[3px]")}>
+                        {/* Its own well (NotesLane's rounded-md
+                            bg-background); under its audio, the lower part
+                            of the track's one well, under the line. */}
+                        <NotesLane
+                          name={lane.name}
+                          data={read ?? null}
+                          missing={lane.kind === "missing"}
+                          duration={duration}
+                          view={{ from, to }}
+                          playhead={position}
+                          className={cn("h-full", paired && "rounded-t-none border-t")}
+                        />
+                      </div>
+                    </div>
+                  )
+                }
+                const m = lane.track
+                const after = lanes[i + 1]
+                const paired = after !== undefined && after.kind !== "audio" && after.name === m.name
+                const muted = player.isMuted(m.name)
+                const soloed = player.isSoloed(m.name)
+                const dimmed = muted || (player.hasSolo && !soloed)
+                return (
+                  <div
+                    key={m.name}
+                    data-lane-row={m.name}
+                    className="grid"
+                    style={{
+                      gridTemplateColumns: columns,
+                      columnGap: COLUMN_GAP_PX,
+                      // 3.5rem, whatever its waveform's canvas was last drawn
+                      // at: the one track of the row is the row's height and
+                      // no more. Left to size itself, the row grew to the
+                      // canvas, and the canvas to the row.
+                      height: `${LANE_REM}rem`,
+                      gridTemplateRows: "minmax(0, 1fr)",
+                    }}
+                  >
+                    <div className="min-h-0">
+                      <LaneControls
+                        name={m.name}
+                        icon={m.icon}
+                        paired={paired}
+                        channels={m.peaks.length}
+                        muted={muted}
+                        soloed={soloed}
+                        dimmed={dimmed}
+                        volume={player.getVolume(m.name)}
+                        levels={player.getLevels(m.name)}
+                        onToggleMute={() => player.toggleMute(m.name)}
+                        onToggleSolo={() => player.toggleSolo(m.name)}
+                        onVolume={(v) => player.setVolume(m.name, v)}
+                        onVolumeCommit={player.persistVolumes}
+                      />
+                    </div>
 
-                <div data-lane={m.name} className="min-w-0" style={{ gridColumn: 2, gridRow: row }}>
-                  <Waveform
-                    peaks={m.peaks}
-                    peaksFrom={player.peaksWindow.from}
-                    peaksTo={player.peaksWindow.to}
-                    viewFrom={from}
-                    viewTo={to}
-                    position={position}
-                    dimmed={dimmed}
-                    className={cn("h-full", laneHalf(paired ? "top" : undefined), dimmed && "opacity-60")}
-                  />
-                </div>
-              </Fragment>
-            )
-          })}
+                    <div data-lane={m.name} className={cn("min-w-0", paired ? "pt-[3px]" : "py-[3px]")}>
+                      {/* On its well (Waveform's own rounded-md
+                          bg-background), 50 px in the 56; above its notes,
+                          the upper part of the track's one well. */}
+                      <Waveform
+                        peaks={m.peaks}
+                        peaksFrom={player.peaksWindow.from}
+                        peaksTo={player.peaksWindow.to}
+                        viewFrom={from}
+                        viewTo={to}
+                        position={position}
+                        dimmed={dimmed}
+                        className={cn("h-full", paired && "rounded-b-none", dimmed && "opacity-60")}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* The desk's master, under the tracks' faders and as wide as them. It
-          is outside the box above, whose overflow would make that box the one
-          it sticks in — a box that never scrolls; the page does. Here it
-          holds to the bottom of the window while the page scrolls the tracks
-          under it, and with eight of them in a small window the master is
-          still where the hand goes for it.
+      {/* The desk's master, under the tracks' faders, its plate as wide as
+          theirs. It is outside the box above, whose overflow would make that
+          box the one it sticks in — a box that never scrolls; the page does.
+          Here it holds to the bottom of the window while the page scrolls the
+          tracks under it, and with eight of them in a small window the master
+          is still where the hand goes for it.
 
           Held to the very edge of the page, not the edge of its padding
           (Shell's --screen-pad-y): stuck at that, it left a strip of the next
           track showing beneath it. Its own padding and background cover the
           rest, and the negative margin gives the gap it adds back in the
-          flow. */}
+          flow.
+
+          It is not a row of the lanes group above but a group of its own
+          under it, a plate with its own fill: it is the sum of the lanes,
+          not one of them, and it is the one that sticks. Its band is as wide
+          as the lanes, plates and pictures, in the page's colour: stuck, the
+          lanes slide under all of it, and no part of a lane shows beside the
+          master or under it. */}
       {rows > 0 && (
         <div
+          data-master-band
           className="sticky z-10 -mt-1 -mb-2 bg-background pt-1 pb-2"
-          style={{ width: GUTTER_PX, bottom: "calc(-1 * var(--screen-pad-y))" }}
+          style={{ bottom: "calc(-1 * var(--screen-pad-y))" }}
         >
-          <MasterControls
-            volume={player.master}
-            level={player.masterLevel}
-            onVolume={player.setMaster}
-            onVolumeCommit={player.persistMaster}
-          />
+          <div style={{ width: GUTTER_PX }}>
+            <MasterControls
+              volume={player.master}
+              level={player.masterLevel}
+              onVolume={player.setMaster}
+              onVolumeCommit={player.persistMaster}
+            />
+          </div>
         </div>
       )}
     </>
