@@ -17,12 +17,14 @@ import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 /** A press that never travelled this far is a click, and a click seeks. */
 const DRAG_THRESHOLD_PX = 5
 const GUTTER_PX = 200
-/** The name row of 1.25rem, the fader and its meter of 1rem under it, 0.25rem
- *  apart, and 0.5rem above and below: 3.5rem, 56 px at the Appearance scale of
- *  1. In rem because all of that is, and a row that stayed 56 px at 150 % left
- *  the fader on top of M and S. No taller than that: at 160 a lane's plate was
- *  mostly empty card, and at 96 five tracks took a laptop's screen and more. A
- *  lane of notes has neither, and is as tall as its plate needs instead. */
+/** The name row of 1rem, the fader's row of 1.25rem under it (the fader and
+ *  its meter 1rem, M and S 1.25rem after it), 0.25rem apart, and 0.5rem above
+ *  and below: 3.5rem, 56 px at the Appearance scale of 1. In rem because all
+ *  of that is, and a row that stayed 56 px at 150 % left the name and the
+ *  fader's row on top of each other. No taller than that: at 160 a lane's
+ *  plate was mostly empty card, and at 96 five tracks took a laptop's screen
+ *  and more. A lane of notes has neither, and is as tall as its plate needs
+ *  instead. */
 const LANE_REM = 3.5
 const RULER_PX = 44
 /** What a tick label needs to the right of its line: "10:00" at 11 px and

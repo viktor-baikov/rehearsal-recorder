@@ -24,8 +24,6 @@
   "src/components/TrackTile.tsx": ["px-text", "raw-colour"],
   "src/components/UnderTheHood.tsx": ["px-text"],
   "src/components/midi/MidiTile.tsx": ["raw-colour"],
-  "src/components/midi/NotesLane.tsx": ["px-text"],
-  "src/components/midi/NotesPlate.tsx": ["px-text"],
   "src/screens/Recording.tsx": ["uppercase"],
   "src/screens/Settings.tsx": ["raw-colour", "raw-button"]
 }

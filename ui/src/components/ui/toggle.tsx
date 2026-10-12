@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
   `selected` fill, never the accent (F2). It is made like Button (C1): the
   same weight and a 1 px frame in every look, clear when it has none to show,
   so turning it on moves nothing beside it. Its sizes are Button's `row` and
-  `icon-row`.
+  `icon-row`, and `lane`, the 20 px square of M and S on a track's plate.
 
   Under the pointer an "on" toggle keeps its fill: only the ones that are off
   answer a hover.
@@ -25,6 +25,8 @@ const toggleVariants = cva(
       size: {
         row: "h-8 px-3 has-[>svg]:px-2.5",
         "icon-row": "size-8",
+        // M and S on a track's plate: a small thing, so 4 px (Button's).
+        lane: "size-5 rounded-sm text-xs",
       },
     },
     defaultVariants: {

@@ -36,7 +36,8 @@ const WHOLE_TAKE_SLACK_SEC = 0.05
  * A take is opened again exactly when its lists are new ones: a rename or a
  * crop hands back fresh copies, with the files moved or rewritten. An answer
  * is kept with the lists it was for, so a take opened since never shows the
- * one before's notes while its own are on their way.
+ * one before's notes while its own are on their way. A read that fails is an
+ * answer too: an error for each lane, which the lane says.
  */
 function useTakeNotes(notes?: NotesFile[], missing?: MissingNotes[]) {
   const [read, setRead] = useState<{
@@ -57,7 +58,16 @@ function useTakeNotes(notes?: NotesFile[], missing?: MissingNotes[]) {
         if (alive) setRead({ notes, missing, byName: new Map(answers.map((a) => [a.name, a])) })
       })
       .catch(() => {
-        /* the bar has said so; the lanes stay empty and the take still plays */
+        // The bar has said what went wrong. Each lane says it too, in place
+        // of the spinner it waited with, and the take still plays.
+        if (alive)
+          setRead({
+            notes,
+            missing,
+            byName: new Map<string, TakeNotes>(
+              files.map((f) => [f.name, { name: f.name, error: "Could not read the notes" }]),
+            ),
+          })
       })
     return () => {
       alive = false

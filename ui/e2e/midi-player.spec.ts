@@ -75,20 +75,27 @@ async function box(locator: Locator) {
 /**
  * Where a lane's canvas has notes drawn along one line across it, at a
  * fraction of its height: each run of drawn pixels as [start, end] in
- * fractions of the width, with its colour.
+ * fractions of the width, with its colour and how opaque that is.
  */
 async function drawnAlong(lane: Locator, at: number) {
   return lane.locator("canvas").evaluate((c: HTMLCanvasElement, at: number) => {
     const ctx = c.getContext("2d")!
     const y = Math.floor(c.height * at)
     const { data } = ctx.getImageData(0, y, c.width, 1)
-    const runs: { from: number; to: number; r: number; g: number; b: number }[] = []
+    const runs: { from: number; to: number; r: number; g: number; b: number; a: number }[] = []
     for (let x = 0; x < c.width; x++) {
       if (data[x * 4 + 3] === 0) continue
       const last = runs.at(-1)
       if (last && last.to === (x - 1) / c.width) last.to = x / c.width
       else
-        runs.push({ from: x / c.width, to: x / c.width, r: data[x * 4], g: data[x * 4 + 1], b: data[x * 4 + 2] })
+        runs.push({
+          from: x / c.width,
+          to: x / c.width,
+          r: data[x * 4],
+          g: data[x * 4 + 1],
+          b: data[x * 4 + 2],
+          a: data[x * 4 + 3],
+        })
     }
     return runs
   }, at)
@@ -412,7 +419,9 @@ test.describe("notes in the player", () => {
     const line = (await box(keys.locator("canvas"))).height
     let played = 0
     for (let y = 4; y < line - 4; y += 2) {
-      const runs = await drawnAlong(keys, y / line)
+      // A note's edge can fall between two pixel rows, and the row it
+      // half covers is too faint to have a colour to read.
+      const runs = (await drawnAlong(keys, y / line)).filter((r) => r.a > 64)
       played += runs.filter((r) => r.to < 0.45 && accent(r)).length
       expect(runs.filter((r) => r.from > 0.55).every(grey)).toBe(true)
     }
@@ -446,11 +455,12 @@ test.describe("notes in the player", () => {
     expect(Math.abs(note.from - 0.5)).toBeLessThan(0.005)
   })
 
-  test("audio lanes keep their 56 px, and a notes lane is as tall as its plate", async ({
+  test("audio lanes keep their 56 px, and a long name on a notes plate is cut to its line", async ({
     page,
   }) => {
-    // A keyboard with a long name on a port with a long name: its plate is
-    // taller than a lane, and leaves the lanes beside it as they are.
+    // A keyboard with a long name on a port with a long name: its plate keeps
+    // to the least a notes plate is, the two cut to their lines and whole in
+    // the tip, and leaves the lanes beside it as they are.
     const name = "Keys and the old Juno 106 that has lived in the corner of the rehearsal room since 1990"
     const port = "Launchkey Mini MK3 MIDI Port, the one on the left of the desk"
     await page.setViewportSize({ width: 960, height: 1000 })
@@ -468,21 +478,23 @@ test.describe("notes in the player", () => {
       expect((await box(plate(page, track))).height).toBeCloseTo(56, 0)
     for (const track of ["Drums", name]) {
       const p = notesPlate(page, track)
-      // Nothing in it cut: the plate is as tall as it needs, and its lane
-      // as tall as the plate.
+      // The plate is the least a notes plate is, 91 at the scale of 1, and
+      // its lane as tall as it: a long name makes neither taller.
       expect(await p.evaluate((e) => e.scrollHeight - e.clientHeight)).toBeLessThanOrEqual(1)
-      const cut = await p.evaluate((e) =>
-        [...e.querySelectorAll("span")].some((s) => s.scrollWidth > s.clientWidth + 1)
-      )
-      expect(cut).toBe(false)
+      expect((await box(p)).height).toBeCloseTo(91, 0)
       const lane = await box(notesLane(page, track))
       expect(Math.abs(lane.height - (await box(p)).height)).toBeLessThan(1)
     }
-    // The keyboard's plate is taller than a lane, and its lane with it; the
-    // drums' half card is left what it needs, which is the least a notes plate
-    // is: its text takes 69 and the floor is 73.
-    expect((await box(keys)).height).toBeGreaterThan(2 * 56)
-    expect((await box(notesPlate(page, "Drums"))).height).toBeCloseTo(73, 0)
+    // Both are cut to their lines, and whole in the shared tip.
+    const tip = page.locator("[data-whole][data-state$='open']")
+    for (const text of [name, port]) {
+      const cut = keys.getByText(text, { exact: true })
+      await expect(cut).toHaveAttribute("data-cut")
+      await cut.hover()
+      await expect(tip).toHaveText(text)
+      await page.mouse.move(0, 0, { steps: 8 })
+      await expect(tip).toHaveCount(0)
+    }
     // Its rows are named all the same: a lane of notes is never so short that
     // a kit cannot be read.
     await expect(notesLane(page, "Drums").getByText("Kick", { exact: true })).toBeVisible()
