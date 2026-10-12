@@ -396,7 +396,15 @@ export function useDialogFocusKeys() {
       e.stopPropagation()
 
       const back = e.key === "ArrowLeft" || (e.key === "Tab" && e.shiftKey)
-      const at = el instanceof HTMLElement ? stops.indexOf(el) : -1
+      // A focused radio is where its group's stop is, whichever radio of the
+      // group the stop is: from any of them Tab goes on past the group.
+      const group = inRadios(el) ? el!.closest('[role="radiogroup"]') : null
+      const at =
+        el instanceof HTMLElement
+          ? stops.findIndex(
+              (s) => s === el || (group !== null && s.closest('[role="radiogroup"]') === group)
+            )
+          : -1
       const next =
         at === -1 ? 0 : (at + (back ? -1 : 1) + stops.length) % stops.length
       stops[next].focus()
