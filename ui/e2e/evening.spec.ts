@@ -1,4 +1,17 @@
-import { calls, callCount, expect, notices, openApp, openEvening, openHistory, settled, test } from "./app.ts"
+import {
+  calls,
+  callCount,
+  expect,
+  notices,
+  openApp,
+  openBandApp,
+  openEvening,
+  openHistory,
+  settled,
+  startRehearsal,
+  style,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Sorting the evening on the rehearsal screen: false starts drawn as such,
@@ -190,6 +203,27 @@ test("the buttons and the legend share the songs group's head in a 960 px window
   expect(middle, "the legend on the buttons' row").toBeLessThan(send.y + send.height)
   expect(legend.x + legend.width, "the legend before the buttons").toBeLessThanOrEqual(send.x)
   expect(await overview.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+})
+
+test("with the stress band the buttons go under the legend and stay on the right", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 680 })
+  await openBandApp(page, { stress: "rehearsal" })
+  await startRehearsal(page, 33)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await expect(overview).toBeVisible()
+  await settled(page)
+  const head = overview.locator("[data-overview-head]")
+  const box = (await head.boundingBox())!
+  const pad = parseFloat((await style(head, "padding-right"))["padding-right"])
+  expect(pad).toBe(24)
+  const send = (await overview.getByRole("button", { name: /Send starred/ }).boundingBox())!
+  const clear = (await overview.getByRole("button", { name: /Clear false starts/ }).boundingBox())!
+  const legend = (await head.locator("> div").first().boundingBox())!
+  // The legend takes the head's first line; the buttons have one of their
+  // own under it, at its right end, where they are when the two share one.
+  expect(send.y, "Send starred under the legend").toBeGreaterThanOrEqual(legend.y + legend.height)
+  expect(clear.y, "Clear false starts under the legend").toBeGreaterThanOrEqual(legend.y + legend.height)
+  expect(Math.abs(clear.x + clear.width - (box.x + box.width - pad))).toBeLessThan(0.5)
 })
 
 test("clearing a false start playing in the overview lets the player go", async ({ page }) => {

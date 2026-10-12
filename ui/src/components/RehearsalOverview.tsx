@@ -163,7 +163,7 @@ export function RehearsalOverview({
       className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 pt-6 pb-4"
     >
       {legend || <span />}
-      {actions && <div className="flex flex-wrap justify-end gap-2">{actions}</div>}
+      {actions && <div className="ml-auto flex flex-wrap justify-end gap-2">{actions}</div>}
     </div>
   )
 
