@@ -175,10 +175,12 @@ export async function openHistory(page: Page, name?: string): Promise<Locator> {
   return list
 }
 
-/** From the setup screen into a rehearsal, ready to record take `n`. */
+/** From the setup screen into a rehearsal, ready to record take `n`, once
+ *  the Next take panel has risen into place: a box in it is measured then. */
 export async function startRehearsal(page: Page, n = 1) {
   await startButton(page).click()
   await expect(page.getByRole("button", { name: new RegExp(`Record take ${n}`) })).toBeVisible()
+  await settled(page)
 }
 
 /** Records take `n` and stops it, leaving it up for review. */

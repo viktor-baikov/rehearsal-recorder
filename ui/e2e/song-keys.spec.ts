@@ -1,4 +1,4 @@
-import { callCount, calls, expect, openApp, recordTake, startRehearsal, test } from "./app.ts"
+import { callCount, calls, expect, openApp, recordTake, settled, startRehearsal, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // ↑ and ↓ on the rehearsal screen pick the next take's song through the rows
@@ -184,6 +184,8 @@ test("the arrow keys hint sits beside the label and is hidden while a take is op
 
   await recordTake(page, 1)
   await page.getByRole("button", { name: /Save take/ }).click()
+  // The panel rises in again with the screen, and a box is measured after.
+  await settled(page)
   const fieldAt = (await field(page).boundingBox())!
   await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1']").click()
   await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()

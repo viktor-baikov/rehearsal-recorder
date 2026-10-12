@@ -914,7 +914,8 @@ test.describe("cropping a saved take", () => {
     await expect(page.getByText("that is the whole take")).toHaveCount(1)
     // A slip of the mouse is the opposite mistake, and the advice for one is
     // no use for the other.
-    await dragRegion(page, 0.4, 0.45)
+    // (Clear of the whole take's tag, which sits on its left end.)
+    await dragRegion(page, 0.6, 0.65)
     await expect(page.getByRole("button", { name: "Crop to the region" })).toBeDisabled()
     await expect(page.getByText("at least a second to crop")).toHaveCount(1)
   })

@@ -335,14 +335,17 @@ test("on Windows the button says Explorer", async ({ page }) => {
   await expect(facts(page).getByRole("button", { name: "Show in Explorer" })).toBeVisible()
 })
 
-test("a narrow window keeps the length, the takes and the button", async ({ page }) => {
+test("a narrow window keeps the most needed figures and the button", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 760 })
   await openGo(page)
+  // The figures give way to the name, the least needed first: the ones that
+  // show are the front of this list, whatever the room.
+  const order = ["Length", "Takes", "In the cloud", "On disk"]
   await expect(fact(page, "Length")).toBeVisible()
-  await expect(fact(page, "Takes")).toBeVisible()
+  const shown = await Promise.all(order.map((label) => fact(page, label).isVisible()))
+  const first = shown.indexOf(false)
+  if (first >= 0) expect(shown.slice(first)).not.toContain(true)
   await expect(facts(page).getByRole("button", { name: "Open folder" })).toBeVisible()
-  await expect(fact(page, "In the cloud")).toBeHidden()
-  await expect(fact(page, "On disk")).toBeHidden()
 })
 
 // A place on its way to a go, or a go on its way from another rehearsal,

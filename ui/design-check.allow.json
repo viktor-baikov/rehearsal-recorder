@@ -1,6 +1,5 @@
 {
   "src/components/ActivityButton.tsx": ["uppercase"],
-  "src/components/EveningFacts.tsx": ["px-text", "uppercase"],
   "src/components/HistorySwitch.tsx": ["raw-button"],
   "src/components/LabelList.tsx": ["raw-button"],
   "src/components/MarksPage.tsx": ["px-text", "uppercase", "raw-button"],

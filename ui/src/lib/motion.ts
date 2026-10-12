@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react"
+
 /**
  * Whether motion should be left out right now (spec F11): the system's
  * Reduce motion is on, or a take is being recorded — Recording.tsx puts
@@ -19,4 +21,13 @@ export function motionOff(): boolean {
  *  off (motionOff), asked at each scroll. */
 export function scrollBehavior(): ScrollBehavior {
   return motionOff() ? "auto" : "smooth"
+}
+
+/**
+ * A group's place in the line a screen brings its groups in by, 40 ms apart
+ * (F10): `--i` for `animate-rise`, which reads it as the animation's delay.
+ * The group nearest the top or the left is 0.
+ */
+export function rise(i: number): CSSProperties {
+  return { "--i": i } as CSSProperties
 }

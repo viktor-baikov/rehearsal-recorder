@@ -30,6 +30,7 @@ import {
 import { savedLine } from "@/lib/format"
 import { goFor } from "@/lib/goes"
 import { cn } from "@/lib/utils"
+import { rise } from "@/lib/motion"
 import { useWide } from "@/lib/wide"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss } from "@/lib/notices"
@@ -389,23 +390,33 @@ export function Rehearsal({
   // The panel is wider from 1100 px, which follows the Appearance scale.
   const wide = useWide()
 
+  // The name wraps when it is longer than its row, never cut (B6); the pencil
+  // goes with its last word, so that it is never alone on a line.
+  const nameWords = session.name.split(" ")
+  const lastWord = nameWords.pop()
+
   return (
     <Shell
       playback
+      air
+      className="px-8 [--screen-pad-y:2rem]"
       subtitle="Rehearsal"
       title={
-        <span className="inline-flex items-center gap-2">
-          {session.name}
-          <Button
-            variant="ghost"
-            size="icon-row"
-            aria-label="Rename rehearsal"
-            onClick={() => setRenamingRehearsal(true)}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <Pencil />
-          </Button>
-        </span>
+        <>
+          {nameWords.length > 0 && `${nameWords.join(" ")} `}
+          <span className="whitespace-nowrap">
+            {lastWord}
+            <Button
+              variant="ghost"
+              size="icon-row"
+              aria-label="Rename rehearsal"
+              onClick={() => setRenamingRehearsal(true)}
+              className="-my-1.5 ml-2 align-middle text-muted-foreground hover:text-foreground"
+            >
+              <Pencil />
+            </Button>
+          </span>
+        </>
       }
       facts={
         <EveningFacts
@@ -427,55 +438,57 @@ export function Rehearsal({
             wide ? "w-[26rem]" : "w-[22.5rem]"
           )}
         >
-          <PanelParts bleed={8}>
-            <TakeNameField
-              ref={fieldRef}
-              id="next-take-name"
-              label="Next take"
-              value={nextName}
-              fallback={fallback}
-              choices={nextChoices}
-              knownGo={knownGo}
-              onCommit={nameNextTake}
-              onPanel
-              songs="none"
-              onDraft={(text) => {
-                // What is typed changed, or the field was left: no row is
-                // highlighted any more.
-                if (text !== (typing?.text ?? null)) setHighlight(null)
-                setTyping((t) => (text === null ? null : { from: t?.from ?? text, text }))
-              }}
-              onArrow={arrowWhileTyping}
-              highlighted={() => highlight}
-              selectOnClick
-              labelAside={<SongKeys hidden={selected !== null} />}
-            />
-            {session.set && (
-              <SetCard
-                set={session.set}
-                goes={goesTonight}
-                current={current}
-                onPick={pickSong}
-                highlighted={highlight}
+          <div className="animate-rise" style={rise(1)}>
+            <PanelParts bleed={8}>
+              <TakeNameField
+                ref={fieldRef}
+                id="next-take-name"
+                label="Next take"
+                value={nextName}
+                fallback={fallback}
+                choices={nextChoices}
+                knownGo={knownGo}
+                onCommit={nameNextTake}
+                onPanel
+                songs="none"
+                onDraft={(text) => {
+                  // What is typed changed, or the field was left: no row is
+                  // highlighted any more.
+                  if (text !== (typing?.text ?? null)) setHighlight(null)
+                  setTyping((t) => (text === null ? null : { from: t?.from ?? text, text }))
+                }}
+                onArrow={arrowWhileTyping}
+                highlighted={() => highlight}
+                selectOnClick
+                labelAside={<SongKeys hidden={selected !== null} />}
               />
-            )}
-            {others.length > 0 && (
-              <SongRows
-                titles={others}
-                lastTake={lastTakes}
-                goes={goesTonight}
-                current={current}
-                typed={narrowBy}
-                typing={typing !== null}
-                inSet={setTitles}
-                title={session.set ? "Other songs" : "Songs"}
-                onPick={pickSong}
-                highlighted={highlight}
-                open={listOpen}
-                onOpen={setListOpen}
-              />
-            )}
-          </PanelParts>
+              {session.set && (
+                <SetCard
+                  set={session.set}
+                  goes={goesTonight}
+                  current={current}
+                  onPick={pickSong}
+                  highlighted={highlight}
+                />
+              )}
+              {others.length > 0 && (
+                <SongRows
+                  titles={others}
+                  lastTake={lastTakes}
+                  goes={goesTonight}
+                  current={current}
+                  typed={narrowBy}
+                  typing={typing !== null}
+                  inSet={setTitles}
+                  title={session.set ? "Other songs" : "Songs"}
+                  onPick={pickSong}
+                  highlighted={highlight}
+                  open={listOpen}
+                  onOpen={setListOpen}
+                />
+              )}
+            </PanelParts>
+          </div>
         </aside>
       }
       footer={
@@ -490,7 +503,11 @@ export function Rehearsal({
               aria-keyshortcuts={inHand ? undefined : "Escape"}
             >
               Finish
-              {!inHand && <Kbd aria-hidden>Esc</Kbd>}
+              {/* Kept unseen while Esc is the take's, so Finish keeps its
+                  width and nothing beside it moves (B4). */}
+              <Kbd aria-hidden className={cn(inHand && "invisible")}>
+                Esc
+              </Kbd>
             </Button>
             <Button
               size="footer"
@@ -500,9 +517,25 @@ export function Rehearsal({
               aria-keyshortcuts={inHand ? undefined : "Space"}
             >
               <Circle className="fill-current" />
-              Record take {session.next_take_number}
-              {/* With a take in hand Space plays it, and the key is on Play. */}
-              {!inHand && <Kbd aria-hidden>Space</Kbd>}
+              <span>
+                Record take{" "}
+                {/* Two digits wide whatever the number, so that take 10 moves
+                    nothing (B4): a hidden 00 holds the room, in the same
+                    figures. 2ch would be short of it, as a zero in the text's
+                    own figures is narrower than a tabular one. The button
+                    grows once, at 100. */}
+                <span className="tnum inline-grid">
+                  <span className="col-start-1 row-start-1">{session.next_take_number}</span>
+                  <span aria-hidden className="invisible col-start-1 row-start-1">
+                    00
+                  </span>
+                </span>
+              </span>
+              {/* With a take in hand Space plays it, and the key is on Play;
+                  the chip keeps its room. */}
+              <Kbd aria-hidden className={cn(inHand && "invisible")}>
+                Space
+              </Kbd>
             </Button>
           </div>
         </FooterRow>

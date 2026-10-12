@@ -101,14 +101,22 @@ export function Shell({
               {backKey && <Kbd aria-hidden>Esc</Kbd>}
             </Button>
           )}
-          <div className="min-w-0 flex-1">
+          {/* With facts beside it the name keeps its width and the facts give
+              way to it (components/EveningFacts); one longer than the whole
+              row wraps to a second line rather than being cut. */}
+          <div className={cn("min-w-0", facts ? "flex-[0_1_auto]" : "flex-1")}>
             {subtitle && (
               <div className="text-xs tracking-wide text-muted-foreground uppercase">
                 {subtitle}
               </div>
             )}
             {title && (
-              <h1 className="truncate text-xl leading-tight font-semibold">
+              <h1
+                className={cn(
+                  "text-xl leading-tight font-semibold",
+                  facts ? "break-words" : "truncate"
+                )}
+              >
                 {title}
               </h1>
             )}

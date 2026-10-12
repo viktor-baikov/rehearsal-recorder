@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react"
 import {
@@ -46,6 +45,7 @@ import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
 import { byFiles, useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { cn } from "@/lib/utils"
 import { dismiss, notify } from "@/lib/notices"
+import { rise } from "@/lib/motion"
 import { useUpdate } from "@/lib/update"
 import { useWide } from "@/lib/wide"
 import { aboutDuration, inputsLabel, notConnected } from "@/lib/format"
@@ -88,10 +88,6 @@ const portName = (t: Track) => (t.midi_port?.name?.trim() ? t.midi_port.name : n
 
 /** A track's name in a sentence, or what stands for it while it has none. */
 const named = (name: string) => name.trim() || "An unnamed track"
-
-/** A group's place in the line the screen brings them in by, 40 ms apart
- *  (F10: `--i` for `animate-rise`). */
-const rise = (i: number) => ({ "--i": i }) as CSSProperties
 
 /** Something over the tracks that is true for as long as it holds, and so
  *  stays where it is (C8): not a notice. */
