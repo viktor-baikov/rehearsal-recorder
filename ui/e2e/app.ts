@@ -10,6 +10,7 @@ export const TAKE_SECONDS = 6
 const FAKE = fileURLToPath(new URL("./fake-bridge.js", import.meta.url))
 const BAND = fileURLToPath(new URL("./band.js", import.meta.url))
 const STRESS = fileURLToPath(new URL("./stress.js", import.meta.url))
+const STRESS_REHEARSAL = fileURLToPath(new URL("./stress-rehearsal.js", import.meta.url))
 
 /**
  * Every test fails on an error in the page: an exception, or anything the
@@ -80,15 +81,19 @@ export async function openApp(
 /**
  * Opens the app with the band laid over the fake: four musicians, their
  * song and their past rehearsals, as the docs' pictures and the site show
- * them. See band.js. With `stress`, stress.js is laid over the band: long
- * names, thirteen songs last time, seven not played, five tracks.
+ * them. See band.js. With `stress: true`, stress.js is laid over the band:
+ * long names, thirteen songs last time, seven not played, five tracks. With
+ * `stress: "rehearsal"`, stress-rehearsal.js is: a rehearsal of 32 takes,
+ * eight tracks with one on MIDI alone, and a set of ten songs.
  */
-export async function openBandApp(page: Page, { stress = false }: { stress?: boolean } = {}) {
+export async function openBandApp(
+  page: Page,
+  { stress = false }: { stress?: boolean | "rehearsal" } = {}
+) {
   // One script, not two: the band sets the fake's top-level `let`s, which a
   // second init script would not see.
-  const source = [FAKE, BAND, ...(stress ? [STRESS] : [])]
-    .map((f) => readFileSync(f, "utf-8"))
-    .join("\n")
+  const laid = stress === "rehearsal" ? [STRESS_REHEARSAL] : stress ? [STRESS] : []
+  const source = [FAKE, BAND, ...laid].map((f) => readFileSync(f, "utf-8")).join("\n")
   await page.addInitScript(source)
   await page.goto("/")
 }
@@ -233,3 +238,68 @@ export async function setFake(page: Page, name: string, value: unknown) {
     [name, value] as const
   )
 }
+
+/**
+ * Tonight is ten takes, the rehearsal started with them already in it:
+ *   1 Pałyn 3:20 ★          2 Pałyn 0:12 ★         3 Viasna 0:12, a mark
+ *   4 Pałyn 0:12            5 Viasna 3:00 ★ mix    6 Take 6 2:30
+ *   7 Viasna 3:10           8 Pałyn 3:30           9 Sonca 2:50 ★ tracks
+ *  10 Take 10 0:08
+ * So with the 30 s default 4 and 10 are false starts, and 1 and 2 are the
+ * ★ takes with nothing in the cloud folder.
+ */
+export const TONIGHT = [
+  { name: "Pałyn", duration_sec: 200, starred: true },
+  { name: "Pałyn", duration_sec: 12, starred: true },
+  { name: "Viasna", duration_sec: 12, markers: [{ at: 4, note: "", label_id: 1 }] },
+  { name: "Pałyn", duration_sec: 12 },
+  { name: "Viasna", duration_sec: 180, starred: true, cloud: { mix: "/cloud/Viasna 2.mp3" } },
+  { name: "Take 6", duration_sec: 150 },
+  { name: "Viasna", duration_sec: 190 },
+  { name: "Pałyn", duration_sec: 210 },
+  { name: "Sonca", duration_sec: 170, starred: true, cloud: { tracks: "/cloud/Sonca 1" } },
+  { name: "Take 10", duration_sec: 8 },
+]
+
+/** Opens a rehearsal with `tonight`'s takes in it and a cloud folder set, and
+ *  returns the overview of the evening. `before` runs ahead of the fake. */
+export async function openEvening(page: Page, before = "", tonight: object[] = TONIGHT) {
+  await openApp(page, {
+    before: `window.__TONIGHT__ = ${JSON.stringify(tonight)};
+             window.__CLOUD_DIR__ = '/cloud'; ${before}`,
+  })
+  await startRehearsal(page, tonight.length + 1)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await expect(overview).toBeVisible()
+  return overview
+}
+
+/** Until the screen's groups have risen into place: a box measured while one
+ *  rises is up to 12 px off. */
+export const settled = (page: Page) =>
+  page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => (a as CSSAnimation).animationName !== "rise" || a.playState === "finished")
+  )
+
+/** The Appearance scale, as Settings stores it: the root font size follows. */
+export const scaled = (scale: number) =>
+  `window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:${scale}}));`
+
+/** A colour the theme defines, as the browser computes it. */
+export const colour = (page: Page, token: string) =>
+  page.evaluate((t) => {
+    const probe = document.createElement("div")
+    probe.style.backgroundColor = `var(${t})`
+    document.body.append(probe)
+    const value = getComputedStyle(probe).backgroundColor
+    probe.remove()
+    return value
+  }, token)
+
+export const style = (el: Locator, ...props: string[]) =>
+  el.evaluate((e, ps) => {
+    const cs = getComputedStyle(e)
+    return Object.fromEntries(ps.map((p) => [p, cs.getPropertyValue(p)]))
+  }, props)

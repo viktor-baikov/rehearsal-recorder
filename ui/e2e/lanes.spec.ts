@@ -1,4 +1,4 @@
-import { expect, openApp, recordTake, startRehearsal, test } from "./app.ts"
+import { colour, expect, openApp, recordTake, scaled, startRehearsal, style, test } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
 // The player's track lanes (spec C6): 56 px, a plate of the card's colour
@@ -32,10 +32,6 @@ const BOTH = {
 
 const light = "window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'light', ui_scale:1}));"
 
-/** The Appearance scale, as Settings stores it: the root font size follows. */
-const scaled = (scale: number) =>
-  `window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:${scale}}));`
-
 /** The first take of a band up for review. */
 async function review(page: Page, setup: { before?: string; after?: string }, theme = "") {
   await openApp(page, { before: theme + (setup.before ?? ""), after: setup.after })
@@ -58,23 +54,6 @@ async function box(locator: Locator) {
   expect(b, "on screen").not.toBeNull()
   return b!
 }
-
-/** A colour the theme defines, as the browser computes it. */
-const colour = (page: Page, token: string) =>
-  page.evaluate((t) => {
-    const probe = document.createElement("div")
-    probe.style.backgroundColor = `var(${t})`
-    document.body.append(probe)
-    const value = getComputedStyle(probe).backgroundColor
-    probe.remove()
-    return value
-  }, token)
-
-const style = (el: Locator, ...props: string[]) =>
-  el.evaluate((e, ps) => {
-    const cs = getComputedStyle(e)
-    return Object.fromEntries(ps.map((p) => [p, cs.getPropertyValue(p)]))
-  }, props)
 
 test.describe("track lanes", () => {
   test("every audio lane and its plate are 56 px tall", async ({ page }) => {

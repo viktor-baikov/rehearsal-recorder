@@ -11,6 +11,7 @@ import {
   notices,
   openApp,
   openBandApp,
+  settled,
   setFake,
   startButton,
   startRehearsal,
@@ -77,15 +78,6 @@ const linesIn = (field: Locator) =>
 /** The notice whose words are exactly `text`. */
 const said = (page: Page, text: string) =>
   notices(page).filter({ has: page.locator("p", { hasText: new RegExp(`^${literally(text)}$`) }) })
-
-/** Until the screen's groups have risen into place: a box measured while one
- *  rises is up to 12 px off. */
-const settled = (page: Page) =>
-  page.waitForFunction(() =>
-    document
-      .getAnimations()
-      .every((a) => (a as CSSAnimation).animationName !== "rise" || a.playState === "finished")
-  )
 
 /** Waits for the check to have read the levels `n` more times. */
 async function polls(page: Page, n: number) {

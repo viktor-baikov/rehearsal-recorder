@@ -1,51 +1,13 @@
-import {
-  calls,
-  callCount,
-  expect,
-  notices,
-  openApp,
-  openHistory,
-  startRehearsal,
-  test,
-} from "./app.ts"
+import { calls, callCount, expect, notices, openApp, openEvening, openHistory, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Sorting the evening on the rehearsal screen: false starts drawn as such,
 // song pills under the takes nobody named, Send starred and Clear false
-// starts over the takes. Tonight is ten takes, the rehearsal started with
-// them already in it:
-//   1 Pałyn 3:20 ★          2 Pałyn 0:12 ★         3 Viasna 0:12, a mark
-//   4 Pałyn 0:12            5 Viasna 3:00 ★ mix    6 Take 6 2:30
-//   7 Viasna 3:10           8 Pałyn 3:30           9 Sonca 2:50 ★ tracks
-//  10 Take 10 0:08
-// So with the 30 s default 4 and 10 are false starts, and 1 and 2 are the
-// ★ takes with nothing in the cloud folder.
-const TONIGHT = [
-  { name: "Pałyn", duration_sec: 200, starred: true },
-  { name: "Pałyn", duration_sec: 12, starred: true },
-  { name: "Viasna", duration_sec: 12, markers: [{ at: 4, note: "", label_id: 1 }] },
-  { name: "Pałyn", duration_sec: 12 },
-  { name: "Viasna", duration_sec: 180, starred: true, cloud: { mix: "/cloud/Viasna 2.mp3" } },
-  { name: "Take 6", duration_sec: 150 },
-  { name: "Viasna", duration_sec: 190 },
-  { name: "Pałyn", duration_sec: 210 },
-  { name: "Sonca", duration_sec: 170, starred: true, cloud: { tracks: "/cloud/Sonca 1" } },
-  { name: "Take 10", duration_sec: 8 },
-]
+// starts over the takes. Tonight is TONIGHT, in app.ts.
+
 /** The rehearsal's folder, as the fake made it from the name it was given. */
 async function folderOf(page: Page) {
   return `/rec/${(await calls(page, "start_rehearsal"))[0].args[0]}`
-}
-
-async function openEvening(page: Page, before = "", tonight: object[] = TONIGHT) {
-  await openApp(page, {
-    before: `window.__TONIGHT__ = ${JSON.stringify(tonight)};
-             window.__CLOUD_DIR__ = '/cloud'; ${before}`,
-  })
-  await startRehearsal(page, tonight.length + 1)
-  const overview = page.locator("[aria-label='Rehearsal overview']")
-  await expect(overview).toBeVisible()
-  return overview
 }
 
 const row = (overview: ReturnType<Page["locator"]>, n: number) =>
