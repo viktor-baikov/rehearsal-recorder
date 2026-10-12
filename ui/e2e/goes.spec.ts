@@ -654,19 +654,53 @@ async function openOf(page: Page, names: string[], open = 1, tracks = ["Guitar"]
   await expect(timeline(page)).toBeVisible()
 }
 
-test("a long song name is cut to 224 px and shown whole on hover", async ({ page }) => {
+test("a long song name is cut to 224 px and shown whole on hover and on focus", async ({
+  page,
+}) => {
   await openOf(page, ["Pałyn", LONG])
   const long = strip(page).locator(`[data-tab='song:${LONG}']`)
   const name = long.locator("[data-tab-name]")
   await expect(name).toHaveText(LONG)
   expect((await name.boundingBox())!.width).toBeLessThanOrEqual(224)
+  // The tip is the shared one: no native title is left in the strip. (The ★
+  // is StarButton's, which the take row shares.)
+  const titled = strip(page).locator("[title]:not([aria-label^='Star '])")
+  await expect(titled).toHaveCount(0)
+
+  const tip = page.locator("[data-whole][data-state$='open']")
+  // Off whatever it was over, on its way as a hand takes it: a tip closes on
+  // the pointer leaving.
+  const away = () => page.mouse.move(0, 0, { steps: 8 })
   const button = long.getByRole("button", { name: new RegExp(`^${LONG}, take 1`) })
-  await expect(button).toHaveAttribute("title", LONG)
-  await expect(openTab(strip(page)).locator("[title]")).toHaveCount(0)
-  await expect(openTab(strip(page))).not.toHaveAttribute("title")
+  await button.hover()
+  await expect(tip).toHaveText(LONG)
+  await away()
+  await expect(tip).toHaveCount(0)
+
+  // Tab from Songs lands on that tab, the next in the order, and says it.
+  await songs(page).focus()
+  await page.keyboard.press("Tab")
+  await expect(button).toBeFocused()
+  await expect(tip).toHaveText(LONG)
+  await page.keyboard.press("Tab")
+  await expect(button).not.toBeFocused()
+  await expect(tip).toHaveCount(0)
+
+  // A name that fits has nothing to show.
+  await away()
+  await strip(page).locator("[data-tab='song:Pałyn']").hover()
+  await page.waitForTimeout(600)
+  await expect(tip).toHaveCount(0)
+
+  // Opened, the tab is not a button but its name is still shown whole on
+  // hover.
   await button.click()
   await expect(openTab(strip(page))).toHaveAttribute("data-tab", `song:${LONG}`)
-  await expect(openTab(strip(page)).locator(`[title='${LONG}']`)).toHaveCount(1)
+  await away()
+  await expect(tip).toHaveCount(0)
+  await openTab(strip(page)).locator("[data-tab-name]").hover()
+  await expect(tip).toHaveText(LONG)
+  await expect(titled).toHaveCount(0)
 })
 
 const TWENTY = ["Pałyn", "Viasna", "Ahoń", "Sonca", "Dym", "Ptuška", "Daroha", "Rečka",
