@@ -1,10 +1,9 @@
-import type { Meta, StoryObj } from "@storybook/react-vite"
+import type { ReactNode } from "react"
+import type { Decorator, Meta, StoryObj } from "@storybook/react-vite"
 import { LaneControls, MasterControls } from "@/components/LaneControls"
 import { NotesLane } from "@/components/midi/NotesLane"
 import { NotesPlate } from "@/components/midi/NotesPlate"
 import { Waveform } from "@/components/Waveform"
-import { laneHalf } from "@/lib/laneHalf"
-import { cn } from "@/lib/utils"
 import type { TakeNotes } from "@/lib/api"
 import { LanePlate } from "./lane-plate"
 
@@ -26,14 +25,21 @@ type Story = StoryObj<typeof meta>
 
 const noop = () => {}
 
+/* The lanes group's fill, which a track's plate is on in the player: the
+   plate has none of its own. */
+function Fill({ children }: { children: ReactNode }) {
+  return <div className="flex flex-col rounded-lg bg-card">{children}</div>
+}
+
 /* The audio plate and the master are LanePlate with their things in it; the
-   stories show them as the player does, an audio plate in its 56 px row. */
-function Audio({ paired = false }: { paired?: boolean }) {
+   stories show them as the player does, an audio plate in its 56 px row on
+   the group's fill. */
+function Audio({ name = "Guitar", paired = false }: { name?: string; paired?: boolean }) {
   return (
     <div className="h-14">
       <LaneControls
-        name="Guitar"
-        icon="guitar-electric"
+        name={name}
+        icon={name === "Drums" ? "drums" : "guitar-electric"}
         paired={paired}
         channels={1}
         muted={false}
@@ -52,11 +58,11 @@ function Audio({ paired = false }: { paired?: boolean }) {
 
 /* The primitive on its own: the card's fill, 12 px across and 8 above and
    below, and whatever the caller puts in it. */
-function Bare({ half }: { half?: "top" | "bottom" }) {
+function Bare() {
   return (
     <div className="h-14">
-      <LanePlate half={half}>
-        <span className="text-sm">{half ? `Half: ${half}` : "A plate"}</span>
+      <LanePlate>
+        <span className="text-sm">A plate</span>
         <span className="text-xs text-muted-foreground">Whatever the caller puts in</span>
       </LanePlate>
     </div>
@@ -67,18 +73,15 @@ function Bare({ half }: { half?: "top" | "bottom" }) {
 export const Plain: Story = { render: () => <Bare /> }
 export const PlainLight: Story = { ...Plain, globals: { theme: "light" } }
 
-/** The upper half of a Both track's card: its lower corners are square. */
-export const Top: Story = { render: () => <Bare half="top" /> }
-export const TopLight: Story = { ...Top, globals: { theme: "light" } }
-
-/** The lower half: its upper corners are square, under a 1 px line in the
- *  border colour. */
-export const Bottom: Story = { render: () => <Bare half="bottom" /> }
-export const BottomLight: Story = { ...Bottom, globals: { theme: "light" } }
-
-/** A track's plate in its row of 56 px: the card's fill with no frame, the
- *  name on a row of its own, and under it the fader with M and S after it. */
-export const Single: Story = { render: () => <Audio /> }
+/** A track's plate in its row of 56 px, on the lanes group's fill: the name
+ *  on a row of its own, and under it the fader with M and S after it. */
+export const Single: Story = {
+  render: () => (
+    <Fill>
+      <Audio />
+    </Fill>
+  ),
+}
 /** The same on the light theme, whatever the toolbar says. */
 export const SingleLight: Story = { ...Single, globals: { theme: "light" } }
 
@@ -87,7 +90,7 @@ export const SingleLight: Story = { ...Single, globals: { theme: "light" } }
  *  name and port are the same. */
 export const LongName: Story = {
   render: () => (
-    <div className="flex flex-col gap-2">
+    <Fill>
       <div className="h-14">
         <LaneControls
           name="Lead and backing vocals (Hanna)"
@@ -105,37 +108,26 @@ export const LongName: Story = {
         />
       </div>
       <NotesPlate name="Keys (Nord Stage 3 MIDI)" icon="keys" port="Nord Stage 3 MIDI Output" />
-    </div>
+    </Fill>
   ),
 }
-
-/** A track that records notes too is one card of two halves: the audio plate
- *  above, with its lower corners square, and the notes' plate below, with its
- *  upper corners square and a 1 px line on top in the border colour. */
-export const Halves: Story = {
-  render: () => (
-    <div className="flex flex-col">
-      <Audio paired />
-      <NotesPlate name="Guitar" port="Launchkey Mini MK3" paired />
-    </div>
-  ),
-}
-export const HalvesLight: Story = { ...Halves, globals: { theme: "light" } }
 
 /** The notes' plate is a variant of the same one: on its own for a track that
  *  records MIDI only, and the same for a port that was not there. It is as tall
- *  as what it holds, and no less than its lane needs to name a kit's rows. */
+ *  as what it holds, and no less than its lane and the well round it need to
+ *  name a kit's rows. */
 export const Notes: Story = {
   render: () => (
-    <div className="flex flex-col gap-2">
+    <Fill>
       <NotesPlate name="Keys" icon="keys" port="Launchkey Mini MK3" />
       <NotesPlate name="Pads" icon="keys" port="Pad box" missing />
-    </div>
+    </Fill>
   ),
 }
 export const NotesLight: Story = { ...Notes, globals: { theme: "light" } }
 
-/** The master's plate, under the tracks, is the third use of it. */
+/** The master's plate, under the tracks, is the third use of it: a group of
+ *  its own, so it keeps its box. */
 export const Master: Story = {
   render: () => (
     <MasterControls volume={0.8} level={0.5} onVolume={noop} onVolumeCommit={noop} />
@@ -156,35 +148,15 @@ const KIT: TakeNotes = {
   ],
 }
 
-/** A plate and its lane are one box, cut by the same function (laneHalf): a
- *  Both track's two lanes meet as its two plates do. */
-export const Both: Story = {
-  decorators: [
-    (Story) => (
-      <div className="w-3xl">
-        <Story />
-      </div>
-    ),
-  ],
-  render: () => (
-    <div className="grid grid-cols-[12.5rem_1fr] gap-x-3">
-      <div className="h-14">
-        <LaneControls
-          name="Drums"
-          icon="drums"
-          paired
-          channels={1}
-          muted={false}
-          soloed={false}
-          dimmed={false}
-          volume={0.8}
-          levels={[0.45]}
-          onToggleMute={noop}
-          onToggleSolo={noop}
-          onVolume={noop}
-          onVolumeCommit={noop}
-        />
-      </div>
+/* A row of the lanes group as Timeline lays it out: the plate, 12 px, the
+   picture, and the group's 12 px after it. The picture's cell pads it 3 px
+   from the row's edges, onto its well, but where a Both track's audio and
+   notes meet. */
+const ROW = "grid grid-cols-[12.5rem_minmax(0,1fr)] gap-x-3 pr-3"
+
+function Wave({ paired = false }: { paired?: boolean }) {
+  return (
+    <div className={paired ? "pt-[3px]" : "py-[3px]"}>
       <Waveform
         peaks={PEAKS}
         peaksFrom={0}
@@ -192,17 +164,71 @@ export const Both: Story = {
         viewFrom={0}
         viewTo={10}
         position={3}
-        className={cn("h-14", laneHalf("top"))}
-      />
-      <NotesPlate name="Drums" port="TD-17" paired />
-      <NotesLane
-        name="Drums"
-        data={KIT}
-        duration={10}
-        playhead={3}
-        className={cn("h-full", laneHalf("bottom"))}
+        className={paired ? "h-full rounded-b-none" : "h-full"}
       />
     </div>
+  )
+}
+
+/** A Both track: its audio row, and its notes' row under it. The two
+ *  pictures share one well, split by a 1 px line: the waveform's lower
+ *  corners square, the notes lane's upper ones square under the line. */
+function BothTrack() {
+  return (
+    <>
+      <div className={`${ROW} h-14 grid-rows-[minmax(0,1fr)]`}>
+        <Audio name="Drums" paired />
+        <Wave paired />
+      </div>
+      <div className={ROW}>
+        <NotesPlate name="Drums" port="TD-17" paired />
+        <div className="pb-[3px]">
+          <NotesLane
+            name="Drums"
+            data={KIT}
+            duration={10}
+            playhead={3}
+            className="h-full rounded-t-none border-t"
+          />
+        </div>
+      </div>
+    </>
+  )
+}
+
+const wide: Decorator[] = [
+  (Story) => (
+    <div className="w-3xl">
+      <Story />
+    </div>
+  ),
+]
+
+/** The lanes group in the player: three rows on one fill, with no line
+ *  between them. Each picture sits on its own well, the page's colour with
+ *  8 px corners and 3 px of the group's fill above and below it; the second
+ *  row is a Both track's notes, sharing the first's well under its line. */
+export const Grouped: Story = {
+  decorators: wide,
+  render: () => (
+    <Fill>
+      <BothTrack />
+      <div className={`${ROW} h-14 grid-rows-[minmax(0,1fr)]`}>
+        <Audio />
+        <Wave />
+      </div>
+    </Fill>
+  ),
+}
+export const GroupedLight: Story = { ...Grouped, globals: { theme: "light" } }
+
+/** A Both track up close: its two rows, one well. */
+export const Both: Story = {
+  decorators: wide,
+  render: () => (
+    <Fill>
+      <BothTrack />
+    </Fill>
   ),
 }
 export const BothLight: Story = { ...Both, globals: { theme: "light" } }

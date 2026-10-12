@@ -498,7 +498,7 @@ describe("what counts as code", () => {
     expect(checkText("e2e/example.tsx", bad)).toEqual([])
     expect(checkText("src/index.css", bad)).toEqual([])
     expect(checkText("src/screens/Example.tsx", bad).length).toBeGreaterThan(0)
-    // Class strings live in .ts too (lib/laneHalf.ts, lib/labels.ts).
+    // Class strings live in .ts too (lib/labels.ts).
     expect(checkText("src/lib/example.ts", `const look = "rounded-[3px] text-[13px]"`)).toEqual([
       { rule: "px-text", line: 1, text: "text-[13px]" },
       { rule: "radius", line: 1, text: "rounded-[3px]" },

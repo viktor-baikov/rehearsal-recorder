@@ -128,8 +128,9 @@ function MeteredFader({
  *
  * It reads zero when nothing is playing, which is what a meter at rest does.
  *
- * A track that records its notes too is one card of two halves: these
- * controls above, and its notes' plate (midi/NotesPlate) below, under a line.
+ * The plate is a row of the player's lanes group (Timeline), on the group's
+ * fill, with no box of its own. A track that records its notes too has its
+ * notes' plate (midi/NotesPlate) on the row under it.
  */
 export function LaneControls({
   name,
@@ -149,7 +150,7 @@ export function LaneControls({
   name: string
   /** The band's icon for this name; none draws the neutral one. */
   icon?: string
-  /** The upper half of the track's card: its notes' plate is under it. */
+  /** The track records its notes too: its notes' row is under this one. */
   paired?: boolean
   /** In the file: 1, 2, or 0 when it could not be read. */
   channels: number
@@ -166,7 +167,7 @@ export function LaneControls({
   onVolumeCommit: () => void
 }) {
   return (
-    <LanePlate data-plate={name} half={paired ? "top" : undefined} className="gap-1">
+    <LanePlate data-plate={name} data-paired={paired || undefined} grouped className="gap-1">
       <div className="flex h-4 items-center gap-2">
         <InstrumentIcon icon={icon} className="size-4 shrink-0 text-muted-foreground" />
         <Whole
@@ -228,7 +229,9 @@ export function VolumeIcon({ volume, className }: { volume: number; className?: 
 
 /**
  * The whole mix, under the tracks, the way a desk ends in its master strip:
- * how loud the take plays, and how loud all of it is coming out.
+ * how loud the take plays, and how loud all of it is coming out. In the
+ * player its plate is a group of its own, under the lanes group, and keeps
+ * the plate's box.
  *
  * For listening only. The faders above are the band's balance, and the copy
  * sent to the cloud is mixed from them; turning all of them down to make the
@@ -254,7 +257,7 @@ export function MasterControls({
   className?: string
 }) {
   return (
-    <LanePlate className={cn("gap-1", className)}>
+    <LanePlate data-master-plate className={cn("gap-1", className)}>
       <div className="flex h-4 items-center gap-2 text-sm">
         <VolumeIcon volume={volume} className="size-4 shrink-0 text-muted-foreground" />
         <Whole

@@ -10,8 +10,9 @@ const PAD_PX = 3
  *  is rem, as the text is, so a larger Appearance scale asks for more. */
 const LABEL_MIN_REM = 0.875
 /** The lane's height is read in whole pixels, so a row that has exactly the
- *  room it needs can come out this far short: at 130 % the plate's 116.2 px
- *  give the lane 115, and six rows of 18.2 px would lose their names. */
+ *  room it needs can come out this far short: at 130 % a Both track's notes
+ *  plate is 119.2 px, its lane the 116.2 over the well's 3 px and 115.2 under
+ *  its line, read as 115, and six rows of 18.2 px would lose their names. */
 const SLACK_PX = 0.5
 /** The narrowest a note is drawn. A drum hit lasts a tenth of a second, which
  *  is under a pixel on a long take zoomed out, and a note struck as a file's
@@ -57,8 +58,9 @@ export function NotesLane({
   /** The track's port was not there the whole take: no .mid to draw. */
   missing?: boolean
   /** The lane's height comes from here, as a waveform's does. Nothing
-   *  inside it has a height of its own, so beside a plate it is as tall as
-   *  the plate. */
+   *  inside it has a height of its own, so it is as tall as the room it is
+   *  given: in the player, its plate's height less the well round it, 3 px
+   *  under a Both track's audio and 6 for a track on MIDI only. */
   className?: string
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
