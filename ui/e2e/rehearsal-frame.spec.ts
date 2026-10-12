@@ -3,6 +3,7 @@ import {
   callCount,
   calls,
   expect,
+  literally,
   openApp,
   openBandApp,
   openEvening,
@@ -57,6 +58,67 @@ function expectSame(now: Box, was: Box, what: string) {
   }
 }
 
+/** How the h1 holds the rehearsal's name: its lines, whether anything of it
+ *  is cut or drawn past its box, and where the pencil is against its last
+ *  line. */
+const holdsName = (h1: Locator) =>
+  h1.evaluate((el) => {
+    const own = el.getBoundingClientRect()
+    // Each line of the name, by the boxes its words make.
+    const words = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    const lines = new Map<number, { top: number; bottom: number }>()
+    let right = 0
+    for (let n = words.nextNode(); n; n = words.nextNode()) {
+      const range = document.createRange()
+      range.selectNodeContents(n)
+      for (const r of range.getClientRects()) {
+        if (r.width === 0) continue
+        lines.set(Math.round(r.top), { top: r.top, bottom: r.bottom })
+        right = Math.max(right, r.right)
+      }
+    }
+    const last = [...lines.values()].sort((a, b) => a.top - b.top).at(-1)!
+    const pencil = el.querySelector("button")!.getBoundingClientRect()
+    const cs = getComputedStyle(el)
+    return {
+      lines: lines.size,
+      // Cut is clipped, or shown with an ellipsis, or drawn past the box.
+      cut: cs.overflowX !== "visible" || cs.textOverflow === "ellipsis" || right > own.right,
+      pencilRight: pencil.right - own.right,
+      pencilMiddle: pencil.top + pencil.height / 2,
+      last,
+    }
+  })
+
+/** The name is whole in its box, and the pencil is inside the box's right
+ *  edge, level with its last line. */
+function expectHeld(seen: Awaited<ReturnType<typeof holdsName>>, what: string) {
+  expect(seen.cut, `${what}: the name is cut or drawn past its box`).toBe(false)
+  expect(seen.pencilRight, `${what}: the pencil past the box`).toBeLessThanOrEqual(0.5)
+  expect(seen.pencilMiddle, `${what}: the pencil above the last line`).toBeGreaterThan(seen.last.top)
+  expect(seen.pencilMiddle, `${what}: the pencil below the last line`).toBeLessThan(seen.last.bottom)
+}
+
+/** How many of the facts fit in the room they have, the most needed first, as
+ *  measured from the out-of-sight copy of them that the header keeps to
+ *  measure with (the last thing in the group's parent). */
+const fitting = (page: Page) =>
+  facts(page).evaluate((group) => {
+    const dl = group.querySelector("dl")!
+    const ruler = group.parentElement!.lastElementChild!.firstElementChild!
+    const own = getComputedStyle(dl)
+    const room = dl.clientWidth - parseFloat(own.paddingLeft) - parseFloat(own.paddingRight)
+    const gap = parseFloat(getComputedStyle(ruler).columnGap)
+    let used = 0
+    let n = 0
+    for (const fact of ruler.children) {
+      used += (n > 0 ? gap : 0) + fact.getBoundingClientRect().width
+      if (used > room + 0.5) break
+      n++
+    }
+    return n
+  })
+
 test.describe("the header", () => {
   test("a long rehearsal name wraps with its pencil beside its last word", async ({ page }) => {
     await page.setViewportSize({ width: 1180, height: 820 })
@@ -71,42 +133,29 @@ test.describe("the header", () => {
       await settled(page)
       const h1 = title(page)
       await expect(h1).toContainText(LONG)
-      const seen = await h1.evaluate((el) => {
-        const own = el.getBoundingClientRect()
-        // Each line of the name, by the boxes its words make.
-        const words = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
-        const lines = new Map<number, { top: number; bottom: number }>()
-        let right = 0
-        for (let n = words.nextNode(); n; n = words.nextNode()) {
-          const range = document.createRange()
-          range.selectNodeContents(n)
-          for (const r of range.getClientRects()) {
-            if (r.width === 0) continue
-            lines.set(Math.round(r.top), { top: r.top, bottom: r.bottom })
-            right = Math.max(right, r.right)
-          }
-        }
-        const last = [...lines.values()].sort((a, b) => a.top - b.top).at(-1)!
-        const pencil = el.querySelector("button")!.getBoundingClientRect()
-        const cs = getComputedStyle(el)
-        return {
-          lines: lines.size,
-          // Cut is clipped, or shown with an ellipsis, or drawn past the box.
-          cut: cs.overflowX !== "visible" || cs.textOverflow === "ellipsis" || right > own.right,
-          pencilRight: pencil.right - own.right,
-          pencilMiddle: pencil.top + pencil.height / 2,
-          last,
-        }
-      })
-      // The whole name is in the h1 and nothing of it is cut.
-      expect(seen.cut, `${width} px`).toBe(false)
-      // The pencil is inside the h1's right edge, level with its last line.
-      expect(seen.pencilRight, `${width} px`).toBeLessThanOrEqual(0.5)
-      expect(seen.pencilMiddle, `${width} px`).toBeGreaterThan(seen.last.top)
-      expect(seen.pencilMiddle, `${width} px`).toBeLessThan(seen.last.bottom)
+      const seen = await holdsName(h1)
+      expectHeld(seen, `${width} px`)
       // In a window this narrow the name takes more than one line.
       if (width === 960) expect(seen.lines).toBeGreaterThan(1)
     }
+  })
+
+  test("a rehearsal name of one long word breaks inside the title box", async ({ page }) => {
+    // 81 letters with nowhere to wrap at (not even a hyphen): wider than the
+    // title's box at 960 px, where the buttons beside it take theirs first.
+    const word = "Rehearsal".repeat(9)
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openApp(page)
+    await page.locator("#rehearsal-name").fill(word)
+    await startRehearsal(page)
+    const h1 = title(page)
+    await expect(h1).toContainText(word)
+    const seen = await holdsName(h1)
+    expect(seen.lines).toBeGreaterThan(1)
+    expectHeld(seen, "one long word")
+    // The box ends before the facts and the buttons begin.
+    const name = await box(h1)
+    expect(name.x + name.width).toBeLessThanOrEqual((await box(facts(page))).x)
   })
 
   test("the header's figures give way least needed first and show whole on hover", async ({
@@ -133,7 +182,13 @@ test.describe("the header", () => {
     frontOfOrder(await shownFacts(stress))
     const line = facts(stress).locator(".sr-only")
     await expect(line).toHaveText(
-      /^Length 1 h 54 min · Takes 32, 14 songs · In the cloud \d+ of 32 · On disk .+$/
+      new RegExp(
+        "^" +
+          literally("Length 1 h 54 min · Takes 32, 14 songs · In the cloud ") +
+          "\\d+" +
+          literally(" of 32 · On disk ") +
+          ".+$"
+      )
     )
     await facts(stress).hover({ position: { x: 4, y: 4 } })
     await expect(stress.locator("[data-whole][data-state$='open']")).toHaveText(
@@ -149,10 +204,14 @@ test.describe("the header", () => {
     const counts = new Set<number>()
     for (const width of [960, 1100, 1280, 1500, 1700, 1900, 2200]) {
       await page.setViewportSize({ width, height: 820 })
-      await settled(page)
-      const shown = await shownFacts(page)
-      frontOfOrder(shown)
-      counts.add(shown.length)
+      // The facts are fitted again from a ResizeObserver and a state update,
+      // which `settled` does not wait for: what shows comes to be what fits.
+      const fit = await fitting(page)
+      await expect
+        .poll(async () => (await shownFacts(page)).length, { message: `${width} px` })
+        .toBe(fit)
+      frontOfOrder(await shownFacts(page))
+      counts.add(fit)
     }
     // Some widths show none and some all, or this proves little.
     expect(counts).toContain(0)
@@ -356,6 +415,13 @@ test.describe("the screen", () => {
       const [scroll, client] = await it.evaluate((el) => [el.scrollWidth, el.clientWidth])
       expect(scroll, name).toBeLessThanOrEqual(client)
     }
+    // The panel is 22.5 rem of the scale's 24 px, the window being under
+    // 1100 px of rem.
+    expect(Math.abs((await box(panel(page))).width - 540)).toBeLessThan(0.5)
+    // The long name still wraps, whole, with its pencil on its last line.
+    const seen = await holdsName(title(page))
+    expect(seen.lines).toBeGreaterThan(1)
+    expectHeld(seen, "at 150 percent")
     // Neither button is cut off at the window's edge.
     for (const button of [finish(page), record(page)]) {
       const at = await box(button)

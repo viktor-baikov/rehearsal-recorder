@@ -914,8 +914,12 @@ test.describe("cropping a saved take", () => {
     await expect(page.getByText("that is the whole take")).toHaveCount(1)
     // A slip of the mouse is the opposite mistake, and the advice for one is
     // no use for the other.
-    // (Clear of the whole take's tag, which sits on its left end.)
-    await dragRegion(page, 0.6, 0.65)
+    // From just past the region's tag, whose buttons and reason take the
+    // pointer from the tracks under them, so that no tag can be under it.
+    const tag = (await page.locator("[data-region-span]").locator("xpath=../..").boundingBox())!
+    const track = (await timeline(page).boundingBox())!
+    const from = (tag.x + tag.width + 12 - track.x) / track.width
+    await dragRegion(page, from, from + 0.05)
     await expect(page.getByRole("button", { name: "Crop to the region" })).toBeDisabled()
     await expect(page.getByText("at least a second to crop")).toHaveCount(1)
   })

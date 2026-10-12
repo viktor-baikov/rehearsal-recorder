@@ -390,10 +390,14 @@ export function Rehearsal({
   // The panel is wider from 1100 px, which follows the Appearance scale.
   const wide = useWide()
 
-  // The name wraps when it is longer than its row, never cut (B6); the pencil
-  // goes with its last word, so that it is never alone on a line.
+  // The name wraps when it is longer than its row, never cut (B6). The pencil
+  // goes with the last character, so that it is never alone on a line; the
+  // rest of the last word is free to break, so that a word wider than the
+  // whole box (one with no spaces in it) breaks inside it rather than being
+  // drawn past it.
   const nameWords = session.name.split(" ")
-  const lastWord = nameWords.pop()
+  const lastWord = Array.from(nameWords.pop() ?? "")
+  const lastChar = lastWord.pop()
 
   return (
     <Shell
@@ -404,8 +408,9 @@ export function Rehearsal({
       title={
         <>
           {nameWords.length > 0 && `${nameWords.join(" ")} `}
+          {lastWord.join("")}
           <span className="whitespace-nowrap">
-            {lastWord}
+            {lastChar}
             <Button
               variant="ghost"
               size="icon-row"
