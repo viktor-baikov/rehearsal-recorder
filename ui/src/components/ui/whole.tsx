@@ -8,6 +8,7 @@ import {
   type ComponentProps,
   type ReactElement,
   type ReactNode,
+  type RefObject,
 } from "react"
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -26,24 +27,76 @@ import { cn } from "@/lib/utils"
 */
 
 /** Whether an element's text is cut: wider or taller than its own box. The
- *  element must be a block (an inline one has no box to measure). */
+ *  element must be a block (an inline one has no box to measure).
+ *
+ *  The ref is a function, so whichever element has it is the one watched:
+ *  one drawn anew in another place (a tab's name, once the tab has shut) is
+ *  watched in place of the one before, whether or not what holds the hook is
+ *  drawn again. */
 // oxlint-disable-next-line react/only-export-components -- the hook measures the name that WholeTip then shows whole, so they are used together
 export function useCut<T extends HTMLElement>() {
-  const ref = useRef<T>(null)
+  const el = useRef<T | null>(null)
   const [cut, setCut] = useState(false)
   const look = useCallback(() => {
-    const el = ref.current
-    if (el) setCut(el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
+    const at = el.current
+    if (at) setCut(at.scrollWidth > at.clientWidth + 1 || at.scrollHeight > at.clientHeight + 1)
   }, [])
+  const ref = useCallback(
+    (node: T | null) => {
+      el.current = node
+      if (!node) return
+      const watch = new ResizeObserver(look)
+      watch.observe(node)
+      return () => {
+        watch.disconnect()
+        if (el.current === node) el.current = null
+      }
+    },
+    [look],
+  )
   useLayoutEffect(() => look())
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const watch = new ResizeObserver(look)
-    watch.observe(el)
-    return () => watch.disconnect()
-  }, [look])
   return [ref, cut] as const
+}
+
+/**
+ * Which of a line's parts have room, whole part by whole part, as Figures
+ * and the header's facts (EveningFacts) both fit theirs. `measure` reads the
+ * room and the parts as drawn and says which show (lib/figures.ts), or null
+ * while what it reads is not there. It is asked after every render and
+ * whenever one of `watch` changes size. It is taken anew only when `key`
+ * does: the parts' words, so a caller can build its parts anew on every
+ * render without the fitting starting over. Until the parts have been
+ * fitted, all of them show.
+ */
+// oxlint-disable-next-line react/only-export-components -- the hook is what Figures fits its line with, and the header's facts fit theirs the same way
+export function useFitted(
+  count: number,
+  key: string,
+  measure: () => boolean[] | null,
+  watch: RefObject<Element | null>[],
+): boolean[] {
+  const [fitted, setFitted] = useState(() => Array<boolean>(count).fill(true))
+  const fit = useCallback(() => {
+    const next = measure()
+    if (!next) return
+    setFitted((was) =>
+      was.length === next.length && was.every((on, i) => on === next[i]) ? was : next,
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  useLayoutEffect(() => fit())
+  useEffect(() => {
+    const els = watch.map((w) => w.current)
+    if (els.some((e) => !e)) return
+    const watcher = new ResizeObserver(fit)
+    for (const e of els) watcher.observe(e!)
+    return () => watcher.disconnect()
+    // The refs keep their identity; a new array of them each render is no
+    // reason to watch anew.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fit])
+  // Until the new parts have been fitted, all of them.
+  return fitted.length === count ? fitted : Array<boolean>(count).fill(true)
 }
 
 /**
@@ -227,35 +280,24 @@ export function Figures({
 }) {
   const box = useRef<HTMLSpanElement>(null)
   const measure = useRef<HTMLSpanElement>(null)
-  const every = parts.map(() => true)
-  const all = joinFigures(parts, every)
-  const [fitted, setFitted] = useState(every)
+  const all = joinFigures(parts, parts.map(() => true))
   // The figures are read through their words, so a caller can build the
   // array anew on every render, drawings and all, without the measuring
   // starting over.
   const key = JSON.stringify(parts.map((p) => [p.text, p.keep, p.join]))
-  const fit = useCallback(() => {
-    const b = box.current
-    const m = measure.current
-    if (!b || !m) return
-    // Each figure alone, as drawn, then " · " and ", " (the last two children).
-    const w = [...m.children].map((c) => c.getBoundingClientRect().width)
-    const next = fitFigures(parts, w, w[parts.length], w[parts.length + 1], b.clientWidth)
-    setFitted((was) =>
-      was.length === next.length && was.every((on, i) => on === next[i]) ? was : next,
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
-  useLayoutEffect(() => fit())
-  useEffect(() => {
-    const b = box.current
-    if (!b) return
-    const watch = new ResizeObserver(fit)
-    watch.observe(b)
-    return () => watch.disconnect()
-  }, [fit])
-  // Until the new figures have been fitted, all of them.
-  const shown = fitted.length === parts.length ? fitted : every
+  const shown = useFitted(
+    parts.length,
+    key,
+    () => {
+      const b = box.current
+      const m = measure.current
+      if (!b || !m) return null
+      // Each figure alone, as drawn, then " · " and ", " (the last two children).
+      const w = [...m.children].map((c) => c.getBoundingClientRect().width)
+      return fitFigures(parts, w, w[parts.length], w[parts.length + 1], b.clientWidth)
+    },
+    [box],
+  )
   const dropped = shown.some((on) => !on)
   useEffect(() => {
     onDropped?.(dropped)

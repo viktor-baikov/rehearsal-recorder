@@ -741,6 +741,37 @@ test("a long open song's name takes Tab and says itself whole, a short one is no
   await expect(next).toBeFocused()
 })
 
+test("a tab's name still says when it is cut after the tab has been open and shut", async ({
+  page,
+}) => {
+  // Pałyn's tab is open first, then shuts, and its name is drawn anew in the
+  // button. That name's width then changes with nothing on the screen drawn
+  // again (a style, as a font that arrives late would): its tip follows.
+  await openOf(page, ["Pałyn", LONG], 1)
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "song:Pałyn")
+  await strip(page).getByRole("button", { name: new RegExp(`^${LONG}, take 1`) }).click()
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", `song:${LONG}`)
+  await settled(page)
+  const button = strip(page).getByRole("button", { name: /^Pałyn, take 1/ })
+  const tip = page.locator("[data-whole][data-state$='open']")
+  const away = () => page.mouse.move(0, 0, { steps: 8 })
+
+  const narrow = await page.addStyleTag({
+    content: "[data-tab='song:Pałyn'] [data-tab-name] { max-width: 1.5rem }",
+  })
+  await away()
+  await button.hover()
+  await expect(tip).toHaveText("Pałyn")
+
+  // And back: the whole name fits again, and there is nothing to show.
+  await narrow.evaluate((el) => (el as Element).remove())
+  await away()
+  await expect(tip).toHaveCount(0)
+  await button.hover()
+  await page.waitForTimeout(600)
+  await expect(tip).toHaveCount(0)
+})
+
 const TWENTY = ["Pałyn", "Viasna", "Ahoń", "Sonca", "Dym", "Ptuška", "Daroha", "Rečka",
   "Vieter", "Zorka", "Kvietka", "Rassvet", "Lieta", "Zima", "Vosień", "Bierah", "Rečyšča",
   "Ranica", "Viečar", "Noč"]

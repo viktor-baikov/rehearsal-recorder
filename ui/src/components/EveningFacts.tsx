@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useRef } from "react"
 import { FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { FigureLine, WholeTip } from "@/components/ui/whole"
+import { FigureLine, WholeTip, useFitted } from "@/components/ui/whole"
 import { api, type Take } from "@/lib/api"
 import { eveningOf, lengthLabel, takesLine } from "@/lib/evening"
 import { fitFigures, joinFigures } from "@/lib/figures"
@@ -71,39 +71,27 @@ export function EveningFacts({
 
   const box = useRef<HTMLDListElement>(null)
   const measure = useRef<HTMLDivElement>(null)
-  const every = parts.map(() => true)
-  const [fitted, setFitted] = useState(every)
   // The facts are fitted again when their words change, not when the array
-  // that holds them is built anew.
+  // that holds them is built anew; and when the room or the facts' own
+  // widths change.
   const key = parts.map((p) => p.text).join("|")
-  const fit = useCallback(() => {
-    const room = box.current
-    const ruler = measure.current
-    if (!room || !ruler) return
-    // Each fact alone, as drawn, and the gap between two, which is in rem.
-    const widths = [...ruler.children].map((c) => c.getBoundingClientRect().width)
-    const gap = parseFloat(getComputedStyle(ruler).columnGap) || 0
-    // The room is what the padding leaves.
-    const own = getComputedStyle(room)
-    const inside = room.clientWidth - parseFloat(own.paddingLeft) - parseFloat(own.paddingRight)
-    const next = fitFigures(parts, widths, gap, 0, inside)
-    setFitted((was) =>
-      was.length === next.length && was.every((on, i) => on === next[i]) ? was : next,
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
-  useLayoutEffect(() => fit())
-  useEffect(() => {
-    const room = box.current
-    const ruler = measure.current
-    if (!room || !ruler) return
-    const watch = new ResizeObserver(fit)
-    watch.observe(room)
-    watch.observe(ruler)
-    return () => watch.disconnect()
-  }, [fit])
-  // Until the new facts have been fitted, all of them.
-  const shown = fitted.length === parts.length ? fitted : every
+  const shown = useFitted(
+    parts.length,
+    key,
+    () => {
+      const room = box.current
+      const ruler = measure.current
+      if (!room || !ruler) return null
+      // Each fact alone, as drawn, and the gap between two, which is in rem.
+      const widths = [...ruler.children].map((c) => c.getBoundingClientRect().width)
+      const gap = parseFloat(getComputedStyle(ruler).columnGap) || 0
+      // The room is what the padding leaves.
+      const own = getComputedStyle(room)
+      const inside = room.clientWidth - parseFloat(own.paddingLeft) - parseFloat(own.paddingRight)
+      return fitFigures(parts, widths, gap, 0, inside)
+    },
+    [box, measure],
+  )
   const dropped = shown.some((on) => !on)
 
   return (
