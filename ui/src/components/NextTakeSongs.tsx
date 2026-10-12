@@ -1,5 +1,8 @@
 import { useLayoutEffect, useRef, useState } from "react"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty"
+import { WholeTip, useCut } from "@/components/ui/whole"
 import type { RehearsalSet } from "@/lib/api"
 import { takesLabel } from "@/lib/format"
 import { SHORT, rowsFor, shortList } from "@/lib/setSongs"
@@ -7,12 +10,15 @@ import { cn } from "@/lib/utils"
 
 // The songs on the rehearsal screen's panel, under the Next take field, in
 // place of the pills the other name fields have (issue #12 step 8, R1–R7):
-// the set the rehearsal plays by as a card, then the band's other songs as
-// rows like the set's. A click on a row names the next take after it.
+// the set the rehearsal plays by, then the band's other songs, as rows like
+// the set's. A click on a row names the next take after it. Each is a part
+// of the panel's one group, under a line the screen draws; neither has a
+// frame of its own.
 
-const ROW =
-  "flex h-9 w-full items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors " +
-  "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+// A row is the shared Button (C1); the row the field names is selected, grey
+// (F2), and the ↑ ↓ row while typing shows the focus ring rather than a ring
+// of its own.
+const ROW = "h-9 w-full justify-start gap-3 px-2 text-left text-sm font-normal"
 
 /** One song: its number in the set (none in the other songs, whose names
  *  still line up with the set's), the title, and its goes tonight. */
@@ -35,49 +41,55 @@ function SongRow({
   onPick: (title: string) => void
   data: Record<string, string>
 }) {
+  const [titleRef, cut] = useCut<HTMLSpanElement>()
   return (
     <li>
-      <button
-        type="button"
-        {...data}
-        aria-current={lit ? "true" : undefined}
-        data-highlighted={highlighted ? "" : undefined}
-        title={title}
-        // The field keeps focus until the row says what it names: what was
-        // half typed in it is dropped, not sent (TakeNameField's `put`).
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => onPick(title)}
-        className={cn(
-          ROW,
-          lit ? "bg-primary/15 ring-1 ring-primary ring-inset" : "hover:bg-accent",
-          highlighted && "bg-accent ring-2 ring-ring/70 ring-inset"
-        )}
-      >
-        <span className="tnum w-4 shrink-0 text-right text-xs text-muted-foreground">{number}</span>
-        <span data-row-title className={cn("min-w-0 flex-1 truncate", lit && "font-semibold")}>
-          {title}
-        </span>
-        {next && <span className="shrink-0 text-xs text-primary">next</span>}
-        {goes > 0 && (
-          <span
-            title={`${takesLabel(goes)} tonight`}
-            className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
-          >
-            {!lit && <Check data-played-check aria-hidden className="size-3.5 text-primary" />}
-            {takesLabel(goes)}
+      <WholeTip cut={cut} text={title}>
+        <Button
+          type="button"
+          variant="ghost"
+          {...data}
+          aria-current={lit ? "true" : undefined}
+          data-highlighted={highlighted ? "" : undefined}
+          // The field keeps focus until the row says what it names: what was
+          // half typed in it is dropped, not sent (TakeNameField's `put`).
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onPick(title)}
+          className={cn(
+            ROW,
+            lit && "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected",
+            highlighted && "border-ring ring-[3px] ring-ring/50"
+          )}
+        >
+          <span className="tnum w-4 shrink-0 text-right text-xs text-muted-foreground">
+            {number}
           </span>
-        )}
-      </button>
+          <span
+            ref={titleRef}
+            data-row-title
+            className={cn("min-w-0 flex-1 truncate", lit && "font-semibold")}
+          >
+            {title}
+          </span>
+          {next && <span className="shrink-0 text-xs text-foreground">next</span>}
+          {goes > 0 && (
+            <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+              {!lit && <Check data-played-check aria-hidden className="size-3.5 text-foreground" />}
+              {takesLabel(goes)}
+            </span>
+          )}
+        </Button>
+      </WholeTip>
     </li>
   )
 }
 
 /**
- * The set as a card (R1): "Gig on the 25th — 2 of 6 played", then its
- * songs in order, numbered. The song the field names is lit and the row
- * after it says *next*; with the field naming a song outside the set,
- * *next* is on the first one not played yet. Rows never move: the card is
- * as tall all evening as the set is long.
+ * The set (R1): "Gig on the 25th — 2 of 6 played", then its songs in
+ * order, numbered. The song the field names is lit and the row after it
+ * says *next*; with the field naming a song outside the set, *next* is on
+ * the first one not played yet. Rows never move: the set is as tall all
+ * evening as it is long.
  */
 export function SetCard({
   set,
@@ -101,23 +113,25 @@ export function SetCard({
   const next =
     at >= 0 ? (titles[at + 1] ?? null) : (titles.find((t) => (goes.get(t) ?? 0) === 0) ?? null)
   return (
-    <section
-      aria-label={`Set ${set.name}`}
-      data-set-card
-      className="flex flex-col gap-2 rounded-xl border bg-card px-4 pt-3.5 pb-4"
-    >
-      <h2 className="flex min-h-8 min-w-0 items-baseline gap-1.5 pt-1.5 text-[15px] font-semibold">
-        <span className="min-w-0 truncate" title={set.name}>
-          {set.name}
-        </span>{" "}
-        <span className="shrink-0 text-[13px] font-normal text-muted-foreground">
+    <section aria-label={`Set ${set.name}`} data-set-card className="flex flex-col gap-2">
+      {/* The set's name keeps its width before its figure (B6): a long one
+          wraps, and "N of M played" goes under it when there is no room. */}
+      <h2 className="flex min-h-8 min-w-0 flex-wrap items-baseline gap-x-1.5 px-2 pt-1.5 text-sm font-semibold">
+        <span className="min-w-0 break-words">{set.name}</span>{" "}
+        <span className="shrink-0 text-sm font-normal text-muted-foreground">
           — {played} of {titles.length} played
         </span>
       </h2>
       {/* Tonight's copy of the set: songs added in Settings › Sets now are
           for the next rehearsal, so this does not send anyone there. */}
       {titles.length === 0 ? (
-        <p className="px-2 text-sm text-muted-foreground">This set has no songs.</p>
+        <Empty className="items-start justify-start p-0 md:p-0">
+          <EmptyHeader className="max-w-none items-start px-2 text-left">
+            <EmptyDescription>
+              This set has no songs yet. Add them in Settings › Sets.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <ol className="flex flex-col">
           {titles.map((title, i) => (
@@ -215,9 +229,9 @@ export function SongRows({
       aria-label={title}
       data-song-list
       style={{ minHeight: held ?? undefined }}
-      className="flex flex-col gap-2 rounded-xl border bg-card px-4 pt-3.5 pb-4"
+      className="flex flex-col gap-2"
     >
-      <h2 className="flex min-h-8 items-center text-[15px] font-semibold">{title}</h2>
+      <h2 className="flex min-h-8 items-center px-2 text-sm font-semibold">{title}</h2>
       {rows.length === 0 ? (
         <p className="px-2 text-sm text-muted-foreground">
           {setHasIt
@@ -241,18 +255,19 @@ export function SongRows({
         </ul>
       )}
       {folds && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
           data-songs-more
           aria-expanded={open}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => onOpen(!open)}
-          className={cn(ROW, "text-muted-foreground hover:bg-accent hover:text-foreground")}
+          className={cn(ROW, "text-muted-foreground hover:text-foreground")}
         >
           <span className="w-4 shrink-0" />
           <span className="flex-1">{open ? "Fewer" : `All ${titles.length} songs`}</span>
           {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-        </button>
+        </Button>
       )}
     </section>
   )

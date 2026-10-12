@@ -176,7 +176,9 @@ test.describe("on the rehearsal screen", () => {
     await openApp(page, { before: withSets([{ ...GIG, songs: [] }]) })
     await startRehearsal(page)
     await expect(card(page)).toContainText("0 of 0 played")
-    await expect(card(page).locator("p")).toHaveText("This set has no songs.")
+    await expect(card(page).locator("[data-slot='empty']")).toHaveText(
+      "This set has no songs yet. Add them in Settings › Sets."
+    )
     await expect(rows(page)).toHaveCount(5)
   })
 

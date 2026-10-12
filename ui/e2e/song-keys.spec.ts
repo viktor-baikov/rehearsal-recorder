@@ -175,7 +175,7 @@ test("the arrow keys hint sits beside the label and is hidden while a take is op
   const group = page.getByRole("group", { name: "Next take" })
   const hint = group.locator("[data-song-keys]")
   await expect(hint).toBeVisible()
-  await expect(hint).toHaveAttribute("title", "↑ ↓ the song before or after")
+  await expect(hint).not.toHaveAttribute("title")
   await expect(hint.locator("kbd")).toHaveText(["↑", "↓"])
   const label = (await group.locator("label").boundingBox())!
   const at = (await hint.boundingBox())!

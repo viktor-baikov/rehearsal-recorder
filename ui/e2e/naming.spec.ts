@@ -612,7 +612,8 @@ test.describe("a song's old name", () => {
   const OLD = "window.__OLD_NAMES__ = [['Palyn', 'Pałyn']];"
   const field = (page: Page) => page.getByRole("textbox", { name: "Next take" })
   const group = (page: Page) => page.getByRole("group", { name: "Next take" })
-  const line = (page: Page) => group(page).locator("[data-old-name]")
+  // The rehearsal screen's line floats in a popover, outside the field's group.
+  const line = (page: Page) => page.locator("[data-old-name]")
 
   test("typed on the rehearsal screen, it says which song it is", async ({ page }) => {
     await openApp(page, { before: OLD })
