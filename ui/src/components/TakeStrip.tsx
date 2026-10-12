@@ -4,14 +4,15 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Cloud,
-  CloudCheck,
+  CloudUpload,
   Music2,
   Pencil,
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { EmptyState } from "@/components/Shell"
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { Toggle } from "@/components/ui/toggle"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { formatDayIn } from "@/lib/format"
 import { StarButton } from "@/components/StarButton"
@@ -156,11 +157,15 @@ export function TakeStrip({
 
   if (takes.length === 0) {
     return (
-      <EmptyState
-        icon={<Music2 className="size-6" />}
-        title="No takes yet"
-        hint={emptyHint}
-      />
+      <Empty className="border">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Music2 />
+          </EmptyMedia>
+          <EmptyTitle>No takes yet</EmptyTitle>
+          {emptyHint && <EmptyDescription>{emptyHint}</EmptyDescription>}
+        </EmptyHeader>
+      </Empty>
     )
   }
 
@@ -170,22 +175,19 @@ export function TakeStrip({
       aria-label="Take strip"
       className={cn("flex gap-2", expanded ? "items-start" : "items-center")}
     >
-      <button
-        type="button"
+      {/* A word, not an icon, so it needs no tip. Grey while the columns are
+          out, as everything that stays pressed is. */}
+      <Toggle
+        pressed={expanded}
         aria-expanded={expanded}
-        title="Every song's takes"
-        onClick={(e) => {
-          onExpandedChange(!expanded)
-          e.currentTarget.blur()
-        }}
-        className={cn(
-          "-ml-2 flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-xs tracking-wide text-muted-foreground uppercase hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground",
-          expanded && "mt-4"
-        )}
+        onPressedChange={onExpandedChange}
+        // Space would press it again rather than play.
+        onClick={(e) => e.currentTarget.blur()}
+        className={cn("-ml-2 text-muted-foreground", expanded && "mt-4")}
       >
         Songs
         {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-      </button>
+      </Toggle>
 
       <div className="relative flex min-w-0 flex-1">
         <div
@@ -239,34 +241,40 @@ export function TakeStrip({
             </Button>
           )}
           {onShare && (
-            <Button
-              variant="ghost"
-              size="icon-row"
-              aria-label={
-                isShared
-                  ? `Cloud copies of ${live.name}`
-                  : `Copy ${live.name} to the cloud`
-              }
-              title={
-                isShared ? "In the cloud folder" : "Copy this take to the cloud folder"
-              }
-              onClick={() => onShare(live)}
-              className={cn(
-                isShared
-                  ? "text-signal hover:text-signal"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {isShared ? <CloudCheck /> : <Cloud />}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-row"
+                  // One icon whatever the take's state: the colour says it.
+                  aria-label={
+                    isShared
+                      ? `Cloud copies of ${live.name}`
+                      : `Copy ${live.name} to the cloud`
+                  }
+                  onClick={() => onShare(live)}
+                  className={cn(
+                    isShared
+                      ? "text-signal hover:text-signal"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <CloudUpload />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isShared ? "In the cloud folder" : "Copy this take to the cloud folder"}
+              </TooltipContent>
+            </Tooltip>
           )}
           {onDelete && (
+            // Set apart from the other three, so a slip of the pointer does not land on it.
             <Button
               variant="ghost"
               size="icon-row"
               aria-label={`Delete take ${live.name}`}
               onClick={() => onDelete(live)}
-              className="text-muted-foreground hover:text-destructive"
+              className="ml-2 text-muted-foreground hover:text-destructive"
             >
               <Trash2 />
             </Button>
@@ -285,23 +293,32 @@ function Edge({ side, onPage }: { side: "before" | "after"; onPage: () => void }
   const name = side === "before" ? "Earlier songs" : "Later songs"
   const Icon = side === "before" ? ChevronLeft : ChevronRight
   return (
-    <button
-      type="button"
-      aria-label={name}
-      title={name}
-      onClick={(e) => {
-        onPage()
-        // Space would press it again rather than play.
-        e.currentTarget.blur()
-      }}
-      className={cn(
-        "absolute top-7.5 z-10 hidden size-7.5 place-items-center rounded-full border bg-card text-foreground shadow-md hover:bg-accent",
-        side === "before"
-          ? "-left-1 peer-data-[before]/row:grid"
-          : "-right-1 peer-data-[after]/row:grid"
-      )}
-    >
-      <Icon className="size-3.5" />
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-row"
+          aria-label={name}
+          onClick={(e) => {
+            onPage()
+            // Space would press it again rather than play.
+            e.currentTarget.blur()
+          }}
+          className={cn(
+            "absolute top-7 z-10 hidden rounded-full bg-card shadow-md dark:bg-card",
+            side === "before"
+              ? "-left-1 peer-data-[before]/row:inline-flex"
+              : "-right-1 peer-data-[after]/row:inline-flex"
+          )}
+        >
+          <Icon className="size-3.5" />
+        </Button>
+      </TooltipTrigger>
+      {/* Only the button's own name again: for the eyes, not read out twice. */}
+      <TooltipContent>
+        <span aria-hidden>{name}</span>
+      </TooltipContent>
+    </Tooltip>
   )
 }

@@ -1,7 +1,11 @@
 import { Fragment, useLayoutEffect, useRef } from "react"
 import { Star } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { labelLook, labelOf, useLabels } from "@/lib/labels"
+import { Button } from "@/components/ui/button"
+import { LabelDot } from "@/components/ui/mark"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { WholeTip, useCut } from "@/components/ui/whole"
+import { labelOf, useLabels } from "@/lib/labels"
 import { formatMMSS } from "@/lib/format"
 import type { Take } from "@/lib/api"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
@@ -22,19 +26,15 @@ function Marks({ take }: { take: Take }) {
       {labels
         .filter((l) => take.markers?.some((m) => labelOf(labels, m.label_id).id === l.id))
         .map((l) => (
-          <span
-            key={l.id}
-            title={l.name}
-            className={cn("size-1.5 shrink-0 rounded-full", labelLook(l.colour).dot)}
-          />
+          <LabelDot key={l.id} colour={l.colour} />
         ))}
-      <span className="tnum text-[11px] text-muted-foreground">{take.markers.length}</span>
+      <span className="tnum text-xs text-muted-foreground">{take.markers.length}</span>
     </span>
   )
 }
 
 const NUMBER =
-  "inline-flex h-6 min-w-[30px] shrink-0 items-center justify-center rounded-md px-1.5 font-mono text-[13px] font-semibold text-foreground"
+  "tnum inline-flex h-6 min-w-6 shrink-0 items-center justify-center px-1.5 text-sm font-semibold text-foreground"
 
 /**
  * A tab's second line: the go's number, its length, ★, its marks and its
@@ -56,20 +56,32 @@ function GoLine({
 }) {
   const number = take.song ? (
     toggle && !ghost ? (
-      <button
-        type="button"
-        aria-label={`Every take of ${toggle.song}`}
-        aria-expanded={toggle.expanded}
-        title={`Every take of ${toggle.song} (↑ ↓)`}
-        onClick={(e) => {
-          toggle.onToggle()
-          // Space would press it again rather than play.
-          e.currentTarget.blur()
-        }}
-        className={cn(NUMBER, "hover:bg-accent aria-expanded:bg-accent")}
-      >
-        {take.go}
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-tiny"
+            aria-label={`Every take of ${toggle.song}`}
+            aria-expanded={toggle.expanded}
+            onClick={(e) => {
+              toggle.onToggle()
+              // Space would press it again rather than play.
+              e.currentTarget.blur()
+            }}
+            // Grey while the column is out, and the pointer over it does not
+            // change that.
+            className={cn(
+              NUMBER,
+              "w-auto",
+              toggle.expanded && "bg-selected hover:bg-selected dark:hover:bg-selected"
+            )}
+          >
+            {take.go}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{`Every take of ${toggle.song} (↑ ↓)`}</TooltipContent>
+      </Tooltip>
     ) : (
       <span className={NUMBER}>{take.go}</span>
     )
@@ -95,7 +107,7 @@ function GoLine({
           />
         )}
         <Marks take={take} />
-        {status && <span className="text-[11px] whitespace-nowrap">{status}</span>}
+        {status && <span className="text-xs whitespace-nowrap">{status}</span>}
       </span>
     </span>
   )
@@ -153,17 +165,8 @@ export function SongTab({
   const title = song ?? `Take ${shown.take.take_number}`
 
   // A long name is cut short so it does not take half the strip; the whole
-  // of it is a hover away, on the names that were cut and only on those.
-  // Whether it was cut is known only from the layout, so, like the width
-  // above it, it is set on the element rather than rendered.
-  const text = useRef<HTMLSpanElement | null>(null)
-  const head = useRef<HTMLElement | null>(null)
-  useLayoutEffect(() => {
-    const el = text.current
-    if (!el || !head.current) return
-    if (el.scrollWidth > el.clientWidth) head.current.title = title
-    else head.current.removeAttribute("title")
-  })
+  // of it is in the shared tip, on the names that were cut and only on those.
+  const [text, cut] = useCut<HTMLSpanElement>()
 
   const statusOf = (go: TabGo) =>
     takeCloudStatus(go.take, go.folder === undefined ? cloudStates?.[go.take.take_number] : undefined)
@@ -193,7 +196,25 @@ export function SongTab({
     </span>
   )
   // The name as wide as it is in the open tab's weight, open or not, and
-  // never wider than 14rem.
+  // never wider than 14rem. A shut tab is a button, so its tip is on the
+  // whole tab, where the keys reach it. The open one is not, and has the
+  // number's button in it, which has a tip of its own: so its tip is on the
+  // name alone, and a name that was cut is a stop for the Tab key, with the
+  // shared focus ring, so the keys reach its tip too (as PortNote's does).
+  // A name that fits is no stop.
+  const label = (
+    <span
+      ref={text}
+      data-tab-name
+      tabIndex={open && cut ? 0 : undefined}
+      className={cn(
+        "truncate",
+        open && "rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      )}
+    >
+      {title}
+    </span>
+  )
   const name = (
     <span
       data-text={title}
@@ -202,19 +223,27 @@ export function SongTab({
         open ? "font-[650]" : "font-medium"
       )}
     >
-      <span ref={text} data-tab-name className="truncate">
-        {title}
-      </span>
+      {open ? (
+        <WholeTip cut={cut} text={title}>
+          {label}
+        </WholeTip>
+      ) : (
+        label
+      )}
     </span>
   )
+  // The same box open or shut, so a tab does not change size when it is
+  // opened: the shut one is a Button, which brings a frame and a height of
+  // its own that are put aside here.
   const body = cn(
-    "relative flex min-w-24 flex-col items-start gap-[3px] rounded-t-lg px-[18px] pt-2.5 pb-3 text-left",
+    "relative flex h-auto min-w-24 flex-col items-start justify-start gap-0.5 rounded-t-lg rounded-b-none border-0 px-4 pt-2 pb-3 text-left",
     open ? "cursor-default text-foreground" : "text-foreground/80 hover:bg-accent hover:text-foreground"
   )
   const bar = open && (
     <span
       aria-hidden
-      className="absolute inset-x-1.5 bottom-0 h-[3px] rounded-t-[3px] bg-primary"
+      data-tab-bar
+      className="absolute inset-x-1.5 bottom-0 h-[3px] rounded-t-sm bg-muted-foreground"
     />
   )
 
@@ -226,23 +255,25 @@ export function SongTab({
       className="flex shrink-0 flex-col"
     >
       {open ? (
-        <div ref={(el) => void (head.current = el)} className={body}>
+        <div className={body}>
           {name} {lines}
           {bar}
         </div>
       ) : (
-        <button
-          type="button"
-          aria-label={tabLabel(song, shown.take, status)}
-          ref={(el) => void (head.current = el)}
-          onClick={(e) => {
-            onPick()
-            e.currentTarget.blur()
-          }}
-          className={body}
-        >
-          {name} {lines}
-        </button>
+        <WholeTip cut={cut} text={title}>
+          <Button
+            type="button"
+            variant="ghost"
+            aria-label={tabLabel(song, shown.take, status)}
+            onClick={(e) => {
+              onPick()
+              e.currentTarget.blur()
+            }}
+            className={body}
+          >
+            {name} {lines}
+          </Button>
+        </WholeTip>
       )}
       <Column
         tabKey={tabKey}
@@ -312,12 +343,12 @@ function Column({
         const heading = go.day !== undefined && go.day !== goes[i - 1]?.day ? go.day : null
         const current = !ghost && isOpenGo(go)
         const row = cn(
-          "flex items-center gap-2 rounded-[7px] px-2.5 py-[5px] text-[13px] whitespace-nowrap",
-          current ? "bg-primary/20" : "hover:bg-accent"
+          "flex items-center gap-2 rounded-md px-2.5 py-1 text-sm whitespace-nowrap",
+          current ? "bg-selected" : "hover:bg-accent"
         )
         const inner = (
           <>
-            <span className="min-w-[18px] text-left font-mono font-semibold">
+            <span className="tnum min-w-4 text-left font-semibold">
               {go.take.song ? go.take.go : "—"}
             </span>
             <span className="tnum text-xs">{formatMMSS(go.take.duration_sec)}</span>
@@ -332,7 +363,7 @@ function Column({
             {heading && (
               <div
                 data-day={ghost ? undefined : ""}
-                className="px-2.5 pt-1.5 pb-0.5 text-[11px] tracking-wide text-muted-foreground uppercase"
+                className="px-2.5 pt-2 pb-0.5 text-xs text-muted-foreground"
               >
                 {heading}
               </div>
@@ -340,8 +371,9 @@ function Column({
             {ghost ? (
               <span className={row}>{inner}</span>
             ) : (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 data-go-row
                 aria-label={takeButtonLabel(go.take, statusOf(go))}
                 aria-current={current ? "true" : undefined}
@@ -349,10 +381,17 @@ function Column({
                   onRow(go)
                   e.currentTarget.blur()
                 }}
-                className={row}
+                // The unseen copy is a span in the same box: a Button's
+                // frame, height and room beside a ★ are put aside, and the
+                // open row keeps its fill under the pointer.
+                className={cn(
+                  row,
+                  "h-auto justify-start border-0 has-[>svg]:px-2.5",
+                  current && "hover:bg-selected dark:hover:bg-selected"
+                )}
               >
                 {inner}
-              </button>
+              </Button>
             )}
           </Fragment>
         )
