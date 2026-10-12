@@ -166,7 +166,7 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
     await sleep(LAST_WEEK_MS)
 
     await press("Start rehearsal")
-    const field = await waitFor(() => document.querySelector<HTMLInputElement>("#next-take-name"))
+    const field = await waitFor(() => document.querySelector<HTMLTextAreaElement>("#next-take-name"))
     // Pałyn is above the song the field names, first of tonight's songs.
     for (let i = 0; i < 10 && !field.value.startsWith("Pałyn"); i++) {
       const was = field.value

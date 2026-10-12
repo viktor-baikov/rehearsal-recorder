@@ -276,6 +276,27 @@ export async function openEvening(page: Page, before = "", tonight: object[] = T
   return overview
 }
 
+/** A song set as the fake's library keeps it. */
+export type SetSeed = { id: number; name: string; songs: string[] }
+
+/** A set of four songs, the one the set tests play by. */
+export const GIG: SetSeed = {
+  id: 1,
+  name: "Gig on the 25th",
+  songs: ["Pałyn", "Viasna", "Ahoń", "Sonca"],
+}
+
+/** A page script: the library has these sets and Start plays by `chosen`.
+ *  `more` runs after it. */
+export function withSets(sets: SetSeed[] = [GIG], chosen: number | null = 1, more = "") {
+  return (
+    `window.__SETS__ = ${JSON.stringify(sets)};` +
+    `localStorage.setItem("mock-python-config", JSON.stringify(` +
+    `{theme: "dark", ui_scale: 1, next_set: ${JSON.stringify(chosen)}}));` +
+    more
+  )
+}
+
 /** Until the screen's groups have risen into place: a box measured while one
  *  rises is up to 12 px off. */
 export const settled = (page: Page) =>

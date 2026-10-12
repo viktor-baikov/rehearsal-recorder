@@ -11,22 +11,13 @@ import {
   startRehearsal,
   style,
   test,
+  withSets,
 } from "./app.ts"
 
 // The rehearsal screen's Next take panel as one group (owner, 2026-10-12, Q1):
 // the field at its head, the set and the other songs under it, each under a
 // 1 px line across the panel. Its field wraps a long name, and the old name's
 // line floats over what is under it.
-
-type SetSeed = { id: number; name: string; songs: string[] }
-const GIG: SetSeed = { id: 1, name: "Gig on the 25th", songs: ["Pałyn", "Viasna", "Ahoń", "Sonca"] }
-
-/** A page script: the library has this set and Start plays by it. */
-const withSet = (set: SetSeed = GIG, more = "") =>
-  `window.__SETS__ = ${JSON.stringify([set])};` +
-  `localStorage.setItem("mock-python-config", JSON.stringify(` +
-  `{theme: "dark", ui_scale: 1, next_set: ${set.id}}));` +
-  more
 
 const OLD = "window.__OLD_NAMES__ = [['Palyn', 'Pałyn']];"
 
@@ -41,7 +32,7 @@ const partOf = (inner: Locator) => inner.locator("xpath=..")
 
 test.describe("the Next take panel", () => {
   test("the next take panel is one group with lines between its parts", async ({ page }) => {
-    await openApp(page, { before: withSet() })
+    await openApp(page, { before: withSets() })
     await startRehearsal(page)
     await settled(page)
     const border = await colour(page, "--border")
@@ -164,7 +155,7 @@ test.describe("the Next take panel", () => {
     page,
   }) => {
     // Pałyn and Sonca are played tonight; Viasna is named, Ahoń comes after.
-    await openEvening(page, withSet())
+    await openEvening(page, withSets())
     await setRow(page, "Viasna").click()
     const named = page.locator("[data-set-song][aria-current='true']")
     await expect(named).toHaveAttribute("data-set-song", "Viasna")
@@ -175,7 +166,7 @@ test.describe("the Next take panel", () => {
   })
 
   test("the arrow keys row shows the shared focus ring", async ({ page }) => {
-    await openApp(page, { before: withSet() })
+    await openApp(page, { before: withSets() })
     await startRehearsal(page)
     await field(page).click()
     await page.keyboard.press("ArrowDown")

@@ -3,12 +3,15 @@ import {
   calls,
   expect,
   expectedError,
+  GIG,
   openApp,
   recordTake,
   startButton,
   startRehearsal,
   test,
+  withSets,
 } from "./app.ts"
+import type { SetSeed } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Song sets (issue #12 step 8): a set is a named list of songs in order,
@@ -43,23 +46,6 @@ test("sets made through the bridge come back in order", async ({ page }) => {
 })
 
 // ---------- the rehearsal screen: the set, then the other songs ----------
-
-type SetSeed = { id: number; name: string; songs: string[] }
-const GIG: SetSeed = {
-  id: 1,
-  name: "Gig on the 25th",
-  songs: ["Pałyn", "Viasna", "Ahoń", "Sonca"],
-}
-
-/** A page script: the library has these sets and Start plays by `chosen`. */
-function withSets(sets: SetSeed[] = [GIG], chosen: number | null = 1, more = "") {
-  return (
-    `window.__SETS__ = ${JSON.stringify(sets)};` +
-    `localStorage.setItem("mock-python-config", JSON.stringify(` +
-    `{theme: "dark", ui_scale: 1, next_set: ${JSON.stringify(chosen)}}));` +
-    more
-  )
-}
 
 const field = (page: Page) => page.getByRole("textbox", { name: "Next take" })
 const card = (page: Page) => page.locator("[data-set-card]")

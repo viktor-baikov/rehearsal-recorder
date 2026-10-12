@@ -137,7 +137,7 @@ test("the second step plays last week's Pałyn, starts, and picks Pałyn with th
         lastWeek: Boolean(
           document.querySelector("[aria-label='Last time'] button[aria-label^='Pause Pałyn 7']")
         ),
-        field: document.querySelector<HTMLInputElement>("#next-take-name")?.value ?? null,
+        field: document.querySelector<HTMLTextAreaElement>("#next-take-name")?.value ?? null,
         recording: Boolean(document.querySelector("h1")?.textContent?.match(/Pałyn\s*3/)),
       })
     })

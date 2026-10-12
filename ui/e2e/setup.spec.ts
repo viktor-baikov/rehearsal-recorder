@@ -11,6 +11,7 @@ import {
   notices,
   openApp,
   openBandApp,
+  scaled,
   settled,
   setFake,
   startButton,
@@ -1303,10 +1304,6 @@ test.describe("the left part behind a button in a narrow window", () => {
   const panel = (page: Page) => page.getByRole("dialog", { name: "Last time" })
   /** The left part, where it is beside the setup. */
   const past = (page: Page) => page.locator("[data-part='past']")
-
-  /** The Appearance scale, as Settings keeps it: the root's font size follows. */
-  const scaled = (scale: number) =>
-    `window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:${scale}}));`
 
   /** The tracks group's width; the most the setup part gives it (its width
    *  less its padding, at most 48rem); and how wide the setup part and the

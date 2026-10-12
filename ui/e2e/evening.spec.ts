@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test"
 
 // Sorting the evening on the rehearsal screen: false starts drawn as such,
 // song pills under the takes nobody named, Send starred and Clear false
-// starts over the takes. Tonight is TONIGHT, in app.ts.
+// starts at the head of the songs. Its takes are TONIGHT, in app.ts.
 
 /** The rehearsal's folder, as the fake made it from the name it was given. */
 async function folderOf(page: Page) {
