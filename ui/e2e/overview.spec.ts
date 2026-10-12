@@ -212,6 +212,7 @@ test.describe("the take row", () => {
 
   test("the take row's toolbar is star, rename, cloud, delete", async ({ page }) => {
     const overview = await openEvening(page)
+    await settled(page)
     const it = row(overview, 1)
     await it.hover()
     const kinds: [string, RegExp][] = [

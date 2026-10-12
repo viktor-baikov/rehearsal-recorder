@@ -43,8 +43,8 @@ function inCloud(take: Take): boolean {
 }
 
 /**
- * What an open rehearsal shows before a take is picked: every song, every go
- * at it, and every note left while listening.
+ * What an open rehearsal shows before a take is picked: every song, every take
+ * of it, and every note left while listening.
  *
  * The songs are one group: the label legend at its head on the left, the
  * screen's `actions` (Send starred, Clear false starts) on the right, then
@@ -52,7 +52,7 @@ function inCloud(take: Take): boolean {
  * figures are not here: the header says them, and it is in view with a take
  * open too.
  *
- * Each go is a row: a bar drawn to scale — so the go that ran long or
+ * Each take is a row: a bar drawn to scale — so the take that ran long or
  * stopped short is plain before anything is read — with its marks where
  * they fell, and every one of them listed under it: its label's name, then
  * its comment when it has one. The comments are usually why the rehearsal
@@ -60,10 +60,11 @@ function inCloud(take: Take): boolean {
  *
  * Play on a row plays the take right here, with no player on screen: the bar
  * fills as it goes. The bar, or anywhere else on its row, opens the take in
- * the player, and a take that is playing carries on there from where it was. A note opens its take at the
- * spot it was left. ★, Rename, the cloud and Delete show on the row under the
- * mouse, ★ staying in view on a starred take; Rename, the cloud and Delete
- * are the same three the strip offers for an open take.
+ * the player, and a take that is playing carries on there from where it was.
+ * A note opens its take at the spot it was left. ★, Rename, the cloud and
+ * Delete show on the row under the mouse, ★ staying in view on a starred
+ * take; Rename, the cloud and Delete are the same three the strip offers for
+ * an open take.
  *
  * It also stands in for the take strip while nothing is open, so a take
  * still waiting for the cloud says so here, as its pill did.
@@ -145,9 +146,9 @@ export function RehearsalOverview({
       ))}
     </div>
   )
-  // Anything renamed or added changes the go each pill offers. A take
-  // nobody named would be the same go at any song as another one, so one
-  // look, which reads the whole library, serves them all.
+  // Anything renamed or added changes the number each pill offers (the 3 of
+  // "Pałyn 3"). A take nobody named would get the same number at any song as
+  // another one would, so one look, which reads the whole library, serves them all.
   const version = takes.map((t) => `${t.take_number}:${t.name}`).join("|")
   const naming = onName !== undefined && folder !== undefined
   const nameChoices = useSongChoices(naming && unnamed.length > 0, folder, null, version)
@@ -247,7 +248,7 @@ export function RehearsalOverview({
 
 /**
  * The songs a take nobody named could be, under it: one row of the Next take
- * field's pills, tonight's songs first, each as the go the take would be. A
+ * field's pills, tonight's songs first, each as the name the take would get. A
  * click names it, and it moves into that song.
  */
 function NamePills({
@@ -298,7 +299,7 @@ const FILLS = {
 /**
  * One take as a row: ▶, its bar to scale with its marks, its length, and the
  * buttons for it, with every mark's line under it. The rehearsal overview
- * draws one per take; a song's page, one per go.
+ * draws one per take; a song's page, one per take of the song.
  *
  * On a song's page a row can be of a rehearsal whose folder is not on disk
  * (`missing`): it says so, and has nothing to play, open or change. `where`
@@ -332,7 +333,7 @@ export function TakeRow({
   where?: string
   onPlay: (take: Take) => void
   /** Opens the take in the player. Left out, the row and its bar play it
-   *  where it is, as the rehearsal screen's earlier goes do. */
+   *  where it is, as the rehearsal screen's earlier takes do. */
   onOpen?: (take: Take) => void
   onOpenAt: (take: Take, at: number) => void
   onRename?: (take: Take) => void
@@ -344,8 +345,10 @@ export function TakeRow({
   const why = useId()
   const open = onOpen ?? onPlay
   const status = takeCloudStatus(take, cloudState)
-  // Why the copy failed, when it did and nothing is on its way.
-  const error = status && !cloudState ? take.cloud_error : undefined
+  // Why the copy failed, when it did and nothing is on its way, and the take
+  // is on disk: a row that is not found says that, not this, and the bar's
+  // description points only at what is drawn.
+  const error = status && !missing && !cloudState ? take.cloud_error : undefined
   const shared = inCloud(take)
   const starred = take.starred ?? false
   const length = take.duration_sec || here?.duration || 0

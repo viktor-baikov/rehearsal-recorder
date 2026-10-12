@@ -6,13 +6,15 @@ import {
   nameTake,
   notices,
   openApp,
+  openBandApp,
   openHistory,
   recordTake,
+  settled,
   startButton,
   startRehearsal,
   test,
 } from "./app.ts"
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 
 test("finishing a rehearsal with takes in it asks, and is answered from the keyboard", async ({
   page,
@@ -243,14 +245,64 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
   expect(widths["1"]).toBeGreaterThan(widths["3"])
   // And no strip of pills repeating it.
   await expect(page.getByRole("group", { name: "Take strip" })).toHaveCount(0)
-  // The evening's figures are the header's, not the overview's: they are in
-  // view with a take open, which the overview is not.
+  // The evening's figures are the pane head's, not the overview's.
   expect(said).not.toMatch(/\bplayed\b/)
-  await overview.getByRole("button", { name: /^Take 1 / }).click()
-  await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
   await expect(fact(page, "Length")).toHaveText("12 min")
   await expect(fact(page, "Takes")).toHaveText("4, 2 songs")
   await expect(fact(page, "In the cloud")).toHaveText("1 of 4")
+})
+
+// The facts in the pane's head, beside the rehearsal's name: the name has its
+// room first and they give way to it fact by fact, as in the rehearsal
+// screen's header. The stress band has a rehearsal whose name is 60 letters
+// and one of 80, and a short one.
+const FACTS = ["Length", "Takes", "In the cloud", "On disk"]
+
+for (const [pick, cut] of [["New songs", false], ["Soundcheck at", true], ["Tuesday jam at", true]] as const) {
+  test(`the pane head of ${pick} keeps the name's room and the facts give way at 960 px`, async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openBandApp(page, { stress: true })
+    await openHistory(page, pick)
+    await settled(page)
+    const group = facts(page)
+    await expect(group).toBeVisible()
+    const pane = page.locator("section").filter({ has: group })
+    const name = pane.getByRole("heading", { level: 2 })
+
+    // Whole facts, the front of the list, never a gap in it.
+    const shown = await group
+      .locator("dt")
+      .evaluateAll((labels) =>
+        labels
+          .filter((dt) => getComputedStyle(dt.parentElement!).display !== "none")
+          .map((dt) => dt.textContent!)
+      )
+    expect(shown).toEqual(FACTS.slice(0, shown.length))
+    if (!cut) expect(shown.length).toBeGreaterThanOrEqual(2)
+
+    const at = async (it: Locator) => (await it.boundingBox())!
+    const [title, row, bin] = [
+      await at(name),
+      await at(group),
+      await at(pane.getByRole("button", { name: /^Delete rehearsal / })),
+    ]
+    // Side by side, the name first, then the facts and their button, then Delete.
+    expect(title.x + title.width).toBeLessThanOrEqual(row.x + 0.5)
+    expect(row.x + row.width).toBeLessThanOrEqual(bin.x + 0.5)
+    expect(bin.x + bin.width).toBeLessThanOrEqual((await at(pane)).x + (await at(pane)).width)
+    expect(await pane.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    // The name is whole when it can be, and when it is cut it has most of the room.
+    const whole = await name.evaluate((el) => el.scrollWidth <= el.clientWidth)
+    expect(whole).toBe(!cut)
+    if (cut) expect(title.width).toBeGreaterThanOrEqual(300)
+  })
+}
+
+test("a rehearsal that is not on disk has no facts in its pane head", async ({ page }) => {
+  await openApp(page)
+  await openHistory(page, "Missing jam")
+  await expect(page.getByText("Not found on disk.")).toBeVisible()
+  await expect(facts(page)).toHaveCount(0)
 })
 
 test("a note opens its take at the spot it was left", async ({ page }) => {

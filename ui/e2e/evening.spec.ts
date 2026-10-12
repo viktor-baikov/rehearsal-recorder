@@ -1,4 +1,4 @@
-import { calls, callCount, expect, notices, openApp, openEvening, openHistory, test } from "./app.ts"
+import { calls, callCount, expect, notices, openApp, openEvening, openHistory, settled, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Sorting the evening on the rehearsal screen: false starts drawn as such,
@@ -172,15 +172,23 @@ test("Not named goes once its last take is cleared", async ({ page }) => {
 test("the buttons and the legend share the songs group's head in a 960 px window", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 680 })
   const overview = await openEvening(page)
+  await settled(page)
   const head = (await overview.locator("[data-overview-head]").boundingBox())!
   const send = (await overview.getByRole("button", { name: /Send starred/ }).boundingBox())!
   const clear = (await overview.getByRole("button", { name: /Clear false starts/ }).boundingBox())!
-  for (const [what, at] of [["Send starred", send], ["Clear false starts", clear]] as const) {
+  // Tonight has one mark, so the legend is one entry: "1 Note".
+  const legend = (await overview.locator("[data-overview-head]").getByText("1 Note").boundingBox())!
+  for (const [what, at] of [["Send starred", send], ["Clear false starts", clear], ["the legend", legend]] as const) {
     expect(at.x, `${what} inside the head, left`).toBeGreaterThanOrEqual(head.x)
     expect(at.x + at.width, `${what} inside the head, right`).toBeLessThanOrEqual(head.x + head.width)
     expect(at.y, `${what} inside the head, top`).toBeGreaterThanOrEqual(head.y)
     expect(at.y + at.height, `${what} inside the head, bottom`).toBeLessThanOrEqual(head.y + head.height)
   }
+  // The legend on the left, on the row of the buttons, which are on the right.
+  const middle = legend.y + legend.height / 2
+  expect(middle, "the legend on the buttons' row").toBeGreaterThan(send.y)
+  expect(middle, "the legend on the buttons' row").toBeLessThan(send.y + send.height)
+  expect(legend.x + legend.width, "the legend before the buttons").toBeLessThanOrEqual(send.x)
   expect(await overview.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
 })
 

@@ -255,6 +255,28 @@ test.describe("Songs in History", () => {
     await expect(head(page)).toBeVisible()
   })
 
+  test("a take not on disk whose copy failed points at no reason that is not there", async ({ page }) => {
+    // The reason is drawn, and described, only for a take that is on disk: a
+    // row greyed as not found says that and nothing about the cloud.
+    const failed = `
+      const api = window.pywebview.api; const get = api.get_song;
+      api.get_song = async (id) => { const r = await get(id);
+        for (const g of r.goes || [])
+          if (g.folder === '/rec/gone') g.take.cloud_error = 'Cloud folder not found';
+        return r; };
+    `
+    await openApp(page, { after: failed })
+    await openSongs(page)
+    await chooseSong(page, "Pałyn")
+    await rung(page, "/rec/gone").click()
+    const gone = rungGroup(page, "/rec/gone").locator("[data-take='1']")
+    await expect(gone).toContainText("Not found on disk")
+    await expect(gone).not.toContainText("Not in the cloud")
+    const bar = gone.getByRole("button", { name: /^Take 1 Pałyn 8/ })
+    await expect(bar).toBeDisabled()
+    await expect(bar).not.toHaveAttribute("aria-describedby")
+  })
+
   test("starred goes come first, and from last time lists the marks", async ({ page }) => {
     await openApp(page, {
       before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#2'];",

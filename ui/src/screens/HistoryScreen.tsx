@@ -46,6 +46,7 @@ import {
   formatWhen,
 } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
+import { cn } from "@/lib/utils"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 import {
   useActivity,
@@ -1011,6 +1012,13 @@ export function HistoryScreen({
   // Neither view is drawn until History knows which it is on.
   const reading = rehearsals === null || view === null
   const noSongs = songIndex !== null && songOrder.length === 0
+  // The evening's figures, in the head of the pane of a rehearsal that is on
+  // disk and read: the overview under it does not say them, and the header
+  // has them only once a take is open.
+  const facts =
+    summary && readable && opened?.folder === current ? (
+      <EveningFacts takes={opened.takes} bytes={summary.disk_bytes} folder={opened.folder} />
+    ) : null
 
   return (
     <Shell
@@ -1151,7 +1159,9 @@ export function HistoryScreen({
             >
               {summary && (
                 <div className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1">
+                  {/* With the facts beside it the name keeps its width and they
+                      give way to it, as in the rehearsal screen's header. */}
+                  <div className={cn("min-w-0", facts ? "flex-[0_1_auto]" : "flex-1")}>
                     <div className="flex items-center gap-1">
                       <h2 className="truncate text-xl leading-tight font-semibold">
                         {summary.name}
@@ -1187,6 +1197,7 @@ export function HistoryScreen({
                       <span className="truncate font-mono">{summary.folder}</span>
                     </div>
                   </div>
+                  {facts}
                   {!summary.missing && (
                     <Button
                       variant="ghost"

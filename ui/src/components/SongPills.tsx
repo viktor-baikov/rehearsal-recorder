@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils"
 const GAP = 6
 // A pill's shape, which the copies that measure the pills have too. It is a
 // block of text cut at the end of the room, so the button's own flex box and
-// its height are put back to a plain one.
+// its height are put back to a plain one. The focus ring's classes repeat the
+// Button's own on purpose: the hidden spans that measure the pills are not
+// Buttons and must be laid out the same.
 const PILL =
   "inline-block h-auto max-w-full truncate rounded-full border px-3 py-1 text-sm font-medium transition-colors " +
   "hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
