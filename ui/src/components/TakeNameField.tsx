@@ -271,7 +271,11 @@ export function TakeNameField({
           )}
         </div>
         <span id={`${id}-go`} className="sr-only">
-          {old ? `${old.song}${go !== null ? `, go ${go}` : ""}` : go !== null ? `Go ${go}` : ""}
+          {old
+            ? `${old.song}${go !== null ? ` ${go}` : ""}`
+            : go !== null
+              ? `${via?.choice.song ?? shown.trim()} ${go}`
+              : ""}
         </span>
         <input
           id={id}

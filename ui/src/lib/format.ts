@@ -6,9 +6,9 @@ export function formatMMSS(totalSec: number): string {
 }
 
 /**
- * How a go's length `now` compares with another's, `then`, named by `what`:
- * "12 s shorter than go 2", "1:05 longer than on 22 Sep" from a minute, and
- * "as long as go 2" under two seconds either way, which nobody hears.
+ * How a take's length `now` compares with another's, `then`, named by `what`:
+ * "12 s shorter than Viasna 2", "1:05 longer than on 22 Sep" from a minute,
+ * and "as long as Viasna 2" under two seconds either way, which nobody hears.
  */
 export function against(now: number, then: number, what: string): string {
   if (Math.abs(now - then) < 2) return `as long as ${what}`
@@ -145,11 +145,6 @@ export function savedLine(n: number): string {
   return n === 1
     ? "1 take is saved and stays where it is."
     : `${n} takes are saved and stay where they are.`
-}
-
-/** "1 go", "4 goes": takes at one song, which are attempts at it. */
-export function goesLabel(n: number): string {
-  return n === 1 ? "1 go" : `${n} goes`
 }
 
 /** "1 rehearsal", "4 rehearsals": how many rehearsals a song, take or mark was in. */

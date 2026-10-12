@@ -100,7 +100,7 @@ test("the sets tile shows a rehearsal mid-set", async ({ page }) => {
   const card = piece.locator("[data-set-card]")
   await expect(card.locator("h2")).toHaveText("Gig on the 25th — 1 of 6 played")
   await expect(card.locator("[data-set-song]")).toHaveText([
-    /^1Pałyn4 goes$/,
+    /^1Pałyn4 takes$/,
     /^2Viasna$/,
     /^3Ahońnext$/,
     /^4Sonca$/,

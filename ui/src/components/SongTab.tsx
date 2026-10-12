@@ -58,9 +58,9 @@ function GoLine({
     toggle && !ghost ? (
       <button
         type="button"
-        aria-label={`Every go at ${toggle.song}`}
+        aria-label={`Every take of ${toggle.song}`}
         aria-expanded={toggle.expanded}
-        title={`Every go at ${toggle.song} (↑ ↓)`}
+        title={`Every take of ${toggle.song} (↑ ↓)`}
         onClick={(e) => {
           toggle.onToggle()
           // Space would press it again rather than play.
@@ -361,10 +361,10 @@ function Column({
   )
 }
 
-/** A shut tab, as a screen reader and the tests name it: "Viasna, go 1,
+/** A shut tab, as a screen reader and the tests name it: "Viasna, take 1,
  *  4:10", or "Take 3, 1:30" with no song. */
 function tabLabel(song: string | null, take: Take, status: string | null): string {
-  const what = song ? `${song}, go ${take.go}` : `Take ${take.take_number}`
+  const what = song ? `${song}, take ${take.go}` : `Take ${take.take_number}`
   const base = `${what}, ${formatMMSS(take.duration_sec)}${take.starred ? ", starred" : ""}`
   return status ? `${base} — ${status}` : base
 }

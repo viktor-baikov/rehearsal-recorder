@@ -619,6 +619,8 @@ test.describe("a song's old name", () => {
     await startRehearsal(page)
     await field(page).fill("Palyn")
     await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn 1")
+    // A screen reader hears the take's name, not an evening's "Take 1".
+    await expect(field(page)).toHaveAccessibleDescription("Pałyn 1")
     await expect(songRows(page)).toHaveCount(1)
     await expect(songRow(page, "Pałyn")).toHaveAttribute("aria-current", "true")
     await expect(line(page)).toHaveText("Palyn is Pałyn now. Make Palyn a new song")
@@ -659,6 +661,7 @@ test.describe("a song's old name", () => {
     await expect(field(page)).toHaveValue("Pałyn")
     await expect(line(page)).toHaveCount(0)
     await expect(group(page).locator("[data-take-go]")).toHaveText("1")
+    await expect(field(page)).toHaveAccessibleDescription("Pałyn 1")
   })
 
   test("typed for the song already next, it settles to the song's title", async ({ page }) => {

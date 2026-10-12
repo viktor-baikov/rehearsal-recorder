@@ -14,7 +14,6 @@ import {
   formatMMSS,
   formatMonth,
   formatWhen,
-  goesLabel,
   inCloudLabel,
   inputsLabel,
   longAgo,
@@ -65,10 +64,6 @@ describe("times", () => {
     expect(longAgo("2026-09-15T19:00:00", now)).toBe("2 weeks ago")
     expect(formatWhen("2026-09-22T19:00:00")).toBe("Tue 22 Sep, 19:00")
     expect(formatWhen("2026-09-22")).toBe("Tue 22 Sep")
-  })
-  it("counts goes at a song", () => {
-    expect(goesLabel(1)).toBe("1 go")
-    expect(goesLabel(4)).toBe("4 goes")
   })
 })
 
@@ -158,17 +153,17 @@ describe("formatDate", () => {
 
 describe("against", () => {
   it("says by how much a go ran shorter or longer, in seconds under a minute", () => {
-    expect(against(139, 151, "go 2")).toBe("12 s shorter than go 2")
+    expect(against(139, 151, "Viasna 2")).toBe("12 s shorter than Viasna 2")
     expect(against(159, 151, "on 22 Sep")).toBe("8 s longer than on 22 Sep")
   })
 
   it("calls under two seconds either way as long", () => {
-    expect(against(151.4, 150, "go 2")).toBe("as long as go 2")
-    expect(against(149, 150.6, "go 2")).toBe("as long as go 2")
+    expect(against(151.4, 150, "Viasna 2")).toBe("as long as Viasna 2")
+    expect(against(149, 150.6, "Viasna 2")).toBe("as long as Viasna 2")
   })
 
   it("writes a minute or more as minutes and seconds", () => {
-    expect(against(216, 151, "go 2")).toBe("1:05 longer than go 2")
-    expect(against(91, 151, "go 2")).toBe("1:00 shorter than go 2")
+    expect(against(216, 151, "Viasna 2")).toBe("1:05 longer than Viasna 2")
+    expect(against(91, 151, "Viasna 2")).toBe("1:00 shorter than Viasna 2")
   })
 })

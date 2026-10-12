@@ -130,15 +130,15 @@ test.describe("on the rehearsal screen", () => {
     await keep(page, 1)
     // The next take follows the one before it: Pałyn again.
     await expect(field(page)).toHaveValue("Pałyn")
-    await expect(setRow(page, "Pałyn")).toContainText("1 go")
+    await expect(setRow(page, "Pałyn")).toContainText("1 take")
     await expect(card(page)).toContainText("1 of 4 played")
     await keep(page, 2)
-    await expect(setRow(page, "Pałyn")).toContainText("2 goes")
+    await expect(setRow(page, "Pałyn")).toContainText("2 takes")
     // Lit, the row has no check; another song lit, it has.
     await expect(setRow(page, "Pałyn").locator("[data-played-check]")).toHaveCount(0)
     await setRow(page, "Viasna").click()
     await expect(setRow(page, "Pałyn").locator("[data-played-check]")).toHaveCount(1)
-    await expect(setRow(page, "Viasna")).not.toContainText("go")
+    await expect(setRow(page, "Viasna")).not.toContainText("take")
   })
 
   test("next is the first unplayed set song while the field names a song outside the set", async ({
@@ -166,7 +166,7 @@ test.describe("on the rehearsal screen", () => {
     await expect(field(page)).toHaveValue("Novaja")
     await keep(page, 1)
     await expect(field(page)).toHaveValue("Novaja")
-    await expect(setRow(page, "Novaja")).toContainText("1 go")
+    await expect(setRow(page, "Novaja")).toContainText("1 take")
     await expect(card(page)).toContainText("1 of 2 played")
     await setRow(page, "Pałyn").click()
     await expect(setRow(page, "Novaja").locator("[data-played-check]")).toHaveCount(1)
@@ -280,7 +280,7 @@ test.describe("on the rehearsal screen", () => {
     await row(page, "Dym").click()
     await keep(page, 1)
     expect((await titlesOf(rows(page), "data-song-row"))[0]).toBe("Dym")
-    await expect(row(page, "Dym")).toContainText("1 go")
+    await expect(row(page, "Dym")).toContainText("1 take")
   })
 
   test("typing narrows the list over all songs, an old name shows its song alone, nothing matching says so", async ({

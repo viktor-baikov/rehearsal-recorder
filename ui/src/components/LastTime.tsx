@@ -14,7 +14,6 @@ import {
   formatDay,
   formatDuration,
   formatMMSS,
-  goesLabel,
   inCloudLabel,
   longAgo,
   rehearsalsLabel,
@@ -249,11 +248,11 @@ function SongRow({
   const total = takes.reduce((sum, t) => sum + (t.duration_sec || 0), 0)
   // Every mark is listed, a plain one with nothing written included (spec D2).
   const notes = takes.flatMap((t) => (t.markers ?? []).map((m) => ({ take: t, marker: m })))
-  // The goes go first, then how long they ran: the columns show both.
+  // How many takes go first, then how long they ran: the columns show both.
   const parts: FigurePart[] = here
     ? [playingPart(here)]
     : [
-        { text: unnamed ? takesLabel(takes.length) : goesLabel(takes.length), keep: 1 },
+        { text: takesLabel(takes.length), keep: 1 },
         { text: formatMMSS(total), keep: 0 },
       ]
 
@@ -369,7 +368,7 @@ function NotPlayedRow({
           : []),
         { text: formatDay(s.created_at), keep: 1 },
         ...(ago ? [{ text: ago, keep: 0, join: ", " as const }] : []),
-        { text: goesLabel(s.goes), keep: 2 },
+        { text: takesLabel(s.goes), keep: 2 },
       ]
   return (
     <div
@@ -493,7 +492,7 @@ function playingPart(here: LastTimePlayback): FigurePart {
 /** What a song's ▶ is called after "Play" or "Pause": the go and which one
  *  it is. reha.stream finds Pałyn 7's by the start of it. */
 function playLabel(take: Take, song: string) {
-  return `${take.name}, the ${take.starred ? "starred" : "last"} go at ${song}`
+  return `${take.name}, the ${take.starred ? "starred" : "last"} take of ${song}`
 }
 
 /** The small player on a row (C2), its look worked out from what plays. */

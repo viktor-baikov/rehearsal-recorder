@@ -148,7 +148,7 @@ test.describe("History", () => {
     await list.getByRole("button", { name: /^First rehearsal/ }).click()
     await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
     await expect(overview).toContainText("Daroha")
-    await expect(overview).toContainText("2 goes")
+    await expect(overview).toContainText("2 takes")
   })
 
   test("deleting a rehearsal asks nothing, says it went, and Undo brings it back", async ({
@@ -212,7 +212,7 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
     "2\nsongs",
     "1 of 4\nin the cloud",
     "Pałyn",
-    "2 goes",
+    "2 takes",
     "Viasna",
     "1 Keep this",
     "1 Went wrong",
@@ -407,8 +407,8 @@ test.describe("last time, on the setup screen", () => {
     await expect(panel).toContainText("Tuesday jam")
     await expect(panel).toContainText("12 min · 4 takes · 1 in the cloud")
     // Each song with how many goes it got and how long they ran in all.
-    await expect(panel.locator("[data-song='Pałyn']")).toContainText("2 goes · 6:10")
-    await expect(panel.locator("[data-song='Viasna']")).toContainText("1 go · 4:10")
+    await expect(panel.locator("[data-song='Pałyn']")).toContainText("2 takes · 6:10")
+    await expect(panel.locator("[data-song='Viasna']")).toContainText("1 take · 4:10")
     await expect(panel.locator("[data-song='Not named']")).toContainText("1 take · 1:30")
     // The marks, under their song, each by its label and its comment.
     await expect(panel.locator("[data-song='Pałyn'] [data-note]")).toContainText("this one is the take")
@@ -418,7 +418,7 @@ test.describe("last time, on the setup screen", () => {
     // What was not played last time, from before it.
     const leftOut = panel.getByRole("region", { name: "Not played last time" })
     await expect(leftOut).toContainText("Daroha")
-    await expect(leftOut).toContainText(/Tue 25 Aug.* · 2 goes/)
+    await expect(leftOut).toContainText(/Tue 25 Aug.* · 2 takes/)
     // And the rest of history.
     const earlier = panel.getByRole("region", { name: "Earlier" })
     await expect(earlier).toContainText("Wednesday jam")
@@ -436,8 +436,8 @@ test.describe("last time, on the setup screen", () => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const panel = lastTime(page)
     await expect(keyOn(startButton(page))).resolves.toBe("Space")
-    await panel.getByRole("button", { name: "Play Pałyn 2, the last go at Pałyn" }).click()
-    await expect(panel.getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })).toBeVisible()
+    await panel.getByRole("button", { name: "Play Pałyn 2, the last take of Pałyn" }).click()
+    await expect(panel.getByRole("button", { name: "Pause Pałyn 2, the last take of Pałyn" })).toBeVisible()
     expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
       { name: "Guitar", file: "/rec/old/p2.wav" },
     ])
@@ -445,15 +445,15 @@ test.describe("last time, on the setup screen", () => {
     // Space is the take's now, not Start's.
     expect(await keyOn(startButton(page))).toBeNull()
     await page.keyboard.press("Space")
-    await expect(panel.getByRole("button", { name: "Play Pałyn 2, the last go at Pałyn" })).toBeVisible()
+    await expect(panel.getByRole("button", { name: "Play Pałyn 2, the last take of Pałyn" })).toBeVisible()
     await expect(page.getByRole("button", { name: /Record take/ })).toHaveCount(0)
     await page.keyboard.press("Space")
-    await expect(panel.getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })).toBeVisible()
+    await expect(panel.getByRole("button", { name: "Pause Pałyn 2, the last take of Pałyn" })).toBeVisible()
 
     // Take 2 of another rehearsal is another take, not this one again.
     const opens = await callCount(page, "player_open")
-    await panel.getByRole("button", { name: "Play Daroha 2, the last go at Daroha" }).click()
-    await expect(panel.getByRole("button", { name: "Pause Daroha 2, the last go at Daroha" })).toBeVisible()
+    await panel.getByRole("button", { name: "Play Daroha 2, the last take of Daroha" }).click()
+    await expect(panel.getByRole("button", { name: "Pause Daroha 2, the last take of Daroha" })).toBeVisible()
     expect(await callCount(page, "player_open")).toBe(opens + 1)
     expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
       { name: "Guitar", file: "/rec/older/d2.wav" },
@@ -468,7 +468,7 @@ test.describe("last time, on the setup screen", () => {
   test("checking the signal stops what was playing", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const panel = lastTime(page)
-    await panel.getByRole("button", { name: "Play Viasna 1, the last go at Viasna" }).click()
+    await panel.getByRole("button", { name: "Play Viasna 1, the last take of Viasna" }).click()
     await expect(panel.getByRole("button", { name: /^Pause Viasna/ })).toBeVisible()
     await page.getByRole("button", { name: "Check signal" }).click()
     await expect(panel.getByRole("button", { name: /^Pause/ })).toHaveCount(0)
@@ -531,7 +531,7 @@ test("the set card counts what was played and says not played for the rest", asy
   const card = page.getByRole("region", { name: "Set Gig on the 25th" })
   await expect(card).toContainText("Gig on the 25th — 2 of 4 played")
   const songs = card.locator("[data-set-played]")
-  await expect(songs).toHaveText([/1\s*Viasna\s*1 go/, /2\s*Pałyn\s*2 goes/, /3\s*Ahoń\s*not played/, /4\s*Kupalle\s*not played/])
+  await expect(songs).toHaveText([/1\s*Viasna\s*1 take/, /2\s*Pałyn\s*2 takes/, /3\s*Ahoń\s*not played/, /4\s*Kupalle\s*not played/])
   // Two columns read down: Ahoń heads the second.
   const first = (await songs.nth(0).boundingBox())!
   const third = (await songs.nth(2).boundingBox())!

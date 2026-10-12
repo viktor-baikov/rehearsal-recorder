@@ -1,11 +1,10 @@
 import { Check, ListMusic } from "lucide-react"
 import type { RehearsalSet } from "@/lib/api"
+import { takesLabel } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 // What History says of a rehearsal played by a set (issue #12 step 8,
 // H1–H4). One played freely looks as it always did.
-
-const goesLabel = (n: number) => (n === 1 ? "1 go" : `${n} goes`)
 
 /** The set's name, small, after its icon: in the list of rehearsals and
  *  beside the date under a rehearsal's title (H1). */
@@ -85,7 +84,7 @@ export function SetPlayedCard({
                 {n > 0 ? (
                   <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                     <Check aria-hidden className="size-3.5 text-primary" />
-                    {goesLabel(n)}
+                    {takesLabel(n)}
                   </span>
                 ) : (
                   <span className="shrink-0 text-xs text-muted-foreground">not played</span>

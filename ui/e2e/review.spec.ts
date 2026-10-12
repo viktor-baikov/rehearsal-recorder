@@ -46,7 +46,7 @@ test("the review screen shows the song with its go and a pencil, no name field",
   await expect(title(page).locator("[data-go]")).toHaveText("1")
   await expect(pencil(page)).toBeVisible()
   await expect(page.locator("#take-name")).toHaveCount(0)
-  await expect(line(page)).toHaveText("0:06 · the first go at it tonight")
+  await expect(line(page)).toHaveText("0:06 · the song's first take tonight")
   await expect(bars(page)).toHaveCount(0)
 })
 
@@ -55,8 +55,13 @@ test("a second go shows bars for the goes tonight and says how it compares", asy
   await startRehearsal(page, 4)
   await recordTake(page, 4)
   await expect(title(page)).toHaveText("Viasna 3")
-  await expect(line(page)).toHaveText("0:06 · 6 s shorter than go 2")
+  await expect(line(page)).toHaveText("0:06 · 6 s shorter than Viasna 2")
   await expect(bars(page)).toHaveText(["1", "2", "3"])
+  // Each bar by the take's own name, so its number is not an evening's "Take 3".
+  await expect(summary(page).getByRole("img", { name: "Takes of Viasna tonight" })).toHaveAttribute(
+    "title",
+    "Viasna 1: 0:18, Viasna 2: 0:12, Viasna 3: 0:06"
+  )
   await expect(bars(page).nth(0)).toHaveAttribute("data-starred", "")
   await expect(bars(page).nth(2)).toHaveAttribute("data-here", "")
   // Each as tall as it ran: 18, 12 and 6 s.
@@ -150,12 +155,12 @@ test("the pencil renames the take and the title, bars and line follow", async ({
   await page.keyboard.press("Enter")
   await expect(dialog(page)).toHaveCount(0)
   await expect(title(page)).toHaveText("Dym 2")
-  await expect(line(page)).toHaveText("0:06 · 24 s shorter than go 1")
+  await expect(line(page)).toHaveText("0:06 · 24 s shorter than Dym 1")
   await expect(bars(page)).toHaveText(["1", "2"])
 
   await nameTake(page, "Ahoń")
   await expect(title(page)).toHaveText("Ahoń 1")
-  await expect(line(page)).toHaveText("0:06 · the first go at it tonight")
+  await expect(line(page)).toHaveText("0:06 · the song's first take tonight")
   await expect(bars(page)).toHaveCount(0)
   await page.getByRole("button", { name: /Save take/ }).click()
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ahoń")

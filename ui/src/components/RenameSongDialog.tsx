@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog"
 import { TakeNameField } from "@/components/TakeNameField"
 import type { SongChoices, SongSummary } from "@/lib/api"
-import { goesLabel } from "@/lib/format"
+import { takesLabel } from "@/lib/format"
 import { songNamed, UNNAMED } from "@/lib/goes"
 import { useHeld } from "@/lib/held"
 
@@ -47,7 +47,7 @@ export function RenameSongDialog({
         <DialogHeader>
           <DialogTitle>Rename song</DialogTitle>
           <DialogDescription>
-            Every go is renamed, with its folder on disk and its copies in the cloud folder.
+            Every take is renamed, with its folder on disk and its copies in the cloud folder.
           </DialogDescription>
         </DialogHeader>
         {/* Keyed by the song, so another song opened starts from its title. */}
@@ -131,13 +131,13 @@ function RenameSongForm({
         />
         <p data-rename-says className="min-h-5 text-xs break-words text-muted-foreground">
           {now.kind === "merge"
-            ? `${now.into.title} is another song: ${song.title}'s goes join it.`
+            ? `${now.into.title} is another song: ${song.title}'s takes join it.`
             : now.kind === "refused"
               ? `${now.typed} is what a take with no song is called.`
               : now.kind === "rename"
                 ? now.typed.toLocaleLowerCase() === song.title.toLocaleLowerCase()
                   ? "Spelled anew: the same song."
-                  : `${goesLabel(song.goes)} ${song.goes === 1 ? "becomes" : "become"} ${now.typed}.`
+                  : `${takesLabel(song.goes)} ${song.goes === 1 ? "becomes" : "become"} ${now.typed}.`
                 : ""}
         </p>
       </div>

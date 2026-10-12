@@ -57,7 +57,7 @@ describe("the site's content", () => {
     const record = content.story.steps.find((s) => s.id === "record")!
     expect(record.title).toBe("Hear last week, then record.")
     expect(leadAndBeats(record.body).beats).toEqual([
-      "▶ beside Pałyn on the start screen plays its best go from last week.",
+      "▶ beside Pałyn on the start screen plays its best take from last week.",
       "Start, and ↑ picks Pałyn under Next take.",
       "Record: the take's name over a big clock, and a tile per track that turns red when it clips.",
     ])

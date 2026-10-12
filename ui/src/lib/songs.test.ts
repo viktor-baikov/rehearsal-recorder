@@ -171,15 +171,15 @@ describe("fromLastTime", () => {
 })
 
 describe("the lines under a song", () => {
-  it("says goes, rehearsals and when it was last played", () => {
+  it("says takes, rehearsals and when it was last played", () => {
     expect(
       songLine(song(1, "Dym", { last_played: "2026-09-28T19:00:00" }), NOW)
-    ).toBe("1 go · 1 rehearsal · last 28 Sep")
+    ).toBe("1 take · 1 rehearsal · last 28 Sep")
   })
   it("says the year of a date before this one", () => {
     const goes = [go("/b", 1, "2026-01-08T19:00:00"), go("/a", 1, "2025-12-30T19:00:00")]
     expect(pageLine(goes, false, NOW)).toBe(
-      "2 goes in 2 rehearsals · first 30 Dec 2025 · last 8 Jan"
+      "2 takes in 2 rehearsals · first 30 Dec 2025 · last 8 Jan"
     )
   })
   it("says the year of Not named's last day before this one", () => {
@@ -187,34 +187,34 @@ describe("the lines under a song", () => {
       "1 take in 1 rehearsal · last Tue 30 Dec 2025"
     )
   })
-  it("counts takes, not goes, for Not named", () => {
+  it("says only the last day for Not named", () => {
     const goes = [go("/b", 4, "2026-09-22T19:00:00"), go("/a", 2, "2026-09-10T19:00:00")]
     expect(pageLine(goes, true, NOW)).toBe("2 takes in 2 rehearsals · last Tue 22 Sep")
   })
 })
 
 describe("mergeQuestion", () => {
-  it("names both songs, the goes, the rehearsals and the goes they become", () => {
+  it("names both songs, the takes, the rehearsals and the numbers they become", () => {
     expect(
       mergeQuestion("Palyn", "Pałyn", { goes: 2, rehearsals: 1, first: 8, last: 9 })
     ).toEqual({
       title: "Merge “Palyn” into “Pałyn”?",
       says:
-        "2 goes in 1 rehearsal become Pałyn 8–9, and their folders and cloud copies are renamed. To split them again, rename the takes one by one.",
+        "2 takes in 1 rehearsal become Pałyn 8–9, and their folders and cloud copies are renamed. To split them again, rename them one by one.",
     })
   })
 
-  it("says one go as one", () => {
+  it("says one take as one", () => {
     expect(
       mergeQuestion("Palyn", "Pałyn", { goes: 1, rehearsals: 1, first: 8, last: 8 }).says
     ).toBe(
-      "1 go in 1 rehearsal becomes Pałyn 8, and its folder and cloud copies are renamed. To split it off again, rename the take."
+      "1 take in 1 rehearsal becomes Pałyn 8, and its folder and cloud copies are renamed. To split it off again, rename it."
     )
   })
 
   it("counts rehearsals in the plural", () => {
     expect(
       mergeQuestion("Polin", "Polyn", { goes: 12, rehearsals: 5, first: 11, last: 22 }).says
-    ).toMatch(/^12 goes in 5 rehearsals become Polyn 11–22, /)
+    ).toMatch(/^12 takes in 5 rehearsals become Polyn 11–22, /)
   })
 })

@@ -60,7 +60,7 @@ test.describe("Rename song, from a song's page", () => {
     await expect(titleField(page)).toBeFocused()
     await expect(
       dialog(page).getByText(
-        "Every go is renamed, with its folder on disk and its copies in the cloud folder."
+        "Every take is renamed, with its folder on disk and its copies in the cloud folder."
       )
     ).toBeVisible()
     const pills = dialog(page).locator("[data-song-choice]")
@@ -80,7 +80,7 @@ test.describe("Rename song, from a song's page", () => {
     await openSong(page, "Pałyn")
     await openRename(page, "Pałyn")
     await titleField(page).fill("Polyn")
-    await expect(dialog(page).getByText("3 goes become Polyn.")).toBeVisible()
+    await expect(dialog(page).getByText("3 takes become Polyn.")).toBeVisible()
     await dialog(page).getByRole("button", { name: "Rename", exact: true }).click()
     await expect(dialog(page)).toBeHidden()
     await expect(head(page).getByRole("heading", { name: "Polyn", exact: true })).toBeVisible()
@@ -179,7 +179,7 @@ test.describe("Rename song, from a song's page", () => {
     await openSong(page, "Palyn")
     await openRename(page, "Palyn")
     await titleField(page).fill("Pałyn 5")
-    await expect(dialog(page).getByText("2 goes become Pałyn 5.")).toBeVisible()
+    await expect(dialog(page).getByText("2 takes become Pałyn 5.")).toBeVisible()
     await expect(dialog(page).getByRole("button", { name: "Rename", exact: true })).toBeEnabled()
   })
 
@@ -192,12 +192,12 @@ test.describe("Rename song, from a song's page", () => {
     await dialog(page).locator("[data-song-choice='Pałyn']").click()
     await expect(titleField(page)).toHaveValue("Pałyn")
     await expect(
-      dialog(page).getByText("Pałyn is another song: Palyn's goes join it.")
+      dialog(page).getByText("Pałyn is another song: Palyn's takes join it.")
     ).toBeVisible()
     await dialog(page).getByRole("button", { name: "Merge…", exact: true }).click()
     await expect(question(page)).toHaveAccessibleName("Merge “Palyn” into “Pałyn”?")
     await expect(question(page)).toContainText(
-      "2 goes in 1 rehearsal become Pałyn 10–11, and their folders and cloud copies are renamed. To split them again, rename the takes one by one."
+      "2 takes in 1 rehearsal become Pałyn 10–11, and their folders and cloud copies are renamed. To split them again, rename them one by one."
     )
     await expect(question(page).getByRole("button", { name: "Merge", exact: true })).toBeVisible()
     // Asked, not done: only the counts were read.
@@ -211,7 +211,7 @@ test.describe("Rename song, from a song's page", () => {
     await titleField(page).fill("polyn")
     await expect(dialog(page).locator("[data-take-go]")).toHaveText(" → Pałyn")
     await expect(
-      dialog(page).getByText("Pałyn is another song: Palyn's goes join it.")
+      dialog(page).getByText("Pałyn is another song: Palyn's takes join it.")
     ).toBeVisible()
     await dialog(page).getByRole("button", { name: "Merge…", exact: true }).click()
     await expect(question(page)).toHaveAccessibleName("Merge “Palyn” into “Pałyn”?")
@@ -228,7 +228,7 @@ test.describe("Rename song, from a song's page", () => {
     await question(page).getByRole("button", { name: "Merge", exact: true }).click()
     await expect(question(page)).toBeHidden()
     await expect(head(page).getByRole("heading", { name: "Pałyn", exact: true })).toBeVisible()
-    await expect(head(page)).toContainText("5 goes in 3 rehearsals")
+    await expect(head(page)).toContainText("5 takes in 3 rehearsals")
     const list = page.getByRole("navigation", { name: "Songs" })
     await expect(list.locator("[data-song='Palyn']")).toHaveCount(0)
     await page.locator("[data-rung='/rec/older']").click()
@@ -259,10 +259,10 @@ test.describe("Rename song, from a song's page", () => {
     await openRename(page, "Pałyn")
     // Not in the Songs list, so not a pill either: the dialog says Rename.
     await titleField(page).fill("Old")
-    await expect(dialog(page).getByText("3 goes become Old.")).toBeVisible()
+    await expect(dialog(page).getByText("3 takes become Old.")).toBeVisible()
     await dialog(page).getByRole("button", { name: "Rename", exact: true }).click()
     await expect(question(page)).toHaveAccessibleName("Merge “Pałyn” into “Old”?")
-    await expect(question(page)).toContainText("3 goes in 2 rehearsals become Old 1–3")
+    await expect(question(page)).toContainText("3 takes in 2 rehearsals become Old 1–3")
     expect((await calls(page, "merge_songs")).map((c) => Boolean(c.args[2]))).toEqual([true])
     await question(page).getByRole("button", { name: "Merge", exact: true }).click()
     await expect(head(page).getByRole("heading", { name: "Old", exact: true })).toBeVisible()
@@ -303,7 +303,7 @@ test.describe("Rename song, from a song's page", () => {
     await openSong(page, "Palyn")
     await openRename(page, "Palyn")
     await titleField(page).fill("take 4")
-    await expect(dialog(page).getByText("2 goes become take 4.")).toBeVisible()
+    await expect(dialog(page).getByText("2 takes become take 4.")).toBeVisible()
     await expect(dialog(page).getByRole("button", { name: "Rename", exact: true })).toBeEnabled()
   })
 
@@ -370,7 +370,7 @@ test.describe("Rename song, from a song's page", () => {
     expect(await sideways(page)).toBe(false)
     await dialog(page).locator("[data-song-choice='Pałyn']").click()
     await expect(
-      dialog(page).getByText(`Pałyn is another song: ${LONG}'s goes join it.`)
+      dialog(page).getByText(`Pałyn is another song: ${LONG}'s takes join it.`)
     ).toBeVisible()
     expect(await sideways(page)).toBe(false)
     await dialog(page).getByRole("button", { name: "Merge…", exact: true }).click()

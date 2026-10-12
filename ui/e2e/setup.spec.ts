@@ -944,7 +944,7 @@ test.describe("the start screen's groups", () => {
   test("Start keeps its width while Last time plays", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const panel = page.getByRole("complementary", { name: "Last time" })
-    const play = panel.getByRole("button", { name: "Play Pałyn 2, the last go at Pałyn" })
+    const play = panel.getByRole("button", { name: "Play Pałyn 2, the last take of Pałyn" })
     await expect(play).toBeVisible()
     await settled(page)
     const boxes = async () => [
@@ -954,7 +954,7 @@ test.describe("the start screen's groups", () => {
     const before = await boxes()
 
     await play.click()
-    await expect(panel.getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })).toBeVisible()
+    await expect(panel.getByRole("button", { name: "Pause Pałyn 2, the last take of Pałyn" })).toBeVisible()
     expect(await boxes()).toEqual(before)
     // Its Space chip keeps its room, unseen: Space is the take's now.
     const chip = startButton(page).locator("kbd")
@@ -1017,6 +1017,10 @@ test.describe("the tracks during the check", () => {
   // under the pointer: each says so with an Undo of its own (B1).
   test("two tracks taken off at once each come back, with Ctrl+Z twice", async ({ page }) => {
     await openFour(page, { Drums: [0.0004], Bass: [0.62], Guitar: [0.0004], Vocals: [0.62] })
+    // Clicked while the screen still rises, Check signal can be scrolled to,
+    // and a screen scrolled down moves its rows down when one goes: the
+    // second click would then land between them.
+    await settled(page)
     await page.getByRole("button", { name: "Check signal" }).click()
     const row = (n: number) => rows(page).nth(n - 1)
     await expect(heard(row(2), "signal")).toBeVisible()
@@ -1348,9 +1352,9 @@ test.describe("the left part behind a button in a narrow window", () => {
       inert: document.querySelector("[inert]") !== null,
     }))
 
-  /** Last time's button for Pałyn 2, the last go at Pałyn, in `where`. */
+  /** Last time's button for Pałyn 2, the last take of Pałyn, in `where`. */
   const palyn = (where: Locator, does: "Play" | "Pause") =>
-    where.getByRole("button", { name: `${does} Pałyn 2, the last go at Pałyn` })
+    where.getByRole("button", { name: `${does} Pałyn 2, the last take of Pałyn` })
 
   test("under 1100 px Last time opens as a side panel from the header", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
@@ -1642,14 +1646,14 @@ test.describe("Last time and long names on the shared pieces", () => {
       const figures = row.locator("[data-figures]")
       await expect(figures, where).toHaveAttribute("data-dropped")
       const read = figures.locator(".sr-only")
-      await expect(read, where).toHaveText(new RegExp(`^${literally(star)} · Sat 19 Sep, .+ ago · 4 goes$`))
+      await expect(read, where).toHaveText(new RegExp(`^${literally(star)} · Sat 19 Sep, .+ ago · 4 takes$`))
       // Dropped in order, the least needed first: how long ago, then the
       // day, then the goes, the ★ go last. The ★ is drawn, not written.
       const ago = (await read.innerText()).split(", ")[1].split(" · ")[0]
       const kept = [
-        `${star} · Sat 19 Sep, ${ago} · 4 goes`,
-        `${star} · Sat 19 Sep · 4 goes`,
-        `${star} · 4 goes`,
+        `${star} · Sat 19 Sep, ${ago} · 4 takes`,
+        `${star} · Sat 19 Sep · 4 takes`,
+        `${star} · 4 takes`,
         star,
         "",
       ].map((line) => line.replace("★ ", ""))
@@ -1662,7 +1666,7 @@ test.describe("Last time and long names on the shared pieces", () => {
       await dayLine(past).click()
       await tabTo(page, songName(past, "Dym"))
       await expect(tip(page), where).toBeVisible()
-      await expect(tip(page), where).toContainText(`${star.replace("★ ", "")} · Sat 19 Sep, ${ago} · 4 goes`)
+      await expect(tip(page), where).toContainText(`${star.replace("★ ", "")} · Sat 19 Sep, ${ago} · 4 takes`)
       await dayLine(past).click()
       await expect(tip(page), where).toHaveCount(0)
     }
@@ -1830,7 +1834,7 @@ test.describe("Last time and long names on the shared pieces", () => {
       await songName(past, DANCING).hover()
       await expect(tip(page), where).toBeVisible()
       await expect(tip(page), where).toContainText(DANCING)
-      await expect(tip(page), where).toContainText("2 goes · 10:10")
+      await expect(tip(page), where).toContainText("2 takes · 10:10")
       await away(page)
       await expect(tip(page), where).toHaveCount(0)
 
@@ -1839,12 +1843,12 @@ test.describe("Last time and long names on the shared pieces", () => {
       await tabTo(page, songName(past, DANCING))
       await expect(tip(page), where).toBeVisible()
       await expect(tip(page), where).toContainText(DANCING)
-      await expect(tip(page), where).toContainText("2 goes · 10:10")
+      await expect(tip(page), where).toContainText("2 takes · 10:10")
       // The tip is for the eyes: a screen reader reads the name, and the
       // figures in their own line, once each.
       await expect(songName(past, DANCING), where).toHaveAccessibleDescription("")
       await expect(past.locator(`[data-song='${DANCING}'] [data-figures] .sr-only`), where).toHaveText(
-        "2 goes · 10:10"
+        "2 takes · 10:10"
       )
       await dayLine(past).click()
       await expect(tip(page), where).toHaveCount(0)
@@ -2009,7 +2013,7 @@ test.describe("Last time and long names on the shared pieces", () => {
   test("the small play button shows a spinner after one second", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const past = page.getByRole("complementary", { name: "Last time" })
-    const play = past.getByRole("button", { name: "Play Pałyn 2, the last go at Pałyn" })
+    const play = past.getByRole("button", { name: "Play Pałyn 2, the last take of Pałyn" })
     await expect(play).toBeVisible()
     // The take is slow to open: the fake holds it until it is let go.
     await hold(page, "player_open")
@@ -2030,7 +2034,7 @@ test.describe("Last time and long names on the shared pieces", () => {
     expect(await button.boundingBox(), "the ▶'s box with the spinner").toEqual(box)
 
     await letGo(page, "player_open")
-    await expect(past.getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })).toBeVisible()
+    await expect(past.getByRole("button", { name: "Pause Pałyn 2, the last take of Pałyn" })).toBeVisible()
     await expect(spinner).toHaveCount(0)
   })
 

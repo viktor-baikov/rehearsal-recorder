@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 import type { RehearsalSet } from "@/lib/api"
+import { takesLabel } from "@/lib/format"
 import { SHORT, rowsFor, shortList } from "@/lib/setSongs"
 import { cn } from "@/lib/utils"
 
@@ -8,8 +9,6 @@ import { cn } from "@/lib/utils"
 // place of the pills the other name fields have (issue #12 step 8, R1–R7):
 // the set the rehearsal plays by as a card, then the band's other songs as
 // rows like the set's. A click on a row names the next take after it.
-
-const goesLabel = (n: number) => (n === 1 ? "1 go" : `${n} goes`)
 
 const ROW =
   "flex h-9 w-full items-center gap-3 rounded-lg px-2 text-left text-sm transition-colors " +
@@ -61,11 +60,11 @@ function SongRow({
         {next && <span className="shrink-0 text-xs text-primary">next</span>}
         {goes > 0 && (
           <span
-            title={`${goesLabel(goes)} tonight`}
+            title={`${takesLabel(goes)} tonight`}
             className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
           >
             {!lit && <Check data-played-check aria-hidden className="size-3.5 text-primary" />}
-            {goesLabel(goes)}
+            {takesLabel(goes)}
           </span>
         )}
       </button>

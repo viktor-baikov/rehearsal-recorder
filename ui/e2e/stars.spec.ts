@@ -128,7 +128,7 @@ test("Last time's ▶ plays a song's newest ★ go, and says which", async ({ pa
   const plays = palyn.locator("[data-plays]")
   await expect(plays).toHaveText("Pałyn 1 · Thu 10 Sep")
   await expect(plays.getByRole("img", { name: "Starred" })).toBeVisible()
-  await palyn.getByRole("button", { name: "Play Pałyn 1, the starred go at Pałyn" }).click()
+  await palyn.getByRole("button", { name: "Play Pałyn 1, the starred take of Pałyn" }).click()
   expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
     { name: "Guitar", file: "/rec/old/p1.wav" },
   ])
@@ -137,7 +137,7 @@ test("Last time's ▶ plays a song's newest ★ go, and says which", async ({ pa
   const viasna = lastTime(page).locator("[data-song='Viasna']")
   await expect(viasna.locator("[data-plays]")).toHaveCount(0)
   await expect(
-    viasna.getByRole("button", { name: "Play Viasna 1, the last go at Viasna" })
+    viasna.getByRole("button", { name: "Play Viasna 1, the last take of Viasna" })
   ).toBeVisible()
 })
 
@@ -148,7 +148,7 @@ test("a ★ on last time's last go plays it and says nothing more", async ({ pag
   const palyn = lastTime(page).locator("[data-song='Pałyn']")
   await expect(palyn.locator("[data-plays]")).toHaveCount(0)
   await expect(
-    palyn.getByRole("button", { name: "Play Pałyn 2, the starred go at Pałyn" })
+    palyn.getByRole("button", { name: "Play Pałyn 2, the starred take of Pałyn" })
   ).toBeVisible()
   await expect(palyn.locator("[data-starred]")).toHaveCount(1)
 })
@@ -159,7 +159,7 @@ test("a song not played last time plays its ★ go too", async ({ page }) => {
   })
   const leftOut = lastTime(page).getByRole("region", { name: "Not played last time" })
   await expect(leftOut).toContainText("★ Daroha 1 · ")
-  await leftOut.getByRole("button", { name: "Play Daroha 1, the starred go at Daroha" }).click()
+  await leftOut.getByRole("button", { name: "Play Daroha 1, the starred take of Daroha" }).click()
   expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
     { name: "Guitar", file: "/rec/older/d1.wav" },
   ])

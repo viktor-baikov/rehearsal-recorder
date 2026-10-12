@@ -152,7 +152,7 @@ test("a second go at a song is measured against the first, under the take's name
   // The song is up there already; the bar under the clock says only the time.
   await expect(page.getByText("Took 0:06 last time", { exact: true })).toHaveCount(1)
   // On a bar that fills as the band gets further into it.
-  await expect(page.getByRole("progressbar", { name: "Against the last go" })).toHaveAttribute(
+  await expect(page.getByRole("progressbar", { name: "Against the last take" })).toHaveAttribute(
     "aria-valuemax",
     "6"
   )
