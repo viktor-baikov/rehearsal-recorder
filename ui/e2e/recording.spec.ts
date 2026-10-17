@@ -65,13 +65,15 @@ const wideFont = (page: Page) =>
   page.addStyleTag({ content: "html, body { font-family: Arial, sans-serif !important; }" })
 
 /** The track names a tile cuts short: no worse than it is without the take's
- *  name over the clock, at each size checked. */
+ *  name over the clock, at each size checked. A name cut on two lines keeps
+ *  only what fits, so it says it is cut; one cut on one line runs out of its
+ *  box. */
 const cutNames = (page: Page) =>
   page.evaluate(() =>
     [...document.querySelectorAll("main [role=group]")]
       .filter((t) => {
         const el = t.querySelector("[data-name]")!
-        return el.scrollHeight > el.clientHeight + 1
+        return el.hasAttribute("data-cut") || el.scrollHeight > el.clientHeight + 1
       })
       .map((t) => t.getAttribute("aria-label"))
   )
@@ -86,9 +88,11 @@ const reach = (page: Page) =>
       : 0
   })
 
-/** How each tile writes its track's name: up the tile, in one piece, from
- *  its bottom left corner — "Overheads" broken into "Overhea / ds" across a
- *  narrow tile is what this replaced. Returns the ones that do not. */
+/** How each tile writes its track's name: up the tile, whole, from its
+ *  bottom left corner, on two lines at most, and on two only where it has a
+ *  space to break at — "Overheads" broken into "Overhea / ds" across a
+ *  narrow tile is what this replaced. Up the tile a line is as wide as its
+ *  line height. Returns the ones that do not. */
 const badNames = (page: Page) =>
   page.evaluate(() =>
     [...document.querySelectorAll("main [role=group]")]
@@ -99,13 +103,19 @@ const badNames = (page: Page) =>
         const tile = t.getBoundingClientRect()
         const r = el.getBoundingClientRect()
         const cs = getComputedStyle(el)
-        const size = parseFloat(cs.fontSize)
+        const lines = r.width / parseFloat(cs.lineHeight)
         return {
           name,
           found: true,
           upward: cs.writingMode === "vertical-rl" && cs.transform !== "none",
-          oneLine: r.width < size * 1.6,
-          whole: el.scrollHeight <= el.clientHeight + 1,
+          lines:
+            ["1", "2"].includes(el.getAttribute("data-lines") ?? "") &&
+            lines < 2.5 &&
+            (lines < 1.5 || /\s/.test(el.textContent ?? "")),
+          whole:
+            !el.hasAttribute("data-cut") &&
+            el.textContent === name &&
+            el.scrollHeight <= el.clientHeight + 1,
           corner: r.left - tile.left < 24 && tile.bottom - r.bottom < 24,
         }
       })
@@ -492,9 +502,9 @@ test("on a small laptop the take's name leaves the tiles room for their names", 
   await expect(page.locator("main [role=group]")).toHaveCount(8)
   for (const [width, height, longest] of [
     [1366, 768, "whole"],
-    // The narrowest tiles were already too short for "Overheads" here, and
-    // the header keeps the room of its status line from the start, which
-    // costs "Backing" its last 2 px (until a name may get smaller (Task 3)).
+    // The narrowest tiles were already too short for "Overheads" here. The
+    // header keeps the room of its status line from the start, and "Backing"
+    // gets smaller for it.
     [1024, 640, "may be cut"],
   ] as const) {
     await page.setViewportSize({ width, height })
@@ -505,7 +515,7 @@ test("on a small laptop the take's name leaves the tiles room for their names", 
       }), { message: `scrolls at ${width}×${height}` })
       .toBe(false)
     const cut = await cutNames(page)
-    expect(longest === "whole" ? cut : cut.filter((n) => n !== "Overheads" && n !== "Backing"), `names cut short at ${width}×${height}`).toEqual([])
+    expect(longest === "whole" ? cut : cut.filter((n) => n !== "Overheads"), `names cut short at ${width}×${height}`).toEqual([])
   }
 })
 
