@@ -390,3 +390,41 @@ export async function tipLines(page: Page, el: Locator): Promise<string[]> {
     [...t.children].filter((c) => c.tagName === "DIV").map((c) => c.textContent ?? "")
   )
 }
+
+/**
+ * How each tile on the recording screen draws its track's name, in order:
+ * - `px`, its size as drawn;
+ * - `lines`, the lines it is drawn on (up the tile a line is as wide as its
+ *   line height), and `said`, the lines it says it has (data-lines);
+ * - `cut`, whether it says it is cut (data-cut);
+ * - `whole`: not cut, all of it, on two lines at most, no taller than its
+ *   box;
+ * - `upward` and `corner`: written up the tile from its bottom left corner;
+ * - `text`, what is drawn.
+ */
+export const tileNames = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("main [role=group]")].map((t) => {
+      const name = t.getAttribute("aria-label") ?? ""
+      const el = t.querySelector("[data-name]")
+      if (!el)
+        return { name, text: "", px: 0, lines: 0, said: 0, cut: false, whole: false, upward: false, corner: false }
+      const cs = getComputedStyle(el)
+      const tile = t.getBoundingClientRect()
+      const r = el.getBoundingClientRect()
+      const lines = Math.round(r.width / parseFloat(cs.lineHeight))
+      const cut = el.hasAttribute("data-cut")
+      const text = el.textContent ?? ""
+      return {
+        name,
+        text,
+        px: parseFloat(cs.fontSize),
+        lines,
+        said: Number(el.getAttribute("data-lines")),
+        cut,
+        whole: !cut && text === name && lines <= 2 && el.scrollHeight <= el.clientHeight + 1,
+        upward: cs.writingMode === "vertical-rl" && cs.transform !== "none",
+        corner: r.left - tile.left < 24 && tile.bottom - r.bottom < 24,
+      }
+    })
+  )

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from "react"
 import { InstrumentIcon } from "@/components/InstrumentIcon"
+import { TileName } from "@/components/TileName"
 import { MidiGlyph } from "@/components/midi/MidiGlyph"
 import { Meter } from "@/components/ui/meter"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { peakToDb } from "@/lib/format"
+import { countOf, nounFor, peakToDb } from "@/lib/format"
 import { CLIP_THRESHOLD, QUIET_THRESHOLD, meterReach } from "@/lib/levels"
 
 /** How high the fill reaches, 0..1, in dB as on the desk (see meterReach),
@@ -212,7 +213,7 @@ function NoteCount({ notes }: { notes: number }) {
   return (
     <>
       <span className="tnum">{notes.toLocaleString("en-US")}</span>
-      <span className="@max-[10rem]:hidden"> {notes === 1 ? "note" : "notes"}</span>
+      <span className="@max-[10rem]:hidden"> {nounFor(notes, "note")}</span>
     </>
   )
 }
@@ -310,7 +311,17 @@ function LevelsTile({
   // The status line keeps its room from the start, so a clip or a silence
   // coming moves nothing in the header.
   const status = clips > 0 ? (clips > 1 ? `clipped ${clips}×` : "clipped") : silent ? "silent" : null
-  const tip = [fits ? "" : db, midi?.tip ?? ""].filter(Boolean)
+  const input =
+    channel === null ? "No input" : stereo ? `Inputs ${channel}–${channel + 1}` : `Input ${channel}`
+  // Whether the name is cut, and whether the input line gave way to its
+  // second line: the tooltip says either whole.
+  const [nameFit, setNameFit] = useState({ cut: false, sideGone: false })
+  const tip = [
+    nameFit.cut ? name : "",
+    nameFit.sideGone ? input : "",
+    fits ? "" : db,
+    midi?.tip ?? "",
+  ].filter(Boolean)
 
   return (
     <TileBox
@@ -366,30 +377,8 @@ function LevelsTile({
           // spine of a book: a tile is tall and, sixteen to a row, narrow,
           // and "Overheads" across one came out as "Overhea / ds". Written
           // the same way on a wide tile, so there is one way to read them.
-          <div className="flex min-h-0 items-end gap-1.5">
-            <div
-              data-name
-              className="max-h-full overflow-hidden leading-none font-semibold text-ellipsis whitespace-nowrap"
-              style={{
-                writingMode: "vertical-rl",
-                transform: "rotate(180deg)",
-                // design-ok(px-text): sized from the tile's width (18cqi), so the name fits at any window size
-                fontSize: "clamp(0.875rem, 18cqi, 2.25rem)",
-              }}
-            >
-              {name}
-            </div>
-            <div
-              className="tnum max-h-full overflow-hidden text-xs leading-none text-ellipsis whitespace-nowrap text-muted-foreground @max-[7rem]:hidden"
-              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-            >
-              {channel === null
-                ? "No input"
-                : stereo
-                  ? `Inputs ${channel}–${channel + 1}`
-                  : `Input ${channel}`}
-            </div>
-          </div>
+          // A long one takes two lines and gets smaller (TileName).
+          <TileName name={name} side={input} sideClassName="tnum" onFit={setNameFit} />
         }
       >
         <span
@@ -458,12 +447,14 @@ function LevelsTile({
  */
 function NotesTile({ name, icon, port, vel, notes, connected, tip, surface = "card" }: NotesTileProps) {
   const { tile, figure, fits } = useFits(notes)
-  // The tooltip: the port's name, and under it what there is no room to say
-  // on the tile: its own sentence when it has one (not there, or held), else
-  // the count that was hidden.
-  const more =
-    tip ?? (fits ? undefined : `${notes.toLocaleString("en-US")} ${notes === 1 ? "note" : "notes"}`)
-  const lines = [port, more ?? ""].filter(Boolean)
+  // The tooltip: the name whole when it is cut; the port's name, and under
+  // it what there is no room to say on the tile: its own sentence when it has
+  // one (not there, or held), else the count that was hidden. "MIDI" giving
+  // way to the name's second line needs no line of its own: the port's name
+  // says where the notes come from.
+  const [nameFit, setNameFit] = useState({ cut: false, sideGone: false })
+  const more = tip ?? (fits ? undefined : countOf(notes, "note"))
+  const lines = [nameFit.cut ? name : "", port, more ?? ""].filter(Boolean)
 
   return (
     <TileBox
@@ -485,26 +476,7 @@ function NotesTile({ name, icon, port, vel, notes, connected, tip, surface = "ca
         name={
           // The name as a levels tile writes it: up the tile from its bottom
           // left corner, with what stands in for the input beside it.
-          <div className="flex min-h-0 items-end gap-1.5">
-            <div
-              data-name
-              className="max-h-full overflow-hidden leading-none font-semibold text-ellipsis whitespace-nowrap"
-              style={{
-                writingMode: "vertical-rl",
-                transform: "rotate(180deg)",
-                // design-ok(px-text): sized from the tile's width (18cqi), so the name fits at any window size
-                fontSize: "clamp(0.875rem, 18cqi, 2.25rem)",
-              }}
-            >
-              {name}
-            </div>
-            <div
-              className="max-h-full overflow-hidden text-xs leading-none text-ellipsis whitespace-nowrap text-muted-foreground @max-[7rem]:hidden"
-              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-            >
-              MIDI
-            </div>
-          </div>
+          <TileName name={name} side="MIDI" onFit={setNameFit} />
         }
       >
         <span

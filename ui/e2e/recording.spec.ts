@@ -12,6 +12,7 @@ import {
   style,
   test,
   themed,
+  tileNames,
   tipLines,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
@@ -66,15 +67,8 @@ const wideFont = (page: Page) =>
 
 /** The track names a tile cuts short: no worse than it is without the take's
  *  name over the clock, at each size checked. */
-const cutNames = (page: Page) =>
-  page.evaluate(() =>
-    [...document.querySelectorAll("main [role=group]")]
-      .filter((t) => {
-        const el = t.querySelector("[data-name]")!
-        return el.scrollHeight > el.clientHeight + 1
-      })
-      .map((t) => t.getAttribute("aria-label"))
-  )
+const cutNames = async (page: Page) =>
+  (await tileNames(page)).filter((n) => !n.whole).map((n) => n.name)
 
 /** How far up its side the Vocals tile's fill reaches, 0..1. */
 const reach = (page: Page) =>
@@ -86,31 +80,20 @@ const reach = (page: Page) =>
       : 0
   })
 
-/** How each tile writes its track's name: up the tile, in one piece, from
- *  its bottom left corner — "Overheads" broken into "Overhea / ds" across a
+/** How each tile writes its track's name: up the tile, whole, from its
+ *  bottom left corner, on the lines it says it has, and on two only where it
+ *  has a space to break at — "Overheads" broken into "Overhea / ds" across a
  *  narrow tile is what this replaced. Returns the ones that do not. */
-const badNames = (page: Page) =>
-  page.evaluate(() =>
-    [...document.querySelectorAll("main [role=group]")]
-      .map((t) => {
-        const el = t.querySelector("[data-name]")
-        const name = t.getAttribute("aria-label")
-        if (!el) return { name, found: false }
-        const tile = t.getBoundingClientRect()
-        const r = el.getBoundingClientRect()
-        const cs = getComputedStyle(el)
-        const size = parseFloat(cs.fontSize)
-        return {
-          name,
-          found: true,
-          upward: cs.writingMode === "vertical-rl" && cs.transform !== "none",
-          oneLine: r.width < size * 1.6,
-          whole: el.scrollHeight <= el.clientHeight + 1,
-          corner: r.left - tile.left < 24 && tile.bottom - r.bottom < 24,
-        }
-      })
-      .filter((n) => !Object.values(n).every(Boolean))
-  )
+const badNames = async (page: Page) =>
+  (await tileNames(page))
+    .map((n) => ({
+      name: n.name,
+      upward: n.upward,
+      lines: n.lines >= 1 && n.said === n.lines && (n.lines === 1 || /\s/.test(n.text)),
+      whole: n.whole,
+      corner: n.corner,
+    }))
+    .filter((n) => !Object.values(n).every(Boolean))
 
 test("a first take says what is recording, what clipped and what is silent", async ({ page }) => {
   // The fake holds Guitar at the top and Vocals at nothing, unless a test
@@ -492,9 +475,9 @@ test("on a small laptop the take's name leaves the tiles room for their names", 
   await expect(page.locator("main [role=group]")).toHaveCount(8)
   for (const [width, height, longest] of [
     [1366, 768, "whole"],
-    // The narrowest tiles were already too short for "Overheads" here, and
-    // the header keeps the room of its status line from the start, which
-    // costs "Backing" its last 2 px (until a name may get smaller (Task 3)).
+    // The narrowest tiles were already too short for "Overheads" here. The
+    // header keeps the room of its status line from the start, and "Backing"
+    // gets smaller for it.
     [1024, 640, "may be cut"],
   ] as const) {
     await page.setViewportSize({ width, height })
@@ -505,7 +488,7 @@ test("on a small laptop the take's name leaves the tiles room for their names", 
       }), { message: `scrolls at ${width}×${height}` })
       .toBe(false)
     const cut = await cutNames(page)
-    expect(longest === "whole" ? cut : cut.filter((n) => n !== "Overheads" && n !== "Backing"), `names cut short at ${width}×${height}`).toEqual([])
+    expect(longest === "whole" ? cut : cut.filter((n) => n !== "Overheads"), `names cut short at ${width}×${height}`).toEqual([])
   }
 })
 
