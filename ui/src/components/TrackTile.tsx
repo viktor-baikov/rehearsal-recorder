@@ -126,9 +126,15 @@ function TileBox({
   const corners = well ? "rounded-md" : "rounded-xl"
   // Held here the whole time, as WholeTip's is: left to Radix only while
   // there is something to say, it would switch between held and not, which
-  // Radix warns of.
+  // Radix warns of. And as there, the flag is let go when the lines go, or a
+  // leave Radix never reports would open the tip by itself when they return.
   const says = tip.length > 0
   const [open, setOpen] = useState(false)
+  const [said, setSaid] = useState(says)
+  if (said !== says) {
+    setSaid(says)
+    if (!says) setOpen(false)
+  }
   return (
     <Tooltip open={says && open} onOpenChange={(next) => setOpen(says && next)}>
       <TooltipTrigger asChild>
@@ -421,8 +427,8 @@ function LevelsTile({
             {!midi.connected && <span className="hidden @min-[9.5rem]:inline">not connected</span>}
           </span>
         )}
-        {/* With nothing to say, an unseen space keeps its line: there is no
-            word in it that is not so, for a test or a screen reader. */}
+        {/* With nothing to say, an unseen no-break space keeps its line: there
+            is no word in it that is not so, for a test or a screen reader. */}
         <span
           data-status
           className={cn(
@@ -431,7 +437,7 @@ function LevelsTile({
             !status && "invisible"
           )}
         >
-          {status ?? " "}
+          {status ?? "\u00a0"}
         </span>
       </TileLayout>
     </TileBox>
