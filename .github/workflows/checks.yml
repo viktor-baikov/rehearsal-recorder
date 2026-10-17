@@ -166,8 +166,8 @@ jobs:
   # nothing. They run in three parts on three machines at once instead,
   # split by Playwright's own --shard: interface · 1/3, 2/3 and 3/3. On
   # 2026-10-17 that took the whole check from 9 minutes to under 4 (two
-  # machines: 4.6). A fourth would gain nothing: the Python suites on macOS
-  # take 3 minutes of their own. The steps are written once, under
+  # machines: 4.6). A fourth would gain little: app · windows takes two and a
+  # half minutes of its own. The steps are written once, under
   # &interface, and the other two jobs take them as they are (*interface);
   # PART tells the three apart. What needs no browser runs in the first part
   # alone.
