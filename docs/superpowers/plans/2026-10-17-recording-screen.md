@@ -184,8 +184,8 @@ The inventory's §4 calls stand. This plan adds the following.
 ### Task 2: One tile, on a well, with the upright meter
 
 **Files:**
-- Modify: `ui/src/components/ui/meter.tsx`, `ui/src/components/ui/meter.stories.tsx` (up, stereo, held, clipped, notes)
-- Modify: `ui/src/components/TrackTile.tsx`, `ui/src/index.css` (`--well` in `:root` and `.dark`, `--color-well` in `@theme`), `ui/src/components/Waveform.tsx:125`, `ui/src/components/midi/NotesLane.tsx` (its well), `ui/src/screens/Recording.tsx` (the tiles' map only)
+- Modify: `ui/src/components/ui/meter.tsx`, `meter.stories.tsx` (up, stereo, held, clipped, notes) and `meter.test.ts` (the up variant's classes, as the across ones are tested)
+- Modify: `ui/src/components/TrackTile.tsx`, `ui/src/index.css` (`--well` in `:root` and `.dark`, `--color-well` in `@theme`), `ui/src/components/Waveform.tsx:125`, `ui/src/components/midi/NotesLane.tsx` (its well `:174` and its names' backing `:198`, `:212`, as `bg-well` and `bg-well/85`), `ui/src/screens/Recording.tsx` (the tiles' map only)
 - Delete: `ui/src/components/midi/MidiTile.tsx`
 - Modify: `ui/design-check.allow.json` (drop `TrackTile.tsx` and `MidiTile.tsx`)
 - Test: `ui/e2e/recording.spec.ts`, `ui/e2e/midi-recording.spec.ts`, `ui/e2e/lanes.spec.ts` (the wells' colour)
