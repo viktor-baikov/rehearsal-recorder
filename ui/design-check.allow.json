@@ -15,6 +15,5 @@
   "src/components/SongPage.tsx": ["px-text", "uppercase", "raw-button"],
   "src/components/TakeSummary.tsx": ["px-text"],
   "src/components/UnderTheHood.tsx": ["px-text"],
-  "src/screens/Recording.tsx": ["uppercase"],
   "src/screens/Settings.tsx": ["raw-colour", "raw-button"]
 }

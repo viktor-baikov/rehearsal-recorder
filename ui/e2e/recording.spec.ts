@@ -6,8 +6,11 @@ import {
   mixed,
   nameTake,
   openApp,
+  openBandApp,
+  scaled,
   setFake,
   settled,
+  startButton,
   startRehearsal,
   style,
   test,
@@ -49,10 +52,10 @@ const vocalsAt = (page: Page, level: number) =>
 const tile = (page: Page, name: string) => page.getByRole("group", { name })
 /** The take's name, big over the clock. */
 const takeName = (page: Page) => page.getByRole("heading", { level: 1 })
-/** The line up top, beside the red RECORDING. */
+/** The red dot, Recording and the take's number, in the footer beside Stop. */
 const topLine = (page: Page) => page.locator("[data-recording-line]")
-/** The disk line up top, with the battery and what is wrong with the interface:
- *  one box that keeps its size whatever it says. */
+/** The disk line under it, with the battery and what is wrong with the
+ *  interface: one box that keeps its size whatever it says. */
 const health = (page: Page) => page.locator("[data-health]")
 /** The pill in the middle that said all was well, or what was not. */
 const pill = (page: Page) => page.getByRole("status", { name: "Take status" })
@@ -150,7 +153,7 @@ test("a second go at a song is measured against the first, under the take's name
 }) => {
   await secondGo(page)
   // The name, big over the clock, half its size and centred over it, so it
-  // reads from as far away. The number goes up beside RECORDING.
+  // reads from as far away. The number goes beside Recording, by Stop.
   await expect(takeName(page)).toHaveText("Viasna 2")
   await expect(topLine(page)).toHaveText(/^Recording\s*Take 2$/)
   const shape = await page.evaluate(() => {
@@ -171,37 +174,162 @@ test("a second go at a song is measured against the first, under the take's name
 
   // The song is up there already; the bar under the clock says only the time.
   await expect(page.getByText("Took 0:06 last time", { exact: true })).toHaveCount(1)
-  // On a bar that fills as the band gets further into it.
+  // On a bar that fills as the band gets further into it, read out in time.
   await expect(page.getByRole("progressbar", { name: "Against the last take" })).toHaveAttribute(
-    "aria-valuemax",
-    "6"
+    "aria-valuetext",
+    /^0:0\d of 0:06$/
   )
   await expect(pill(page)).toHaveCount(0)
 })
 
-test("a long name is cut short on one line, and moves nothing", async ({ page }) => {
-  await secondGo(page, "A very long name for a song about spring, summer and a little autumn")
+/** A box's edges, to the pixel's fraction. */
+const edges = (el: Element) => {
+  const r = el.getBoundingClientRect()
+  return { top: r.top, right: r.right, bottom: r.bottom, left: r.left }
+}
+
+test("the screen is the take and the tiles, with the status beside Stop", async ({ page }) => {
+  // The band's sixth take, its second go at Viasna: the bar against the
+  // first is under the clock.
+  await openBandApp(page)
+  await page.locator("#rehearsal-name").fill("Tuesday jam")
+  await startButton(page).click()
+  await page.getByRole("button", { name: /Record take 6/ }).click()
+  const stop = page.getByRole("button", { name: /^Stop/ })
+  await expect(stop).toBeVisible()
+  await settled(page)
+
+  // Two groups and a footer, with no header over them (Q1, «Статус у Stop»).
+  await expect(page.locator("header")).toHaveCount(0)
+  const take = page.locator("main [data-take]")
+  const tiles = page.locator("main [data-tiles]")
+  await expect(take.getByRole("heading", { level: 1 })).toHaveText("Viasna 2")
+  await expect(take.getByRole("timer")).toHaveCount(1)
+  await expect(take.getByRole("progressbar", { name: "Against the last take" })).toHaveCount(1)
+  await expect(tiles.getByRole("group")).toHaveCount(4)
+
+  // The status row is in the footer's left, beside Stop: Recording, as
+  // written, over the disk line.
+  const status = page.locator("footer [data-status-row]")
+  await expect(status).toHaveCount(1)
+  const recording = status.locator("[data-recording-line]")
+  await expect(recording).toHaveText(/^Recording\s*Take 6$/)
+  expect(await style(recording.getByText("Recording", { exact: true }), "text-transform")).toEqual({
+    "text-transform": "none",
+  })
+  const row = await status.evaluate(edges)
+  const line = await recording.evaluate(edges)
+  const disk = await status.locator("[data-health]").evaluate(edges)
+  expect(row.right, "left of Stop").toBeLessThanOrEqual((await stop.evaluate(edges)).left)
+  expect(disk.top, "the disk line under Recording").toBeGreaterThanOrEqual(line.bottom)
+  expect(Math.abs(disk.left - line.left), "both from the row's left").toBeLessThanOrEqual(0.5)
+
+  // The start screen's air: 32 round the screen, 48 between the groups, the
+  // bar 24 under the clock.
+  const main = page.locator("main")
+  expect(
+    await style(main, "padding-top", "padding-right", "padding-bottom", "padding-left")
+  ).toEqual({
+    "padding-top": "32px",
+    "padding-right": "32px",
+    "padding-bottom": "32px",
+    "padding-left": "32px",
+  })
+  const between = (await tiles.evaluate(edges)).top - (await take.evaluate(edges)).bottom
+  expect(Math.abs(between - 48), `${between} between the take and the tiles`).toBeLessThanOrEqual(0.5)
+  const clock = await take.getByRole("timer").evaluate(edges)
+  const bar = await take.locator("[data-against]").evaluate(edges)
+  expect(Math.abs(bar.top - clock.bottom - 24), "the bar under the clock").toBeLessThanOrEqual(0.5)
+
+  // The tiles one group on one fill, 6 px between them and 3 px of it round
+  // each well.
+  expect(
+    await style(
+      tiles,
+      "background-color",
+      "border-top-left-radius",
+      "border-top-right-radius",
+      "border-bottom-right-radius",
+      "border-bottom-left-radius",
+      "column-gap",
+      "padding-top"
+    )
+  ).toEqual({
+    "background-color": await colour(page, "--card"),
+    "border-top-left-radius": "12px",
+    "border-top-right-radius": "12px",
+    "border-bottom-right-radius": "12px",
+    "border-bottom-left-radius": "12px",
+    "column-gap": "6px",
+    "padding-top": "3px",
+  })
+})
+
+test("the bar against the last take is the shared progress bar, in grey", async ({ page }) => {
+  await secondGo(page)
+  const bar = page.getByRole("progressbar", { name: "Against the last take" })
+  await expect(bar).toHaveAttribute("data-slot", "progress")
+  // Grey, as it was: it is a reading, not the main action or what plays.
+  const fill = bar.locator("[data-slot='progress-indicator']")
+  const grey = await mixed(page, "--foreground", 55)
+  expect(await style(fill, "background-color")).toEqual({ "background-color": grey })
+  expect(grey, "not the accent").not.toBe(await colour(page, "--primary"))
+})
+
+test("a long take name wraps to two lines and is cut after that with its number", async ({
+  page,
+}) => {
+  const whole = "Kalychanka (slow version for the wedding, with the long intro the bride asked for)"
+  await openApp(page, { stress: "recording" })
+  await settled(page)
   const name = takeName(page)
-  await expect(name).toHaveText(/^A very long name .* 2$/)
-  // The title is what is cut; the go beside it stays whole.
-  const cut = await name.evaluate((el) => {
-    const title = el.querySelector("span.truncate")!
-    const go = title.nextElementSibling!.getBoundingClientRect()
+  // Read whole, whatever is drawn.
+  await expect(name).toHaveAccessibleName(`${whole} 2`)
+  const title = name.locator("[data-go-title]")
+  await expect(title).toHaveAttribute("data-lines", "2")
+  await expect(title).toHaveAttribute("data-cut")
+  // Cut after the second line, and the go after the "…" stays whole.
+  await expect(title).toHaveText(/…\s2$/)
+  const drawn = await title.evaluate((el) => {
+    const size = parseFloat(getComputedStyle(el).fontSize)
+    const box = el.getBoundingClientRect()
+    const go = el.querySelector("[data-go]")!.getBoundingClientRect()
     return {
-      short: title.scrollWidth > title.clientWidth,
-      oneLine: el.getBoundingClientRect().height < parseFloat(getComputedStyle(el).fontSize) * 1.5,
-      inside: el.getBoundingClientRect().right <= window.innerWidth,
-      ellipsis: getComputedStyle(title).textOverflow,
-      goWhole: go.width > 0 && go.right <= window.innerWidth,
+      lines: Math.round(box.height / (size * 1.1)),
+      goOnTheLast: Math.abs(go.bottom - box.bottom) <= size * 0.2,
+      goInside: go.width > 0 && go.left >= box.left && go.right <= box.right,
+      inside: box.left >= 0 && box.right <= window.innerWidth,
     }
   })
-  expect(cut).toEqual({
-    short: true,
-    oneLine: true,
-    inside: true,
-    ellipsis: "ellipsis",
-    goWhole: true,
-  })
+  expect(drawn).toEqual({ lines: 2, goOnTheLast: true, goInside: true, inside: true })
+  // Whole in the shared tooltip, on hover.
+  await title.hover()
+  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(whole)
+})
+
+test("a name on the edge of a second line settles, and then nothing moves", async ({ page }) => {
+  // Eight tracks in 960x680: the clock gives way for the tiles, and at the
+  // size that fits, this name is on one line where a little bigger it takes
+  // two. The two are fitted once, not one after the other for ever.
+  const tracks = ["Kick", "Snare", "Overheads", "Bass", "Guitar", "Keys", "Vocals", "Backing"].map(
+    (name, i) => ({ name, channel: i + 1 })
+  )
+  await page.setViewportSize({ width: 960, height: 680 })
+  await page.addInitScript(`window.__SESSION_TRACKS__ = ${JSON.stringify(tracks)};`)
+  await secondGo(page, "Forty characters in this song name here ok")
+  await settled(page)
+  const boxes = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll("main h1, main [role=timer], main [data-tiles]")].map((el) => {
+        const r = el.getBoundingClientRect()
+        return [r.x, r.y, r.width, r.height]
+      })
+    )
+  const first = await boxes()
+  for (let i = 0; i < 10; i++) {
+    await page.waitForTimeout(50)
+    expect(await boxes(), `${i * 50 + 50} ms on`).toEqual(first)
+  }
 })
 
 test("clips are counted, on the tile that clipped, and kept to the end of the take", async ({
@@ -309,7 +437,7 @@ test("running out of disk is said on the disk line, and past an hour the clock s
 
 test("a battery running low is said on the status line, and nothing moves", async ({ page }) => {
   await secondGo(page)
-  // The row the status line shares with RECORDING: it must not grow a line.
+  // The status row the line shares with Recording: it must not grow a line.
   const row = topLine(page).locator("..")
   const before = (await row.boundingBox())!.height
   await setFake(page, "__BATTERY__", 14)
@@ -325,6 +453,85 @@ test("a battery running low is said on the status line, and nothing moves", asyn
   await expect(page.getByText(/^Battery 14%/)).toHaveCount(1)
   await setFake(page, "__BATTERY__", null)
   await expect(page.getByText(/^Interface connected · room for/)).toHaveCount(1)
+})
+
+/** The take's time as m:ss or h:mm:ss, in seconds. */
+const seconds = (clock: string) => clock.split(":").reduce((s, part) => s * 60 + Number(part), 0)
+
+/** Moves the page's clock on until the take's clock reads `reading`: to a
+ *  second short of it, then on by the screen's own tick. */
+async function clockReads(page: Page, reading: string) {
+  const figures = page.locator("[data-clock]")
+  const short = seconds(reading) - seconds(await figures.innerText()) - 1
+  if (short > 0) await page.clock.fastForward(short * 1000)
+  await expect
+    .poll(
+      async () => {
+        const now = await figures.innerText()
+        if (seconds(now) < seconds(reading)) await page.clock.fastForward(200)
+        return now
+      },
+      { intervals: [50] }
+    )
+    .toBe(reading)
+}
+
+test("the seconds never move as the clock gains a figure", async ({ page }) => {
+  await secondGo(page)
+  await settled(page)
+  // The clock grows to the left from where "0:00" ends.
+  const right: Record<string, number> = {}
+  for (const reading of ["9:59", "10:00", "59:59", "1:00:00"]) {
+    await clockReads(page, reading)
+    right[reading] = await page.locator("[data-clock]").evaluate((el) => el.getBoundingClientRect().right)
+  }
+  for (const [reading, at] of Object.entries(right))
+    expect(Math.abs(at - right["9:59"]), `the right edge at ${reading}`).toBeLessThanOrEqual(0.5)
+})
+
+test("ten hours fit in a 960x820 window", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 820 })
+  await secondGo(page)
+  await settled(page)
+  await page.clock.fastForward(10 * 3600 * 1000)
+  await expect(page.locator("[data-clock]")).toHaveText(/^10:00:\d\d$/)
+  // Inside the screen's air: it starts no further left than the padding.
+  const { left, edge } = await page.evaluate(() => {
+    const main = document.querySelector("main")!
+    return {
+      left: document.querySelector("[data-clock]")!.getBoundingClientRect().left,
+      edge: main.getBoundingClientRect().left + parseFloat(getComputedStyle(main).paddingLeft),
+    }
+  })
+  expect(left).toBeGreaterThanOrEqual(edge - 0.5)
+})
+
+test("nothing moves when low space comes at 150 percent in 960x680", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 680 })
+  await secondGo(page, "Viasna", scaled(1.5))
+  // Past the last take's 0:06, so the bar is full and holds still.
+  await page.clock.fastForward(10_000)
+  await settled(page)
+  // Every box on the screen; inside the disk line only its own box, as its
+  // words are what changes.
+  const boxes = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll("main *, footer *")]
+        .filter((el) => !el.parentElement?.closest("[data-health]"))
+        .map((el) => {
+          const r = el.getBoundingClientRect()
+          const marks = [...el.attributes].filter((a) => a.name.startsWith("data-")).map((a) => a.name)
+          return { el: [el.tagName.toLowerCase(), ...marks].join(" "), at: [r.x, r.y, r.width, r.height] }
+        })
+    )
+  const before = await boxes()
+  await setFake(page, "__LOW_SPACE__", true)
+  await expect(page.getByText(/^Low disk space: room for about 5 min\./)).toHaveCount(1)
+  await settled(page)
+  const after = await boxes()
+  expect(after.length, "the same boxes").toBe(before.length)
+  const moved = after.filter((b, i) => b.at.some((v, k) => Math.abs(v - before[i].at[k]) > 0.5))
+  expect(moved.map((b) => b.el), "what moved").toEqual([])
 })
 
 test("the recording disk line says the start screen's words", async ({ page }) => {
