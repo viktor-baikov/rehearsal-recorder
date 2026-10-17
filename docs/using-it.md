@@ -69,8 +69,8 @@ a stereo track needs sound on both sides.
 
 The free disk space is shown under the tracks, as recording time: "Room for
 about 29 h 25 min of recording". It takes the number of tracks and the
-recording quality into account. When the disk is about to run out, its
-icon turns yellow and it says so: "Low disk space: room for about 12 min".
+recording quality into account. When the disk is nearly full, the line
+gets a yellow icon and says so: "Low disk space: room for about 12 min".
 
 ### Last time
 
@@ -242,12 +242,13 @@ laptop.
   nothing coming in, below −60 dB, goes dim, which is normal while someone
   is not playing.
 
-Under *Recording*, a line says that the interface is connected and how
-much recording time the disk has left: "Interface connected · room for
-about 3 h 20 min of recording". When the disk is about to run out, its icon
-turns yellow and it says "Low disk space: room for about 12 min. Free some
-up or finish the rehearsal." It does the same when the laptop runs on its
-battery with 20% or less left: "Battery 14%: plug the laptop in".
+At the bottom left, under the red *Recording*, a line says that the
+interface is connected and how much recording time the disk has left:
+"Interface connected · room for about 3 h 20 min of recording". When the
+disk is nearly full, the line gets a yellow icon and says "Low disk space:
+room for about 12 min. Free some up or finish the rehearsal." It does the
+same when the laptop runs on its battery with 20% or less left: "Battery
+14%: plug the laptop in".
 
 While a take records, the laptop does not go to sleep and its screen does
 not go dark or lock, whatever the system's own settings say. After Stop,
