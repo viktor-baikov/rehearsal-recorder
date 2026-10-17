@@ -15,17 +15,18 @@ opening.
   figures are in the app's own font instead of a typewriter face, every
   digit still as wide as the next. Buttons are in a regular weight, and a
   row of pills no longer shifts when another one is picked. Corners are
-  rounder, at 4, 8 or 12 px. In the light theme the page is a shade darker
-  than the white panels on it. In the player each track's lane is 56 px high
-  where it was over 90, so more tracks fit on a laptop's screen: **M** and
-  **S** are smaller, the *Mono* or *Stereo* under a track's name is gone,
-  and a track that records notes too has a plain line between its audio and
-  its notes instead of a dashed one. Dialogs, menus and notices come and go
-  more smoothly, and with the system's Reduce motion on, or while a take
-  records, they simply appear and a spinner stands still. While a take
-  records nothing moves but the meters and the clock: the red dot beside
-  *Recording* no longer pulses. A red button is full red in the dark theme
-  too.
+  rounder, at 4, 8 or 12 px. In the light theme the page is white, as the
+  panels on it are, with grey kept for the side panel and what is picked,
+  and grey text and lines are darker, so they read more easily. In the
+  player each track's lane is 56 px high where it was over 90, so more
+  tracks fit on a laptop's screen: **M** and **S** are smaller, the *Mono*
+  or *Stereo* under a track's name is gone, and a track that records notes
+  too has a plain line between its audio and its notes instead of a dashed
+  one. Dialogs, menus and notices come and go more smoothly, and with the
+  system's Reduce motion on, or while a take records, they simply appear and
+  a spinner stands still. While a take records nothing moves but the meters
+  and the clock: the red dot beside *Recording* no longer pulses. A red
+  button is full red in the dark theme too.
 - **Deleting, discarding and cropping happen at once, with Undo for 10 s.**
   Deleting a take or a rehearsal, clearing false starts, discarding a take
   and cropping one no longer ask first: a notice says what went, and its
@@ -119,6 +120,25 @@ opening.
   **S** are grey when on; the marker's labels are one switch that the arrow
   keys move along; on the map the part on screen is grey; and an empty set
   under **Next take** says how to fill it.
+- **The recording screen in two groups, with its status beside Stop.** The
+  take is one group: its name over the clock, and the bar against the last
+  take under them. The tracks are the other, a tile each, every tile on a
+  darker well of its own. There is no header any more: the red *Recording*,
+  the take's number, and the line about the disk or the battery under them
+  are at the bottom left, beside **Stop**. A long track name takes two lines
+  up its tile, and gets smaller where it must, down to two thirds of its
+  size; one still too long is cut, and pointing at its tile shows it whole.
+  A tile's figure in dB is never cut short: where it has no room it hides,
+  and pointing at the tile shows it. The clock always has room for ten
+  hours, so a take past 10:00:00 no longer runs off the left of a narrow
+  window. In a short window the clock and the take's name get smaller
+  first, then the tiles get lower, and only then does the screen scroll;
+  this is settled as the screen opens or the window changes, never during a
+  take. The room on the disk is said one way on the start screen and while
+  a take records, "Room for about 3 h 20 min of recording", and when it
+  runs low, "Low disk space: room for about 12 min", with a yellow icon
+  beside words in the text's colour, which read better than yellow words
+  did.
 
 ## 0.11.1
 

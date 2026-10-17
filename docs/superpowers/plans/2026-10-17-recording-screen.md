@@ -39,8 +39,8 @@ The inventory counted lines on 811868d. `ui/src` is the same on 8be3652 (PR #49 
 - **The other screens' rulings carry over:**
   - tips are for cut names and icon buttons;
   - a cut name is whole in the shared tooltip (`WholeTip`, `components/ui/whole.tsx`);
-  - groups are set apart by fill only;
-  - a well is the page's colour with 8 px corners and 3 px of the group's fill round it («Волна на подложке»).
+  - a group has no border. In dark it is set apart by its fill. In light the page is now white, as a card is (owner's pick «Белее», 2026-10-17 19:31Z), so air and the group's own lines set it apart;
+  - a well is `--well`, which is `var(--panel)` in both themes, with 8 px corners and 3 px of the group's fill round it («Волна на подложке»). It is not the page's colour any more.
 - **The owner's answers, exact:**
   - **Q1 «Статус у Stop»** (2026-10-17 18:19Z). The screen is two groups and a footer:
     - the take: its name, the clock, and the bar against the last take;
@@ -122,7 +122,7 @@ The inventory counted lines on 811868d. `ui/src` is the same on 8be3652 (PR #49 
 
 The inventory's §4 calls stand. This plan adds the following.
 
-- **One look for a well, the `--well` token.** Light is `--background`, as now. Dark is `--panel`, because a well on `--background` was faint on the group's `--card`: 1.09:1, against 1.11:1 in light. On `--panel` it is 1.14:1, as the Q2 mockup drew it. The tiles use `bg-well`, and so do the rehearsal screen's wells (`Waveform.tsx:125`, `NotesLane`), so the two screens keep one look.
+- **One look for a well, the `--well` token.** It is `--panel`, the side panel's colour, in both themes. In dark a well on `--background` was faint on the group's `--card`: 1.09:1, against 1.11:1 in light. On `--panel` it is 1.14:1, as the Q2 mockup drew it. In light, since the owner's palette «Белее» (2026-10-17 19:31Z), the page is white as the card is, so a well the page's colour would not show at all. The tiles use `bg-well`, and so do the rehearsal screen's wells (`Waveform.tsx:125`, `NotesLane`), so the two screens keep one look.
 - **The low disk line takes the shared warning look**: the icon in `warn` and the words in the text's colour, as `Alert`'s `warning` draws them (`ui/alert.tsx:25`). This applies on both screens and both themes. Amber words were 1.86:1 on the light footer. The Q2 mockup tried `warn-foreground` for the words, but the Alert's look is the one the system already has. Other screens' amber words (`Settings.tsx:734`, `:904`, `DraftsScreen.tsx:119`, `ShareDialog.tsx:120`) wait for their screens' PRs.
 - **The order things give way in a short window.**
   1. The clock and the take's name shrink, down to the clock's 3rem floor.
