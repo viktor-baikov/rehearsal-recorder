@@ -1,7 +1,9 @@
 import {
+  badNames,
   colour,
   EDGE,
   expect,
+  fitted,
   keyOn,
   mixed,
   nameTake,
@@ -58,7 +60,8 @@ const topLine = (page: Page) => page.locator("[data-recording-line]")
 /** The disk line under it, with the battery and what is wrong with the
  *  interface: one box that keeps its size whatever it says. */
 const health = (page: Page) => page.locator("[data-health]")
-/** The pill in the middle that said all was well, or what was not. */
+/** The pill in the middle of the header the screen had, which said all was
+ *  well or what was not. Neither is drawn now (Q1). */
 const pill = (page: Page) => page.getByRole("status", { name: "Take status" })
 
 /** CI's Linux draws the page in Liberation Sans, which has Arial's metrics
@@ -82,21 +85,6 @@ const reach = (page: Page) =>
       ? fill.getBoundingClientRect().height / side.getBoundingClientRect().height
       : 0
   })
-
-/** How each tile writes its track's name: up the tile, whole, from its
- *  bottom left corner, on the lines it says it has, and on two only where it
- *  has a space to break at — "Overheads" broken into "Overhea / ds" across a
- *  narrow tile is what this replaced. Returns the ones that do not. */
-const badNames = async (page: Page) =>
-  (await tileNames(page))
-    .map((n) => ({
-      name: n.name,
-      upward: n.upward,
-      lines: n.lines >= 1 && n.said === n.lines && (n.lines === 1 || /\s/.test(n.text)),
-      whole: n.whole,
-      corner: n.corner,
-    }))
-    .filter((n) => !Object.values(n).every(Boolean))
 
 test("a first take says what is recording, what clipped and what is silent", async ({ page }) => {
   // The fake holds Guitar at the top and Vocals at nothing, unless a test
@@ -291,28 +279,128 @@ test("a long take name wraps to two lines and is cut after that with its number"
 })
 
 test("a name on the edge of a second line settles, and then nothing moves", async ({ page }) => {
-  // Eight tracks in 960x680: the clock gives way for the tiles, and at the
-  // size that fits, this name is on one line where a little bigger it takes
-  // two. The two are fitted once, not one after the other for ever.
+  // Eight tracks, 960 wide: the clock gives way for the tiles, so a window a
+  // few pixels taller draws it, and the name over it, a little bigger.
+  // Somewhere between 600 and 780 tall this name goes from one line to two
+  // (here at 688, in Inter or in Arial), so a sweep every 4 px crosses that
+  // edge in whatever font the page has. Every line is 1.1 tall, one or two
+  // (TwoLines): with one line at 1, how tall the name is would depend on
+  // what it was last fitted to, and on the edge the name and the clock would
+  // be fitted one after the other for ever.
   const tracks = ["Kick", "Snare", "Overheads", "Bass", "Guitar", "Keys", "Vocals", "Backing"].map(
     (name, i) => ({ name, channel: i + 1 })
   )
-  await page.setViewportSize({ width: 960, height: 680 })
+  await page.setViewportSize({ width: 960, height: 600 })
   await page.addInitScript(`window.__SESSION_TRACKS__ = ${JSON.stringify(tracks)};`)
   await secondGo(page, "Forty characters in this song name here ok")
   await settled(page)
-  const boxes = () =>
-    page.evaluate(() =>
-      [...document.querySelectorAll("main h1, main [role=timer], main [data-tiles]")].map((el) => {
-        const r = el.getBoundingClientRect()
-        return [r.x, r.y, r.width, r.height]
-      })
+  /** What a fit changes, counted over 200 ms: the clock's size on the
+   *  column, the tiles' least height on their group, the name's lines and
+   *  words. A fit that does not settle changes them every frame. */
+  const changes = () =>
+    page.evaluate(
+      () =>
+        new Promise<number>((done) => {
+          let count = 0
+          const watch = new MutationObserver((seen) => (count += seen.length))
+          watch.observe(document.querySelector("main [data-take]")!.parentElement!, { attributes: true })
+          watch.observe(document.querySelector("main [data-tiles]")!, { attributes: true })
+          watch.observe(document.querySelector("main h1")!, {
+            attributes: true,
+            childList: true,
+            characterData: true,
+            subtree: true,
+          })
+          setTimeout(() => {
+            watch.disconnect()
+            done(count)
+          }, 200)
+        })
     )
-  const first = await boxes()
-  for (let i = 0; i < 10; i++) {
-    await page.waitForTimeout(50)
-    expect(await boxes(), `${i * 50 + 50} ms on`).toEqual(first)
+  const title = takeName(page).locator("[data-go-title]")
+  const seen: { height: number; lines: string | null; leading: number; changes: number }[] = []
+  for (let height = 600; height <= 780; height += 4) {
+    await page.setViewportSize({ width: 960, height })
+    // The fit, once, for the new size.
+    await page.waitForTimeout(100)
+    const after = await changes()
+    const { lines, leading } = await title.evaluate((el) => {
+      const cs = getComputedStyle(el)
+      return {
+        lines: el.getAttribute("data-lines"),
+        leading: parseFloat(cs.lineHeight) / parseFloat(cs.fontSize),
+      }
+    })
+    seen.push({ height, lines, leading: Math.round(leading * 100) / 100, changes: after })
   }
+  // The edge is crossed: one line at the bottom of the sweep, two at the top.
+  expect(seen[0].lines, `one line at ${seen[0].height}`).toBe("1")
+  expect(seen.at(-1)!.lines, `two lines at ${seen.at(-1)!.height}`).toBe("2")
+  expect(
+    seen.filter((s) => s.leading !== 1.1 || s.changes > 0),
+    "a leading not 1.1, on one line or two, or a fit that does not settle"
+  ).toEqual([])
+})
+
+/** In the page: each wording the take's name has, with the frames begun
+ *  since its first (0 for the first), and whether it came in a
+ *  ResizeObserver, where a frame is laid out but not yet drawn. One in the
+ *  observers of frame 1 is drawn with that frame; one after them, or later,
+ *  comes after a frame drawn with the wording before. */
+const WORDINGS = `{
+  window.__WORDINGS__ = [];
+  let frames = 0;
+  let first = null;
+  const note = (observing) => {
+    const text = document.querySelector("main h1 [data-go-title]")?.textContent;
+    if (text == null || window.__WORDINGS__.at(-1)?.text === text) return;
+    if (first === null) first = frames;
+    window.__WORDINGS__.push({ text, frame: frames - first, observing });
+  };
+  const tick = () => {
+    frames++;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  const Observer = window.ResizeObserver;
+  window.ResizeObserver = class extends Observer {
+    constructor(callback) {
+      super((...seen) => {
+        callback(...seen);
+        note(true);
+      });
+    }
+  };
+  new MutationObserver(() => note(false)).observe(document, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+  });
+}`
+
+test("a take name has its words before the screen is first drawn", async ({ page }) => {
+  // In 960x680 the clock gives way for the tiles, so the take's name is drawn
+  // smaller than the window's height alone makes it: the stress data's long
+  // name is whole on two lines, where at the window's size it is cut. It is
+  // first fitted at the window's size, before the screen's fit; fitted again
+  // at the screen's only after the first frame was drawn, it would show cut
+  // for that frame, and then whole.
+  await page.setViewportSize({ width: 960, height: 680 })
+  await page.addInitScript(WORDINGS)
+  await openApp(page, { stress: "recording" })
+  await settled(page)
+  type Wording = { text: string; frame: number; observing: boolean }
+  const wordings = await page.evaluate(
+    () => (window as unknown as { __WORDINGS__: Wording[] }).__WORDINGS__
+  )
+  // The go after a no-break space, so it never starts a line of its own.
+  expect(wordings.at(-1)?.text, "the name, whole").toBe(
+    "Kalychanka (slow version for the wedding, with the long intro the bride asked for)\u00a02"
+  )
+  expect(
+    wordings.filter((w) => w.frame > 1 || (w.frame === 1 && !w.observing)),
+    "words that came after a frame was drawn"
+  ).toEqual([])
 })
 
 test("clips are counted, on the tile that clipped, and kept to the end of the take", async ({
@@ -634,7 +722,7 @@ test("sixteen tracks still fit in one row, a stereo one split down the middle", 
     [1180, 820],
     [1024, 640],
   ]) {
-    await page.setViewportSize({ width, height })
+    await fitted(page, { width, height })
     await expect
       .poll(() =>
         page.evaluate(() => {
@@ -671,8 +759,8 @@ test("on a small laptop the take's name leaves the tiles room for their names", 
   page,
 }) => {
   // Eight tracks on a second go, with the bar under the clock: the tallest
-  // the screen gets. The name over the clock takes no more than the pill in
-  // the middle gave back.
+  // the screen gets. The take's name and the clock give way for the tiles
+  // before the tiles do, so the names keep their room.
   const tracks = ["Kick", "Snare", "Overheads", "Bass", "Guitar", "Keys", "Vocals", "Backing"].map(
     (name, i) => ({ name, channel: i + 1 })
   )
@@ -682,12 +770,12 @@ test("on a small laptop the take's name leaves the tiles room for their names", 
   await expect(page.locator("main [role=group]")).toHaveCount(8)
   for (const [width, height, longest] of [
     [1366, 768, "whole"],
-    // The narrowest tiles were already too short for "Overheads" here. The
-    // header keeps the room of its status line from the start, and "Backing"
-    // gets smaller for it.
+    // Here the clock has given way and the tiles stand at their 12.5rem,
+    // too short for "Overheads" at 2.25rem: it gets smaller (TileName), and
+    // in a font wider than Arial it could still be cut.
     [1024, 640, "may be cut"],
   ] as const) {
-    await page.setViewportSize({ width, height })
+    await fitted(page, { width, height })
     await expect
       .poll(() => page.evaluate(() => {
         const main = document.querySelector("main")!

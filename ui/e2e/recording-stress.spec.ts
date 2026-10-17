@@ -1,5 +1,6 @@
 import {
   expect,
+  fitted,
   openApp,
   openBandApp,
   scaled,
@@ -53,53 +54,6 @@ test("the recording stress data opens on take 33 with eight tiles", async ({ pag
 
 const HANNA = "Lead and backing vocals (Hanna)"
 const NORD = "Keys (Nord Stage 3 MIDI)"
-
-/** Sets the window to `size`, when given, and waits for the names to be
- *  fitted to their room: a fit lands after a resize, through the tile's
- *  ResizeObserver, so until two reads of every name, two frames apart,
- *  agree. */
-async function fitted(page: Page, size?: { width: number; height: number }) {
-  if (size) await page.setViewportSize(size)
-  await settled(page)
-  const read = () =>
-    page.evaluate(
-      () =>
-        new Promise<string>((done) =>
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() =>
-              done(
-                JSON.stringify(
-                  [...document.querySelectorAll("main [data-name]")].map((el) => {
-                    const r = el.getBoundingClientRect()
-                    return [
-                      el.getAttribute("data-name-px"),
-                      el.getAttribute("data-lines"),
-                      el.hasAttribute("data-cut"),
-                      r.x,
-                      r.y,
-                      r.width,
-                      r.height,
-                    ]
-                  })
-                )
-              )
-            )
-          )
-        )
-    )
-  let was = await read()
-  await expect
-    .poll(
-      async () => {
-        const now = await read()
-        const same = now === was
-        was = now
-        return same
-      },
-      { message: "names fitted" }
-    )
-    .toBe(true)
-}
 
 type Want = { px: number | [number, number]; lines?: 1 | 2; cut?: true }
 
@@ -306,7 +260,8 @@ test("the band's names are whole at 960x680", async ({ page }) => {
 // clock and the take's name first, down to the clock's 3rem; then the tiles,
 // from their 12.5rem down to 6rem; only then does the page scroll.
 
-/** The clock's size, the tiles' heights, and whether the screen scrolls. */
+/** The clock's size, how many tiles there are and their heights, and
+ *  whether the screen scrolls. */
 const giveWay = (page: Page) =>
   page.evaluate(() => {
     const main = document.querySelector("main")!
@@ -318,6 +273,9 @@ const giveWay = (page: Page) =>
       .getBoundingClientRect()
     return {
       clock: parseFloat(getComputedStyle(document.querySelector("[role=timer]")!).fontSize),
+      // With none, the least and the most of them would be ±Infinity, and
+      // pass whatever they are held against.
+      count: tiles.length,
       lowest: Math.min(...tiles),
       highest: Math.max(...tiles),
       down: main.scrollHeight > main.clientHeight + 1,
@@ -332,6 +290,7 @@ test("in a short window the clock gives way before the tiles", async ({ page }) 
   await openApp(page, { stress: "recording" })
   await settled(page)
   const seen = await giveWay(page)
+  expect(seen.count, "the tiles").toBe(8)
   // The tiles keep their 12.5rem; the clock is smaller than the window's
   // 19vh would make it, and no smaller than its 3rem.
   expect(seen.lowest, "the tiles").toBeGreaterThanOrEqual(200 - 0.5)
@@ -345,6 +304,7 @@ test("at 150 percent in 960x680 the tiles give way after the clock", async ({ pa
   await openApp(page, { stress: "recording", before: scaled(1.5) })
   await settled(page)
   const seen = await giveWay(page)
+  expect(seen.count, "the tiles").toBe(8)
   // The clock at its 3rem, and the tiles between 6rem and 12.5rem.
   expect(Math.abs(seen.clock - 72), `the clock at ${seen.clock}px`).toBeLessThanOrEqual(1)
   expect(seen.lowest, "the tiles").toBeGreaterThanOrEqual(144 - 0.5)
@@ -357,18 +317,17 @@ test("at 150 percent in 960x680 the tiles give way after the clock", async ({ pa
 test("tab reaches only stop", async ({ page }) => {
   await openApp(page, { stress: "recording" })
   await settled(page)
-  // From the page's start: a press on the screen's empty corner puts the
-  // keys' starting point there.
-  const main = (await page.locator("main").boundingBox())!
-  await page.mouse.click(main.x + 4, main.y + 4)
+  // From the page's start: nothing has been pressed or focused since it
+  // loaded (the fixture presses Record from a script, which moves no focus).
+  expect(await page.evaluate(() => document.activeElement === document.body), "on the page").toBe(true)
   const stop = page.getByRole("button", { name: /^Stop/ })
+  const on = () =>
+    stop.evaluate((el) =>
+      document.activeElement === el ? "Stop" : document.activeElement === document.body ? "the page" : "else"
+    )
   await page.keyboard.press("Tab")
-  await expect(stop).toBeFocused()
+  expect(await on(), "the first Tab").toBe("Stop")
   await page.keyboard.press("Tab")
-  // Off the page, or round to Stop again.
-  const away = await page.evaluate(() => {
-    const at = document.activeElement
-    return !at || at === document.body || at.textContent?.trim().startsWith("Stop")
-  })
-  expect(away, "the second Tab").toBe(true)
+  // Off the page, or round to Stop again: nothing else.
+  expect(["Stop", "the page"], "the second Tab").toContain(await on())
 })

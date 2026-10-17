@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import { WholeTip } from "@/components/ui/whole"
 import type { Take } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -64,7 +65,11 @@ function TwoLines({ title, go }: { title: string; go: number | null | undefined 
     measure()
     const el = box.current
     if (!el) return
-    const watch = new ResizeObserver(measure)
+    // The measure above comes before the screen's own fit (Recording's),
+    // which can draw the title smaller. The observer measures it again at
+    // that size before the frame is drawn, and flushSync puts the words it
+    // finds in that frame, not the next.
+    const watch = new ResizeObserver(() => flushSync(measure))
     watch.observe(el)
     return () => watch.disconnect()
   }, [measure])
