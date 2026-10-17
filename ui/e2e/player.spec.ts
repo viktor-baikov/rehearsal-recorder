@@ -2,6 +2,7 @@ import {
   TAKE_SECONDS,
   callCount,
   calls,
+  colour,
   dragRegion,
   expect,
   keyOn,
@@ -10,7 +11,9 @@ import {
   openApp,
   openHistory,
   recordTake,
+  setFake,
   startRehearsal,
+  style,
   test,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
@@ -492,6 +495,38 @@ test.describe("the mix", () => {
     await page.getByRole("button", { name: "Mute Guitar" }).click()
     await page.getByRole("button", { name: "Pause", exact: true }).click()
     await expect(meter).toHaveAttribute("aria-valuenow", "0")
+  })
+
+  test("a track's meter clips above the level the recording screen counts, not at it", async ({
+    page,
+  }) => {
+    // One clip level for both screens (CLIP_THRESHOLD): a peak of 0.97 is
+    // not a clip on the recording screen, so it is not red in the player.
+    await openApp(page, {
+      after: `
+        const real = window.pywebview.api.player_state;
+        window.pywebview.api.player_state = async () => {
+          const s = await real();
+          return s.levels && s.levels.Guitar
+            ? {...s, levels: {...s.levels, Guitar: [window.__GUITAR__ ?? 0.5]}}
+            : s;
+        };`,
+    })
+    await startRehearsal(page)
+    await recordTake(page, 1)
+    const meter = page.getByRole("meter", { name: "Guitar level" })
+    await page.getByRole("button", { name: "Play", exact: true }).click()
+    await setFake(page, "__GUITAR__", 0.97)
+    await expect(meter).toHaveAttribute("aria-valuenow", "97")
+    await expect(meter).not.toHaveAttribute("data-clipping")
+    expect(await style(meter.locator("[data-fill]"), "background-color")).not.toEqual({
+      "background-color": await colour(page, "--destructive"),
+    })
+    await setFake(page, "__GUITAR__", 0.98)
+    await expect(meter).toHaveAttribute("data-clipping")
+    expect(await style(meter.locator("[data-fill]"), "background-color")).toEqual({
+      "background-color": await colour(page, "--destructive"),
+    })
   })
 
   test("mute and solo reach Python, and Space plays rather than pressing them again", async ({

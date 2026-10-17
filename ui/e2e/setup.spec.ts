@@ -1,6 +1,7 @@
 import {
   callCount,
   calls,
+  colour,
   expect,
   expectedError,
   hold,
@@ -16,7 +17,9 @@ import {
   setFake,
   startButton,
   startRehearsal,
+  style,
   test,
+  themed,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -113,6 +116,26 @@ test("says the app's name with its logo, and fills the band in from the template
   ).toHaveText("18 inputs · 44.1 kHz · 24 bit")
   await expect.poll(() => keyOn(startButton(page))).toBe("Space")
 })
+
+for (const theme of ["dark", "light"] as const) {
+  test(`the start screen's low disk line is a warning in the text colour, in the ${theme} theme`, async ({
+    page,
+  }) => {
+    await openApp(page, { before: `${themed(theme)} window.__LOW_SPACE__ = true;` })
+    expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
+      theme === "dark"
+    )
+    // Said where the free space always is, in the shared warning look: the
+    // icon in warn, as the Alert draws it, and the words in the text's own
+    // colour, which amber does not pass in the light theme.
+    const words = page.getByText("Low disk space: room for about 5 min", { exact: true })
+    await expect(words).toHaveCount(1)
+    expect(await style(words, "color")).toEqual({ color: await colour(page, "--foreground") })
+    expect(await style(words.locator("svg"), "color")).toEqual({
+      color: await colour(page, "--warn"),
+    })
+  })
+}
 
 test.describe("the signal check", () => {
   /** How far along the Guitar row's bar reaches, 0..1. */

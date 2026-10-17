@@ -136,7 +136,7 @@ export function daysAgo(iso: string, now: Date = new Date()): string {
 }
 
 export function takesLabel(n: number): string {
-  return `${n} ${n === 1 ? "take" : "takes"}`
+  return `${n} ${nounFor(n, "take")}`
 }
 
 /** What a rehearsal's takes are, to the person about to leave it: kept, and
@@ -149,17 +149,17 @@ export function savedLine(n: number): string {
 
 /** "1 rehearsal", "4 rehearsals": how many rehearsals a song, take or mark was in. */
 export function rehearsalsLabel(n: number): string {
-  return n === 1 ? "1 rehearsal" : `${n} rehearsals`
+  return `${n} ${nounFor(n, "rehearsal")}`
 }
 
 /** "1 song", "6 songs": the songs in a set. */
 export function songsLabel(n: number): string {
-  return n === 1 ? "1 song" : `${n} songs`
+  return `${n} ${nounFor(n, "song")}`
 }
 
 /** "1 input", "18 inputs": the inputs a card has. */
 export function inputsLabel(n: number): string {
-  return n === 1 ? "1 input" : `${n} inputs`
+  return `${n} ${nounFor(n, "input")}`
 }
 
 /** "3 in the cloud": how many of a rehearsal's takes have a copy in the cloud folder. */
@@ -202,6 +202,26 @@ export function formatDuration(minutes: number): string {
 export function aboutDuration(minutes: number): string {
   const said = formatDuration(minutes)
   return said === "many hours" ? said : `about ${said}`
+}
+
+/** The free space, said one way on the start screen and while a take
+ *  records (C8, B8): "Room for about 3 h of recording", or, when it runs low,
+ *  "Low disk space: room for about 5 min". */
+export function diskLine(minutes: number, low: boolean): string {
+  return low
+    ? `Low disk space: room for ${aboutDuration(minutes)}`
+    : `Room for ${aboutDuration(minutes)} of recording`
+}
+
+/** "3 notes", "1 note", "1,234 notes": a count and its noun, one place for
+ *  the plural (B8). */
+export function countOf(n: number, one: string, many = `${one}s`): string {
+  return `${n.toLocaleString("en-US")} ${nounFor(n, one, many)}`
+}
+
+/** The noun alone, for a count drawn apart from it. */
+export function nounFor(n: number, one: string, many = `${one}s`): string {
+  return n === 1 ? one : many
 }
 
 /** Peak 0..1 as dBFS, for the meter caption. */

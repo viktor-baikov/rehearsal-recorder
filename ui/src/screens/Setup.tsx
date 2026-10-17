@@ -48,7 +48,7 @@ import { dismiss, notify } from "@/lib/notices"
 import { rise } from "@/lib/motion"
 import { useUpdate } from "@/lib/update"
 import { useWide } from "@/lib/wide"
-import { aboutDuration, inputsLabel, notConnected } from "@/lib/format"
+import { diskLine, inputsLabel, notConnected } from "@/lib/format"
 import { QUIET_THRESHOLD, fallBack } from "@/lib/levels"
 import { modeOf, notesProblem, recordsAudio, recordsNotes } from "@/lib/midi"
 import { findPort, portLine, type PortStanding } from "@/lib/midiPorts"
@@ -1071,18 +1071,18 @@ export function Setup({
       </Button>
 
       {/* Always on screen, not just when space runs low — while any track
-          records sound, which is what fills a disk. */}
+          records sound, which is what fills a disk. Low is a warning, not a
+          failure: the shared warning look, the icon in warn and the words in
+          the text's colour, as on the recording screen. */}
       {disk?.ok && disk.minutes !== undefined && channelCount > 0 && (
         <span
           className={cn(
             "flex items-center gap-1 text-xs",
-            disk.low ? "text-destructive" : "text-muted-foreground"
+            disk.low ? "text-foreground" : "text-muted-foreground"
           )}
         >
-          <HardDrive className="size-3.5" />
-          {disk.low
-            ? `Low disk space: room for ${aboutDuration(disk.minutes)}`
-            : `Room for ${aboutDuration(disk.minutes)} of recording`}
+          <HardDrive className={cn("size-3.5", disk.low && "text-warn")} />
+          {diskLine(disk.minutes, !!disk.low)}
         </span>
       )}
     </div>
