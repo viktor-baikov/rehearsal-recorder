@@ -65,12 +65,18 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   no library needs a migration, and is drawn with `--label-orange`
   (`lib/labels.ts`); orange stands sixth in Settings' picker, where blue
   was.
-- **F4. A group is set apart by its fill, with no border.** An outline round
-  every panel made the screens busy; a card a shade off the page does the
-  same job quietly. `--card` against `--background`, at least 0.03 apart in
-  lightness in both themes (`lib/theme.test.ts` checks it), and the `Card`
-  component (C7). Fields, buttons and dialogs keep their frames. The
-  bordered panels lose theirs as each screen is redone.
+- **F4. A group has no border.** An outline round every panel made the
+  screens busy. In the dark theme a card a shade lighter than the page sets
+  a group apart quietly. In the light theme the page is white, as the card
+  is: a grey page with grey fills on it read as grey on grey, and grey text
+  on them fell under 4.5 to 1. So there air and the group's own lines set
+  it apart, and grey is left for a side panel, what is selected, a hover
+  and a pill. On a side panel a card is white on the grey in both themes.
+  `lib/theme.test.ts` checks that the card is at least 0.03 lighter than
+  the page in dark and than a side panel in light, and that grey text reads
+  at 4.5 to 1 or more on every fill in both themes. The `Card` component
+  is C7. Fields, buttons and dialogs keep their frames. The bordered panels
+  lose theirs as each screen is redone.
 
 ### Type
 
@@ -250,7 +256,7 @@ piece of its own moves onto the shared one when it is redone.
   corners of its own. A notes lane is as tall as its plate needs. Master is
   its own group, a plate with the card's fill, sticky at the bottom in a
   band as wide as the lanes, so that no part of a lane shows beside it.
-- **C7. Group**, `Card`: a panel set apart by its fill (F4), with 12 px
+- **C7. Group**, `Card`: a panel set apart as F4 says, with 12 px
   corners, 16 px inside, and no border or shadow. A screen gives it more air
   with `className`. It takes the place of about 21 hand-made bordered boxes
   as each screen is redone. A group of rows, such as the start screen's
