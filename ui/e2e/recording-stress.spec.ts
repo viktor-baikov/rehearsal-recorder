@@ -2,6 +2,7 @@ import {
   expect,
   openApp,
   openBandApp,
+  scaled,
   setFake,
   settled,
   startRehearsal,
@@ -19,8 +20,9 @@ import type { Page } from "@playwright/test"
 
 test("the recording stress data opens on take 33 with eight tiles", async ({ page }) => {
   await openApp(page, { stress: "recording" })
-  // The second take of the longest song name, take 33 of the evening, recording.
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+  // The second take of the longest song name, take 33 of the evening,
+  // recording. Read whole: drawn, it is cut after two lines.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveAccessibleName(
     "Kalychanka (slow version for the wedding, with the long intro the bride asked for) 2"
   )
   await expect(page.getByText("Take 33", { exact: true })).toBeVisible()
@@ -298,4 +300,75 @@ test("the band's names are whole at 960x680", async ({ page }) => {
   ).toEqual([])
   // 35 px, within 1 px.
   expect(seen.find((n) => n.name === "Vocals")?.px ?? 0).toBeGreaterThanOrEqual(34)
+})
+
+// What gives way in a window too short for everything (the plan's calls): the
+// clock and the take's name first, down to the clock's 3rem; then the tiles,
+// from their 12.5rem down to 6rem; only then does the page scroll.
+
+/** The clock's size, the tiles' heights, and whether the screen scrolls. */
+const giveWay = (page: Page) =>
+  page.evaluate(() => {
+    const main = document.querySelector("main")!
+    const tiles = [...document.querySelectorAll("main [data-tiles] [role=group]")].map(
+      (t) => t.getBoundingClientRect().height
+    )
+    const stop = [...document.querySelectorAll("footer button")]
+      .find((b) => b.textContent?.startsWith("Stop"))!
+      .getBoundingClientRect()
+    return {
+      clock: parseFloat(getComputedStyle(document.querySelector("[role=timer]")!).fontSize),
+      lowest: Math.min(...tiles),
+      highest: Math.max(...tiles),
+      down: main.scrollHeight > main.clientHeight + 1,
+      mainSideways: main.scrollWidth > main.clientWidth + 1,
+      pageSideways: document.documentElement.scrollWidth > window.innerWidth,
+      stopInView: stop.top >= 0 && stop.bottom <= window.innerHeight,
+    }
+  })
+
+test("in a short window the clock gives way before the tiles", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 680 })
+  await openApp(page, { stress: "recording" })
+  await settled(page)
+  const seen = await giveWay(page)
+  // The tiles keep their 12.5rem; the clock is smaller than the window's
+  // 19vh would make it, and no smaller than its 3rem.
+  expect(seen.lowest, "the tiles").toBeGreaterThanOrEqual(200 - 0.5)
+  expect(seen.clock, "the clock").toBeLessThan(129)
+  expect(seen.clock, "the clock").toBeGreaterThanOrEqual(48)
+  expect(seen.down, "the screen scrolls").toBe(false)
+})
+
+test("at 150 percent in 960x680 the tiles give way after the clock", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 680 })
+  await openApp(page, { stress: "recording", before: scaled(1.5) })
+  await settled(page)
+  const seen = await giveWay(page)
+  // The clock at its 3rem, and the tiles between 6rem and 12.5rem.
+  expect(Math.abs(seen.clock - 72), `the clock at ${seen.clock}px`).toBeLessThanOrEqual(1)
+  expect(seen.lowest, "the tiles").toBeGreaterThanOrEqual(144 - 0.5)
+  expect(seen.highest, "the tiles").toBeLessThanOrEqual(300 + 0.5)
+  expect(seen.mainSideways, "the screen scrolls sideways").toBe(false)
+  expect(seen.pageSideways, "the page scrolls sideways").toBe(false)
+  if (seen.down) expect(seen.stopInView, "Stop, with the screen scrolling").toBe(true)
+})
+
+test("tab reaches only stop", async ({ page }) => {
+  await openApp(page, { stress: "recording" })
+  await settled(page)
+  // From the page's start: a press on the screen's empty corner puts the
+  // keys' starting point there.
+  const main = (await page.locator("main").boundingBox())!
+  await page.mouse.click(main.x + 4, main.y + 4)
+  const stop = page.getByRole("button", { name: /^Stop/ })
+  await page.keyboard.press("Tab")
+  await expect(stop).toBeFocused()
+  await page.keyboard.press("Tab")
+  // Off the page, or round to Stop again.
+  const away = await page.evaluate(() => {
+    const at = document.activeElement
+    return !at || at === document.body || at.textContent?.trim().startsWith("Stop")
+  })
+  expect(away, "the second Tab").toBe(true)
 })
