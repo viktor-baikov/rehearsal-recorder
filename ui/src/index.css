@@ -170,15 +170,16 @@ html[data-recording]
      the player. */
   color-scheme: light;
 
-  /* A group is set apart from the page by its fill, with no border (F4):
-     white cards on a page a shade darker. A side panel is darker than the
-     page, and a hover or a pill fill darker still. */
-  --background: oklch(0.965 0.002 286.3);
+  /* The page is white, as a card is: grey is left for what means something,
+     a side panel, what is selected, a hover and a pill. A group on the page
+     is set apart by air and its own lines, with no border (F4); on a side
+     panel a card is white on the grey. */
+  --background: oklch(1 0 0);
   --foreground: oklch(0.21 0.006 285.9);
   --card: oklch(1 0 0);
   /* A side panel set back from the screen it is beside, darker than the
      background in both themes, with cards on it as they are elsewhere. */
-  --panel: oklch(0.94 0.003 286.3);
+  --panel: oklch(0.96 0.003 286.3);
   --card-foreground: oklch(0.21 0.006 285.9);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.006 285.9);
@@ -189,18 +190,18 @@ html[data-recording]
   --secondary: oklch(0.935 0.004 286.3);
   --secondary-foreground: oklch(0.21 0.006 285.9);
   --muted: oklch(0.935 0.004 286.3);
-  --muted-foreground: oklch(0.55 0.014 285.9);
+  --muted-foreground: oklch(0.47 0.014 285.9);
   --accent: oklch(0.935 0.004 286.3);
   --accent-foreground: oklch(0.21 0.006 285.9);
   /* Selected is neutral, and so is what is on (F2); strong is Stop's alone. */
-  --selected: oklch(0.92 0.004 286.3);
+  --selected: oklch(0.885 0.004 286.3);
   --strong: oklch(0.21 0.006 285.9);
   --strong-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.58 0.22 27.3);
   --destructive-foreground: oklch(0.985 0 0);
   --overlay: oklch(0 0 0 / 0.6);
-  --border: oklch(0.92 0.004 286.3);
-  --input: oklch(0.92 0.004 286.3);
+  --border: oklch(0.87 0.004 286.3);
+  --input: oklch(0.87 0.004 286.3);
   --ring: oklch(0.56 0.24 266);
   --signal: oklch(0.72 0.18 149);
   --warn: oklch(0.79 0.16 76);
@@ -209,7 +210,7 @@ html[data-recording]
   /* Labels. The first four are the colours the four kinds of mark had —
      muted, destructive, warn and signal — so every mark keeps its look. Each
      reads as a tick on the waveform, a dot on a take's bar and a chip. */
-  --label-grey: oklch(0.55 0.014 285.9);
+  --label-grey: oklch(0.47 0.014 285.9);
   --label-red: oklch(0.58 0.22 27.3);
   --label-amber: oklch(0.79 0.16 76);
   --label-green: oklch(0.72 0.18 149);
