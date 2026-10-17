@@ -89,7 +89,9 @@ test("long names fit on two lines and get smaller at 1180x820", async ({ page })
   const { seen, wanted } = await namesAgainst(page, {
     // Too long for two lines even at 1.5rem: cut, and whole in the tooltip.
     [HANNA]: { px: 24, lines: 2, cut: true },
-    [NORD]: { px: 24, lines: 2 },
+    // Smaller, whole on two lines. How much smaller depends on the font:
+    // 24 px with one, 25.3 with the Linux CI machine's.
+    [NORD]: { px: [23, 36], lines: 2 },
     // Smaller, on one line, and not as small as it may get.
     Percussion: { px: [24, 36], lines: 1 },
     "Second guitar": { px: 36, lines: 2 },

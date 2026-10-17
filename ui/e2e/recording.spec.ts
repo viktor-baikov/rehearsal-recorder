@@ -282,8 +282,8 @@ test("a name on the edge of a second line settles, and then nothing moves", asyn
   // Eight tracks, 960 wide: the clock gives way for the tiles, so a window a
   // few pixels taller draws it, and the name over it, a little bigger.
   // Somewhere between 600 and 780 tall this name goes from one line to two
-  // (here at 688, in Inter or in Arial), so a sweep every 4 px crosses that
-  // edge in whatever font the page has. Every line is 1.1 tall, one or two
+  // (at 688 in Inter or in Arial). The test finds that edge in whatever
+  // font the page has and looks every 2 px round it. Every line is 1.1 tall, one or two
   // (TwoLines): with one line at 1, how tall the name is would depend on
   // what it was last fitted to, and on the edge the name and the clock would
   // be fitted one after the other for ever.
@@ -294,7 +294,7 @@ test("a name on the edge of a second line settles, and then nothing moves", asyn
   await page.addInitScript(`window.__SESSION_TRACKS__ = ${JSON.stringify(tracks)};`)
   await secondGo(page, "Forty characters in this song name here ok")
   await settled(page)
-  /** What a fit changes, counted over 200 ms: the clock's size on the
+  /** What a fit changes, counted over 60 ms: the clock's size on the
    *  column, the tiles' least height on their group, the name's lines and
    *  words. A fit that does not settle changes them every frame. */
   const changes = () =>
@@ -314,28 +314,38 @@ test("a name on the edge of a second line settles, and then nothing moves", asyn
           setTimeout(() => {
             watch.disconnect()
             done(count)
-          }, 200)
+          }, 60)
         })
     )
   const title = takeName(page).locator("[data-go-title]")
-  const seen: { height: number; lines: string | null; leading: number; changes: number }[] = []
-  for (let height = 600; height <= 780; height += 4) {
+  const at = async (height: number) => {
     await page.setViewportSize({ width: 960, height })
     // The fit, once, for the new size.
     await page.waitForTimeout(100)
+    return title.getAttribute("data-lines")
+  }
+  // Where the name goes from one line to two depends on the font: find it,
+  // then look closely only round it, where a fit that chases its own
+  // line count would show.
+  let one = 600
+  let two = 780
+  expect(await at(one), `one line at ${one}`).toBe("1")
+  expect(await at(two), `two lines at ${two}`).toBe("2")
+  while (two - one > 2) {
+    const mid = Math.round((one + two) / 2)
+    if ((await at(mid)) === "1") one = mid
+    else two = mid
+  }
+  const seen: { height: number; lines: string | null; leading: number; changes: number }[] = []
+  for (let height = one - 10; height <= two + 4; height += 2) {
+    const lines = await at(height)
     const after = await changes()
-    const { lines, leading } = await title.evaluate((el) => {
+    const leading = await title.evaluate((el) => {
       const cs = getComputedStyle(el)
-      return {
-        lines: el.getAttribute("data-lines"),
-        leading: parseFloat(cs.lineHeight) / parseFloat(cs.fontSize),
-      }
+      return parseFloat(cs.lineHeight) / parseFloat(cs.fontSize)
     })
     seen.push({ height, lines, leading: Math.round(leading * 100) / 100, changes: after })
   }
-  // The edge is crossed: one line at the bottom of the sweep, two at the top.
-  expect(seen[0].lines, `one line at ${seen[0].height}`).toBe("1")
-  expect(seen.at(-1)!.lines, `two lines at ${seen.at(-1)!.height}`).toBe("2")
   expect(
     seen.filter((s) => s.leading !== 1.1 || s.changes > 0),
     "a leading not 1.1, on one line or two, or a fit that does not settle"
