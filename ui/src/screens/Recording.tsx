@@ -4,7 +4,6 @@ import { HealthLine } from "@/components/HealthLine"
 import { Shell } from "@/components/Shell"
 import { StopTake } from "@/components/StopTake"
 import { GoTitle } from "@/components/TakeTitle"
-import { MidiTile } from "@/components/midi/MidiTile"
 import { TrackTile } from "@/components/TrackTile"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import {
@@ -348,8 +347,10 @@ export function Recording({
               : undefined
             if (heard && !recordsAudio(t))
               return (
-                <MidiTile
+                <TrackTile
                   key={t.name}
+                  kind="notes"
+                  surface="well"
                   name={t.name}
                   icon={t.icon}
                   port={port}
@@ -359,6 +360,7 @@ export function Recording({
             return (
               <TrackTile
                 key={t.name}
+                surface="well"
                 name={t.name}
                 icon={t.icon}
                 channel={t.channel}

@@ -7,6 +7,7 @@ import {
   hold,
   letGo,
   literally,
+  mixed,
   openApp,
   openEvening,
   recordTake,
@@ -88,20 +89,6 @@ async function goQuiet(page: Page, what = QUIET) {
 const lineWords = (page: Page) => line(page).locator("[data-slot='alert-description'] > span")
 
 const shows = (locator: Locator) => locator.isVisible()
-
-/** A theme colour mixed with nothing, `percent` strong, as the browser computes it. */
-const mixed = (page: Page, token: string, percent: number) =>
-  page.evaluate(
-    ([t, p]) => {
-      const probe = document.createElement("div")
-      probe.style.backgroundColor = `color-mix(in oklab, var(${t}) ${p}%, transparent)`
-      document.body.append(probe)
-      const value = getComputedStyle(probe).backgroundColor
-      probe.remove()
-      return value
-    },
-    [token, percent] as const
-  )
 
 test.describe("the transport", () => {
   test("near a mark the transport keeps its height at 960 px", async ({ page }) => {

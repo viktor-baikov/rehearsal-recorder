@@ -64,3 +64,38 @@ export const BesideItsWord: Story = {
     </div>
   ),
 }
+
+/* Upright, as a recording tile draws it: the meter fills the box it is
+   given and has no ground of its own, so here it stands on a well, as the
+   tile does. */
+const onAWell: Story["decorators"] = [
+  (Story) => (
+    <div className="h-48 w-24 overflow-hidden rounded-md bg-well">
+      <Story />
+    </div>
+  ),
+]
+
+/** Up from the bottom, with a line on top of its fill. A tile hands it how
+ *  far up its dB scale each side reaches, and what each side reads as
+ *  `levels`. */
+export const Up: Story = { args: { direction: "up", sides: [0.7] }, decorators: onAWell }
+
+/** A stereo track's two sides, side by side 2 px apart: a dead half shows. */
+export const UpStereo: Story = { args: { direction: "up", sides: [0.8, 0.35] }, decorators: onAWell }
+
+/** The highest it reached lately, held as a line while the fill falls back. */
+export const UpHeld: Story = {
+  args: { direction: "up", sides: [0.45, 0.4], held: [0.85, 0.6] },
+  decorators: onAWell,
+}
+
+/** A clip draws its side in destructive; the other side stays green. */
+export const UpClipped: Story = {
+  args: { direction: "up", sides: [1, 0.6], held: [1, 0.7], clipped: [true, false] },
+  decorators: onAWell,
+}
+
+/** Notes, grey as across, in the text's colour: a Both track's column or a
+ *  MIDI track's tile. */
+export const UpNotes: Story = { args: { direction: "up", tone: "notes", sides: [0.6] }, decorators: onAWell }

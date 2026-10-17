@@ -351,3 +351,42 @@ export const style = (el: Locator, ...props: string[]) =>
     const cs = getComputedStyle(e)
     return Object.fromEntries(ps.map((p) => [p, cs.getPropertyValue(p)]))
   }, props)
+
+/** A theme colour mixed with nothing, `percent` strong, as the browser computes it. */
+export const mixed = (page: Page, token: string, percent: number) =>
+  page.evaluate(
+    ([t, p]) => {
+      const probe = document.createElement("div")
+      probe.style.backgroundColor = `color-mix(in oklab, var(${t}) ${p}%, transparent)`
+      document.body.append(probe)
+      const value = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      return value
+    },
+    [token, percent] as const
+  )
+
+/** The four sides of a box, for `style`: its edge's colour and width. */
+export const EDGE = ["top", "right", "bottom", "left"].flatMap((s) => [`border-${s}-color`, `border-${s}-width`])
+
+/**
+ * The lines of the tooltip `el` shows once the pointer rests on it, one to a
+ * line; none when it shows none, long after one would have. It goes away
+ * first, so each call reads the tooltip afresh: poll it for one that changes.
+ */
+export async function tipLines(page: Page, el: Locator): Promise<string[]> {
+  const tip = page.getByRole("tooltip")
+  // Away in steps: a tooltip waits for the pointer to leave the way to it.
+  await page.mouse.move(0, 0, { steps: 8 })
+  await expect(tip).toHaveCount(0)
+  await el.hover()
+  // A tooltip shows 400 ms after the pointer comes; by twice that, none is none.
+  const shown = await tip.waitFor({ state: "attached", timeout: 800 }).then(
+    () => true,
+    () => false
+  )
+  if (!shown) return []
+  return tip.evaluate((t) =>
+    [...t.children].filter((c) => c.tagName === "DIV").map((c) => c.textContent ?? "")
+  )
+}
