@@ -301,8 +301,8 @@ piece of its own moves onto the shared one when it is redone.
   of it: its levels, with a narrow column for its notes on Both, or with
   `kind="notes"` a MIDI track's notes alone. Its fill is `Meter` up, and its
   name is `TileName` (B6). On the recording screen the tiles are one group
-  on the card's fill, each tile on a well of its own (`surface="well"`,
-  C7), and reha.stream shows them so. A take drawn as a bar is as tall as
+  on the card's fill, each tile on a well of its own (C7), and reha.stream
+  shows them so. A take drawn as a bar is as tall as
   it ran against the longest, through `drawnLength` (`lib/takeScale.ts`),
   never under a few pixels. "Selected" has two looks instead of seven: the
   white plate inside a switch, and a grey fill for a row, pill, tab or
