@@ -67,6 +67,31 @@ test("on Windows, the Windows download is the button", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Download for macOS" })).toHaveAttribute("href", MAC_ZIP)
 })
 
+test("the health piece is as wide as its words, with no room held for a longer sentence", async ({
+  page,
+}) => {
+  // The app's line holds, unseen, the room of the longest thing it can say,
+  // so that it never moves during a take. A still picture has nothing to
+  // keep still for: its box ends where its words do. Where the tile is wide
+  // enough for the sentence on one line (800 px, two columns) the held room
+  // would show as empty card beside the words; where the tile is narrow, the
+  // words wrap and fill it either way.
+  for (const width of [390, 800, 1280]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/")
+    const health = page.locator("#features [data-health]")
+    await expect(health).toHaveCount(1)
+    const words = health.getByText("Interface connected · room for")
+    await expect(words).toBeVisible()
+    await health.scrollIntoViewIfNeeded()
+    // The line the words are on: the icon, the gap and the words.
+    const said = (await words.locator("..").boundingBox())!
+    const box = (await health.boundingBox())!
+    expect(box.width, `width at ${width} px`).toBeLessThanOrEqual(said.width + 2)
+    expect(box.height, `height at ${width} px`).toBeLessThanOrEqual(said.height + 2)
+  }
+})
+
 test("the tiles show the app's own pieces", async ({ page }) => {
   await page.goto("/")
   const tiles = page.locator("#features")

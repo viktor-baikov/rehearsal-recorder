@@ -93,8 +93,9 @@ export async function openApp(
   }
   if (after) await page.addInitScript(after)
   await page.goto("/", { waitUntil })
-  // The fixture presses Record itself: the screen is up once the clock is.
-  if (stress) await expect(page.locator("[role=timer]")).toBeVisible()
+  // The fixture presses Record itself, and keeps trying for 10 s: the screen
+  // is up once the clock is.
+  if (stress) await expect(page.locator("[role=timer]")).toBeVisible({ timeout: 10_000 })
 }
 
 /**

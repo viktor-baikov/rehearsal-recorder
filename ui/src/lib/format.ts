@@ -136,7 +136,7 @@ export function daysAgo(iso: string, now: Date = new Date()): string {
 }
 
 export function takesLabel(n: number): string {
-  return `${n} ${n === 1 ? "take" : "takes"}`
+  return `${n} ${nounFor(n, "take")}`
 }
 
 /** What a rehearsal's takes are, to the person about to leave it: kept, and
@@ -149,17 +149,17 @@ export function savedLine(n: number): string {
 
 /** "1 rehearsal", "4 rehearsals": how many rehearsals a song, take or mark was in. */
 export function rehearsalsLabel(n: number): string {
-  return n === 1 ? "1 rehearsal" : `${n} rehearsals`
+  return `${n} ${nounFor(n, "rehearsal")}`
 }
 
 /** "1 song", "6 songs": the songs in a set. */
 export function songsLabel(n: number): string {
-  return n === 1 ? "1 song" : `${n} songs`
+  return `${n} ${nounFor(n, "song")}`
 }
 
 /** "1 input", "18 inputs": the inputs a card has. */
 export function inputsLabel(n: number): string {
-  return n === 1 ? "1 input" : `${n} inputs`
+  return `${n} ${nounFor(n, "input")}`
 }
 
 /** "3 in the cloud": how many of a rehearsal's takes have a copy in the cloud folder. */

@@ -365,8 +365,17 @@ for (const theme of ["dark", "light"] as const) {
     expect(await style(words.locator("..").locator("svg"), "color")).toEqual({
       color: await colour(page, "--warn"),
     })
-    // Quiet when all is well.
+    // A low battery is the same line and the same look.
     await setFake(page, "__LOW_SPACE__", false)
+    await setFake(page, "__BATTERY__", 14)
+    const battery = page.getByText("Battery 14%: plug the laptop in", { exact: true })
+    await expect(battery).toHaveCount(1)
+    expect(await style(battery, "color")).toEqual({ color: await colour(page, "--foreground") })
+    expect(await style(battery.locator("..").locator("svg"), "color")).toEqual({
+      color: await colour(page, "--warn"),
+    })
+    // Quiet when all is well.
+    await setFake(page, "__BATTERY__", null)
     const fine = page.getByText(/^Interface connected · room for /)
     await expect(fine).toHaveCount(1)
     expect(await style(fine, "color")).toEqual({ color: await colour(page, "--muted-foreground") })
@@ -390,6 +399,7 @@ test("the health line keeps its size when low space comes", async ({ page }) => 
     ] as const) {
       await setFake(page, name, value)
       await expect.poll(said, { message: `${name} at ${width}` }).not.toBe(was)
+      await settled(page)
       const after = (await line.boundingBox())!
       for (const key of ["x", "y", "width", "height"] as const)
         expect(Math.abs(after[key] - before[key]), `${key} at ${width} with ${name}`).toBeLessThanOrEqual(0.5)

@@ -18,9 +18,11 @@ const connected = (minutes: number) => `Interface connected · ${lower(diskLine(
 const lowSpace = (minutes: number) =>
   `${diskLine(minutes, true)}. Free some up or finish the rehearsal.`
 
-/** The longest the line can say, held unseen under it from the start, so the
- *  room it takes never changes while a take records (B4). Past 48 h the
- *  estimate is "many hours", so 48 h 59 min is the longest it writes. */
+/** The longest the line can say while a take records, held unseen under it
+ *  from the start, so the room it takes never changes during the take (B4).
+ *  Past 48 h the estimate is "many hours", so 48 h 59 min is the longest it
+ *  writes. An error is not held: it ends the take, and its words are
+ *  Python's, as long as they are. */
 const LONGEST = [connected(48 * 60 + 59), lowSpace(LOW_SPACE_MINUTES - 1)]
 
 function Line({
@@ -63,17 +65,22 @@ function Line({
  * screens: the icon in warn and the words in the text's colour, as Alert
  * draws it.
  *
- * It holds the room of the longest thing it can say, so it never moves what
- * is beside it.
+ * It holds the room of the longest thing it can say during a take, so it
+ * never moves what is beside it.
  */
 export function HealthLine({
   health,
   align = "end",
+  hold = true,
 }: {
   health: RecordingHealth | null
   /** Where the line stands in the room it holds: flush right at the top of
    *  the screen, flush left in the footer. */
   align?: "start" | "end"
+  /** Keeps the room of the longest sentence, unseen. A still picture of the
+   *  line, which nothing moves beside, passes false: its box is as wide as
+   *  its words. */
+  hold?: boolean
 }) {
   const battery = health?.battery_percent
   const lowBattery = battery != null && battery <= LOW_BATTERY
@@ -98,9 +105,8 @@ export function HealthLine({
         health?.error ? "text-destructive" : warn ? "text-foreground" : "text-muted-foreground"
       )}
     >
-      {LONGEST.map((t) => (
-        <Line key={t} icon="disk" text={t} unseen />
-      ))}
+      {hold &&
+        LONGEST.map((t) => <Line key={t} icon="disk" text={t} unseen />)}
       <Line
         icon={lowBattery && !health?.error && !health?.low_space ? "battery" : "disk"}
         text={text}

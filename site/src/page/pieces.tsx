@@ -158,7 +158,7 @@ export function shots({
       pieces: (
         <>
           <Piece label="Interface connected, room for about 28 hours 40 minutes more">
-            <HealthLine health={{ recording: true, minutes_left: 1720 }} />
+            <HealthLine health={{ recording: true, minutes_left: 1720 }} hold={false} />
           </Piece>
           <Piece label="The Bass and Guitar tiles while recording; the Guitar tile is red and says clipped 3 times">
             <Tracks />

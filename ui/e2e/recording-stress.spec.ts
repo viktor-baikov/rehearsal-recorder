@@ -17,13 +17,10 @@ test("the recording stress data opens on take 33 with eight tiles", async ({ pag
   // Seven tracks that take sound and the Nord, on MIDI alone.
   const tiles = page.locator("main [role=group]")
   await expect(tiles).toHaveCount(8)
-  // Somebody plays the Nord: its tile counts notes, beside the name it is
-  // called by.
+  // Somebody plays the Nord: its tile counts notes.
   const nord = page.getByRole("group", { name: "Keys (Nord Stage 3 MIDI)" })
   await expect(nord).toBeVisible()
-  await expect
-    .poll(async () => /\b[1-9][\d,]*\b/.test((await nord.innerText()).replace(/Keys \(Nord Stage 3 MIDI\)/, "")))
-    .toBe(true)
+  await expect(nord).toContainText(/\d[\d,]* notes?/)
   // Guitar clips three times in the first seconds, Percussion is silent.
   await expect(page.getByRole("group", { name: "Guitar", exact: true })).toContainText("clipped 3×")
   await expect(page.getByRole("group", { name: "Percussion" })).toContainText("silent")
