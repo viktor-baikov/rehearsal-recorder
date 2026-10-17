@@ -4,6 +4,7 @@ import {
   expectedError,
   hold,
   letGo,
+  mixed,
   openApp,
   openBandApp,
   problemBar,
@@ -132,14 +133,14 @@ function rowsOf(page: Page) {
 
 /**
  * The rows touch, with no line between them, and every picture is on its
- * well: the page's colour with 8 px corners, 3 px of the group's fill above
+ * well: the well's colour with 8 px corners, 3 px of the group's fill above
  * and below it. A Both track's audio and its notes (the row after, with
  * data-paired) are one well: nothing pads them apart, their corners where they
  * meet are square, and the notes are under a 1 px line in the border colour.
  */
 async function expectWells(page: Page) {
   const rows = await rowsOf(page)
-  const well = await colour(page, "--background")
+  const well = await colour(page, "--well")
   const line = await colour(page, "--border")
   expect(rows.length, "rows in the group").toBeGreaterThan(0)
   rows.forEach((row, i) => {
@@ -365,7 +366,7 @@ test.describe("track lanes", () => {
         theme === "dark"
       )
       const card = await colour(page, "--card")
-      const well = await colour(page, "--background")
+      const well = await colour(page, "--well")
       await expect(group(page)).toHaveCount(1)
       expect(
         await style(
@@ -402,7 +403,7 @@ test.describe("track lanes", () => {
           "border-top-left-radius": "0px",
           "border-top-width": "0px",
         })
-      // Each picture is on its well: the page's colour, 8 px corners
+      // Each picture is on its well: the well's colour, 8 px corners
       // (band(4) has no Both track).
       const pictures = await page.locator("[data-lane] > div, [data-notes-lane]").all()
       expect(pictures).toHaveLength(4)
@@ -484,7 +485,7 @@ test.describe("track lanes", () => {
       )
       await settled(page)
       const line = await colour(page, "--border")
-      const well = await colour(page, "--background")
+      const well = await colour(page, "--well")
       const wave = lane(page, "Drums")
       const notes = notesLane(page, "Drums")
       const audioRow = await box(rowOf(wave))
@@ -561,6 +562,29 @@ test.describe("track lanes", () => {
     })
   }
 
+  // One look for a well on both screens (the recording screen's tiles too):
+  // the side panel's colour, in both themes.
+  for (const theme of ["dark", "light"] as const) {
+    test(`the rehearsal screen's wells are --well, in the ${theme} theme`, async ({ page }) => {
+      await review(page, BOTH, themed(theme))
+      await settled(page)
+      const well = await colour(page, "--well")
+      expect(well, "the theme has a well").not.toBe("rgba(0, 0, 0, 0)")
+      expect(well, "a well is the panel's colour").toBe(await colour(page, "--panel"))
+      // Drums' waveform and notes, Gtr's waveform, Keys' notes.
+      const pictures = await page.locator("[data-lane] > div, [data-notes-lane]").all()
+      expect(pictures).toHaveLength(4)
+      for (const el of pictures) expect(await style(el, "background-color")).toEqual({ "background-color": well })
+      // The names of a notes lane's octaves stand on the well's colour, so
+      // a note under one does not run through it.
+      const octave = notesLane(page, "Keys").getByText(/^C\d$/).first()
+      await expect(octave).toBeVisible()
+      expect(await style(octave, "background-color")).toEqual({
+        "background-color": await mixed(page, "--well", 85),
+      })
+    })
+  }
+
   test("a MIDI-only lane is a row of the group on a well of its own", async ({ page }) => {
     await review(page, BOTH)
     await settled(page)
@@ -589,7 +613,7 @@ test.describe("track lanes", () => {
       "border-top-right-radius": "8px",
       "border-bottom-right-radius": "8px",
       "border-bottom-left-radius": "8px",
-      "background-color": await colour(page, "--background"),
+      "background-color": await colour(page, "--well"),
     })
     // Its plate is a row's plate, as an audio track's: no fill of its own,
     // and the same padding.

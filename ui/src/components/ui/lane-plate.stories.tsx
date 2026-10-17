@@ -205,9 +205,10 @@ const wide: Decorator[] = [
 ]
 
 /** The lanes group in the player: three rows on one fill, with no line
- *  between them. Each picture sits on its own well, the page's colour with
- *  8 px corners and 3 px of the group's fill above and below it; the second
- *  row is a Both track's notes, sharing the first's well under its line. */
+ *  between them. Each picture sits on its own well, the side panel's colour
+ *  (`--well`, `var(--panel)`) with 8 px corners and 3 px of the group's fill
+ *  above and below it; the second row is a Both track's notes, sharing the
+ *  first's well under its line. */
 export const Grouped: Story = {
   decorators: wide,
   render: () => (

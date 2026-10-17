@@ -1,6 +1,7 @@
 import {
   callCount,
   calls,
+  colour,
   expect,
   expectedError,
   hold,
@@ -16,7 +17,9 @@ import {
   setFake,
   startButton,
   startRehearsal,
+  style,
   test,
+  themed,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -38,12 +41,19 @@ const FOUR = [
  * each, by the names Python knows them by: the names they had when it began.
  */
 async function openFour(page: Page, levels: Record<string, number[]> = {}, before = "") {
-  await page.addInitScript((heard) => {
-    ;(window as unknown as { __MONITOR_LEVELS__: unknown }).__MONITOR_LEVELS__ = heard
-  }, levels)
+  // Both handed over as data, never written into the page's code.
+  await page.addInitScript(
+    ([heard, four]) => {
+      const w = window as unknown as { __MONITOR_LEVELS__: unknown; __FOUR__: unknown }
+      w.__MONITOR_LEVELS__ = heard
+      w.__FOUR__ = four
+    },
+    [levels, FOUR] as const
+  )
   await openApp(page, {
     before,
-    after: `window.pywebview.api.load_default_tracks = async () => ({tracks: ${JSON.stringify(FOUR)}});`,
+    after:
+      "window.pywebview.api.load_default_tracks = async () => ({tracks: structuredClone(window.__FOUR__)});",
   })
   await expect(rows(page)).toHaveCount(4)
 }
@@ -113,6 +123,26 @@ test("says the app's name with its logo, and fills the band in from the template
   ).toHaveText("18 inputs · 44.1 kHz · 24 bit")
   await expect.poll(() => keyOn(startButton(page))).toBe("Space")
 })
+
+for (const theme of ["dark", "light"] as const) {
+  test(`the start screen's low disk line is a warning in the text colour, in the ${theme} theme`, async ({
+    page,
+  }) => {
+    await openApp(page, { before: `${themed(theme)} window.__LOW_SPACE__ = true;` })
+    expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
+      theme === "dark"
+    )
+    // Said where the free space always is, in the shared warning look: the
+    // icon in warn, as the Alert draws it, and the words in the text's own
+    // colour, which amber does not pass in the light theme.
+    const words = page.getByText("Low disk space: room for about 5 min", { exact: true })
+    await expect(words).toHaveCount(1)
+    expect(await style(words, "color")).toEqual({ color: await colour(page, "--foreground") })
+    expect(await style(words.locator("..").locator("svg"), "color")).toEqual({
+      color: await colour(page, "--warn"),
+    })
+  })
+}
 
 test.describe("the signal check", () => {
   /** How far along the Guitar row's bar reaches, 0..1. */

@@ -11,6 +11,7 @@ const FAKE = fileURLToPath(new URL("./fake-bridge.js", import.meta.url))
 const BAND = fileURLToPath(new URL("./band.js", import.meta.url))
 const STRESS = fileURLToPath(new URL("./stress.js", import.meta.url))
 const STRESS_REHEARSAL = fileURLToPath(new URL("./stress-rehearsal.js", import.meta.url))
+const STRESS_RECORDING = fileURLToPath(new URL("./stress-recording.js", import.meta.url))
 
 /**
  * Every test fails on an error in the page: an exception, or anything the
@@ -59,23 +60,42 @@ export function expectedError(errors: string[], pattern: RegExp) {
  * `before` runs ahead of the fake, to set it up: window.__LEVELS__,
  * window.__DRAFTS__ and the rest that fake-bridge.js reads. `after` runs once
  * the fake is in place, to change one of its answers.
+ *
+ * With `stress: "recording"`, the band and stress-rehearsal.js are under the
+ * fake and stress-recording.js over them: take 33, the second of the longest
+ * song name, is recording when the app comes up, and this returns once its
+ * clock is on screen. `before` and `after` still wrap it.
  */
 export async function openApp(
   page: Page,
   {
     before,
     after,
+    stress,
     waitUntil = "load",
   }: {
     before?: string
     after?: string
+    stress?: "recording"
     waitUntil?: "load" | "domcontentloaded" | "networkidle"
   } = {}
 ) {
   if (before) await page.addInitScript(before)
-  await page.addInitScript({ path: FAKE })
+  if (stress) {
+    // One script, not two, as in openBandApp: the fake's top-level `let`s are
+    // not seen from a second init script.
+    const source = [FAKE, BAND, STRESS_REHEARSAL, STRESS_RECORDING]
+      .map((f) => readFileSync(f, "utf-8"))
+      .join("\n")
+    await page.addInitScript(source)
+  } else {
+    await page.addInitScript({ path: FAKE })
+  }
   if (after) await page.addInitScript(after)
   await page.goto("/", { waitUntil })
+  // The fixture presses Record itself, and keeps trying for 10 s: the screen
+  // is up once the clock is.
+  if (stress) await expect(page.locator("[role=timer]")).toBeVisible({ timeout: 10_000 })
 }
 
 /**
@@ -331,3 +351,197 @@ export const style = (el: Locator, ...props: string[]) =>
     const cs = getComputedStyle(e)
     return Object.fromEntries(ps.map((p) => [p, cs.getPropertyValue(p)]))
   }, props)
+
+/** A theme colour mixed with nothing, `percent` strong, as the browser computes it. */
+export const mixed = (page: Page, token: string, percent: number) =>
+  page.evaluate(
+    ([t, p]) => {
+      const probe = document.createElement("div")
+      probe.style.backgroundColor = `color-mix(in oklab, var(${t}) ${p}%, transparent)`
+      document.body.append(probe)
+      const value = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      return value
+    },
+    [token, percent] as const
+  )
+
+/** The four sides of a box, for `style`: its edge's colour and width. */
+export const EDGE = ["top", "right", "bottom", "left"].flatMap((s) => [`border-${s}-color`, `border-${s}-width`])
+
+/**
+ * The lines of the tooltip `el` shows once the pointer rests on it, one to a
+ * line; none when it shows none, long after one would have. It goes away
+ * first, so each call reads the tooltip afresh: poll it for one that changes.
+ */
+export async function tipLines(page: Page, el: Locator): Promise<string[]> {
+  const tip = page.getByRole("tooltip")
+  // Away in steps: a tooltip waits for the pointer to leave the way to it.
+  await page.mouse.move(0, 0, { steps: 8 })
+  await expect(tip).toHaveCount(0)
+  await el.hover()
+  // A tooltip shows 400 ms after the pointer comes; by twice that, none is none.
+  const shown = await tip.waitFor({ state: "attached", timeout: 800 }).then(
+    () => true,
+    () => false
+  )
+  if (!shown) return []
+  return tip.evaluate((t) =>
+    [...t.children].filter((c) => c.tagName === "DIV").map((c) => c.textContent ?? "")
+  )
+}
+
+/**
+ * How each tile on the recording screen draws its track's name, in order:
+ * - `px`, its size as drawn;
+ * - `lines`, the lines it is drawn on (up the tile a line is as wide as its
+ *   line height), and `said`, the lines it says it has (data-lines);
+ * - `cut`, whether it says it is cut (data-cut);
+ * - `whole`: not cut, all of it, on two lines at most, no taller than its
+ *   box;
+ * - `upward` and `corner`: written up the tile from its bottom left corner;
+ * - `text`, what is drawn.
+ */
+export const tileNames = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("main [role=group]")].map((t) => {
+      const name = t.getAttribute("aria-label") ?? ""
+      const el = t.querySelector("[data-name]")
+      if (!el)
+        return { name, text: "", px: 0, lines: 0, said: 0, cut: false, whole: false, upward: false, corner: false }
+      const cs = getComputedStyle(el)
+      const tile = t.getBoundingClientRect()
+      const r = el.getBoundingClientRect()
+      const lines = Math.round(r.width / parseFloat(cs.lineHeight))
+      const cut = el.hasAttribute("data-cut")
+      const text = el.textContent ?? ""
+      return {
+        name,
+        text,
+        px: parseFloat(cs.fontSize),
+        lines,
+        said: Number(el.getAttribute("data-lines")),
+        cut,
+        whole: !cut && text === name && lines <= 2 && el.scrollHeight <= el.clientHeight + 1,
+        upward: cs.writingMode === "vertical-rl" && cs.transform !== "none",
+        corner: r.left - tile.left < 24 && tile.bottom - r.bottom < 24,
+      }
+    })
+  )
+
+/** How each tile writes its track's name: up the tile, whole, from its
+ *  bottom left corner, on the lines it says it has, and on two only where it
+ *  has a space to break at — "Overheads" broken into "Overhea / ds" across a
+ *  narrow tile is what this replaced. Returns the ones that do not. */
+export const badNames = async (page: Page) =>
+  (await tileNames(page))
+    .map((n) => ({
+      name: n.name,
+      upward: n.upward,
+      lines: n.lines >= 1 && n.said === n.lines && (n.lines === 1 || /\s/.test(n.text)),
+      whole: n.whole,
+      corner: n.corner,
+    }))
+    .filter((n) => !Object.values(n).every(Boolean))
+
+/**
+ * Sets the window to `size`, when given, and waits for the tiles' names to
+ * be fitted to their room: a fit lands after a resize, through the tile's
+ * ResizeObserver, so until two reads of every name, two frames apart, agree.
+ * A screen with no names drawn is not fitted: it fails, rather than pass on
+ * no tiles at all.
+ */
+export async function fitted(page: Page, size?: { width: number; height: number }) {
+  if (size) await page.setViewportSize(size)
+  await settled(page)
+  const read = () =>
+    page.evaluate(
+      () =>
+        new Promise<string>((done) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              done(
+                JSON.stringify(
+                  [...document.querySelectorAll("main [data-name]")].map((el) => {
+                    const r = el.getBoundingClientRect()
+                    return [
+                      el.getAttribute("data-name-px"),
+                      el.getAttribute("data-lines"),
+                      el.hasAttribute("data-cut"),
+                      r.x,
+                      r.y,
+                      r.width,
+                      r.height,
+                    ]
+                  })
+                )
+              )
+            )
+          )
+        )
+    )
+  let was = await read()
+  await expect
+    .poll(
+      async () => {
+        const now = await read()
+        const state = now === "[]" ? "no names drawn" : now === was ? "fitted" : "moving"
+        was = now
+        return state
+      },
+      { message: "names fitted" }
+    )
+    .toBe("fitted")
+}
+
+/**
+ * A page script, run ahead of the app: notes each state `read` finds (an
+ * expression run in the page, null while there is nothing to note), with the
+ * frames begun since the first state (0 for the first), and whether it came
+ * in a ResizeObserver, where a frame is laid out but not yet drawn. A state
+ * in the observers of frame 1 is drawn with that frame; one after them, or
+ * later, comes after a frame was drawn with the state before. Read back with
+ * `drawnLate`.
+ */
+export const watchDrawn = (read: string) => `{
+  window.__DRAWN__ = [];
+  let frames = 0;
+  let first = null;
+  const note = (observing) => {
+    const state = ${read};
+    if (state == null || window.__DRAWN__.at(-1)?.state === state) return;
+    if (first === null) first = frames;
+    window.__DRAWN__.push({ state, frame: frames - first, observing });
+  };
+  const tick = () => {
+    frames++;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  const Observer = window.ResizeObserver;
+  window.ResizeObserver = class extends Observer {
+    constructor(callback) {
+      super((...seen) => {
+        callback(...seen);
+        note(true);
+      });
+    }
+  };
+  new MutationObserver(() => note(false)).observe(document, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+  });
+}`
+
+/** What `watchDrawn` noted: the last state, and the states that came after
+ *  a frame was drawn with the one before. */
+export async function drawnLate(page: Page) {
+  type Drawn = { state: string; frame: number; observing: boolean }
+  const all = await page.evaluate(() => (window as unknown as { __DRAWN__: Drawn[] }).__DRAWN__)
+  return {
+    last: all.at(-1)?.state,
+    late: all.filter((d) => d.frame > 1 || (d.frame === 1 && !d.observing)),
+  }
+}

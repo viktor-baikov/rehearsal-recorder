@@ -1,10 +1,23 @@
-import { expect, openApp, setFake, startRehearsal, test } from "./app.ts"
+import {
+  badNames,
+  colour,
+  EDGE,
+  expect,
+  fitted,
+  mixed,
+  openApp,
+  setFake,
+  startRehearsal,
+  style,
+  test,
+  tipLines,
+} from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
 // The recording screen with MIDI in the band. A Both track keeps its audio
 // tile and gets a narrow column of notes beside the levels; a MIDI track gets
 // a tile of its own, in band order. Each says how many notes it has had, and
-// a fill in the accent jumps with each note's velocity. The fake kit plays
+// a grey fill jumps with each note's velocity. The fake kit plays
 // from a quarter second into a take, on the drums; a keyboard stays quiet.
 
 /** The kit on Both, a bass on audio alone, a keyboard on MIDI alone and a
@@ -48,47 +61,8 @@ async function notesOn(tileEl: Locator): Promise<number> {
   return found ? Number(found[1].replace(/,/g, "")) : -1
 }
 
-/** What a colour looks like once the browser has it, so two that come from
- *  different places can be told apart or found the same. */
-const colourOf = (page: Page, css: { color?: string; borderColor?: string; className?: string }) =>
-  page.evaluate((c) => {
-    const probe = document.createElement("i")
-    if (c.className) probe.className = c.className
-    if (c.color) probe.style.color = c.color
-    if (c.borderColor) probe.style.borderColor = c.borderColor
-    document.body.append(probe)
-    const style = getComputedStyle(probe)
-    const out = c.borderColor || c.className ? style.borderTopColor : style.color
-    probe.remove()
-    return out
-  }, css)
-
-const edgeOf = (tileEl: Locator) => tileEl.evaluate((el) => getComputedStyle(el).borderTopColor)
-
-/** How the tile writes its track's name: up the tile, in one piece, from its
- *  bottom left corner, as the audio tiles do. Returns the ones that do not. */
-const badNames = (page: Page) =>
-  page.evaluate(() =>
-    [...document.querySelectorAll("main [role=group]")]
-      .map((t) => {
-        const el = t.querySelector("[data-name]")
-        const name = t.getAttribute("aria-label")
-        if (!el) return { name, found: false }
-        const box = t.getBoundingClientRect()
-        const r = el.getBoundingClientRect()
-        const cs = getComputedStyle(el)
-        const size = parseFloat(cs.fontSize)
-        return {
-          name,
-          found: true,
-          upward: cs.writingMode === "vertical-rl" && cs.transform !== "none",
-          oneLine: r.width < size * 1.6,
-          whole: el.scrollHeight <= el.clientHeight + 1,
-          corner: r.left - box.left < 24 && box.bottom - r.bottom < 24,
-        }
-      })
-      .filter((n) => !Object.values(n).every(Boolean))
-  )
+/** The sides of a tile's levels, not of its notes. */
+const levelSides = (tileEl: Locator) => tileEl.locator("[data-levels] [data-side]")
 
 /** Makes the fake say every track has had `window.__NOTES__` notes, so a
  *  count can stand at 99 or at 12,345 without waiting for a kit to get there. */
@@ -161,10 +135,10 @@ function bandOf(count: number) {
 const notThere = (port: string, track: string) =>
   `\u201c${port}\u201d is not connected. ${track} records its notes from the moment it is plugged in.`
 
-/** A MIDI tile's tooltip: its port's name, and under it what else there is to
- *  say (that it is not there, held, or how many notes there is no room for). */
+/** The port Keys plays on: a MIDI tile's tooltip says its name, and under it
+ *  what else there is to say (that it is not there, held, or how many notes
+ *  there is no room for). */
 const KEYS_PORT = "Launchkey Mini MK3"
-const keysTip = (more: string) => `${KEYS_PORT}\n${more}`
 
 test.describe("recording", () => {
   test("a MIDI track gets a tile in band order, as wide as the others", async ({ page }) => {
@@ -182,19 +156,19 @@ test.describe("recording", () => {
     // Its icon stands in the corner, as an audio tile's does, and its name
     // runs up the tile from the bottom left.
     await expect(tile(page, "Keys").locator("[data-icon]").first()).toHaveAttribute("data-icon", "keys")
+    await fitted(page)
     expect(await badNames(page)).toEqual([])
   })
 
-  test("a Both track keeps its audio tile and gets a dashed column labelled MIDI", async ({ page }) => {
+  test("a Both track keeps its audio tile and gets a column labelled MIDI", async ({ page }) => {
     await recording(page)
     const drums = tile(page, "Drums")
     // Its audio is there as it always was.
-    await expect(drums.locator("[data-side]")).toHaveCount(1)
+    await expect(levelSides(drums)).toHaveCount(1)
     await expect(drums).toContainText("Input 1")
     const column = drums.locator("[data-midi-column]")
     await expect(column).toHaveCount(1)
     await expect(column).toContainText("MIDI")
-    expect(await column.evaluate((el) => getComputedStyle(el).borderLeftStyle)).toBe("dashed")
     // Upright: written up the column, as the names are.
     expect(
       await column.getByText("MIDI", { exact: true }).evaluate((el) => getComputedStyle(el).writingMode)
@@ -202,7 +176,7 @@ test.describe("recording", () => {
     // On the right of the levels, narrower than a side of its own.
     const box = (await drums.boundingBox())!
     const col = (await column.boundingBox())!
-    const side = (await drums.locator("[data-side]").boundingBox())!
+    const side = (await levelSides(drums).boundingBox())!
     expect(col.x + col.width).toBeGreaterThan(box.x + box.width - 2)
     expect(col.x).toBeGreaterThanOrEqual(side.x + side.width - 1)
     expect(col.width).toBeLessThan(box.width / 3)
@@ -210,10 +184,10 @@ test.describe("recording", () => {
     // An audio track has none; a MIDI track has no levels.
     await expect(tile(page, "Bass").locator("[data-midi-column]")).toHaveCount(0)
     await expect(tile(page, "Bass")).not.toContainText("notes")
-    await expect(tile(page, "Keys").locator("[data-side]")).toHaveCount(0)
+    await expect(levelSides(tile(page, "Keys"))).toHaveCount(0)
   })
 
-  test("the column fills with the kit's velocity, in the accent rather than the level's green", async ({
+  test("the column fills with the kit's velocity, in grey rather than the level's green", async ({
     page,
   }) => {
     await recording(page)
@@ -227,7 +201,7 @@ test.describe("recording", () => {
         new Promise<{ level: number; fill: boolean; onBottom: boolean; inside: boolean }[]>((done) => {
           const out: { level: number; fill: boolean; onBottom: boolean; inside: boolean }[] = []
           const timer = setInterval(() => {
-            const f = el.querySelector("[data-midi-fill]")
+            const f = el.querySelector("[data-fill]")
             const c = el.getBoundingClientRect()
             const r = f?.getBoundingClientRect()
             out.push({
@@ -252,17 +226,17 @@ test.describe("recording", () => {
     expect(seen.filter((s) => s.fill).length).toBeGreaterThan(20)
     expect(seen.every((s) => s.onBottom && s.inside)).toBe(true)
 
-    // The accent, not the green of the levels beside it.
-    const accent = await colourOf(page, { color: "var(--primary)" })
-    const green = await colourOf(page, { color: "var(--signal)" })
-    expect(accent).not.toBe(green)
+    // Grey, in the text's colour, not the green of the levels beside it.
+    const grey = await mixed(page, "--foreground", 60)
+    const green = await colour(page, "--signal")
+    expect(grey).not.toBe(green)
     await expect
       .poll(() =>
-        column.locator("[data-midi-fill]").evaluateAll((els) =>
+        column.locator("[data-fill]").evaluateAll((els) =>
           els.map((el) => getComputedStyle(el).borderTopColor)
         )
       )
-      .toContain(accent)
+      .toContain(grey)
     await expect
       .poll(() =>
         drums.locator("[data-side] [data-fill]").evaluateAll((els) =>
@@ -295,12 +269,12 @@ test.describe("recording", () => {
     await expect(keys).toContainText("MIDI")
     await expect(keys).not.toContainText("Input")
     await expect(keys).not.toContainText("No input")
-    await expect(keys).toHaveAttribute("title", "Launchkey Mini MK3")
+    await expect.poll(() => tipLines(page, keys)).toEqual(["Launchkey Mini MK3"])
     await expect(tile(page, "Vocals")).toContainText("Input 3")
     await expect(tile(page, "Bass")).toContainText("Input 2")
-    await expect(tile(page, "Vocals")).not.toHaveAttribute("title")
-    // Its port is there, so its edge is a tile's usual one.
-    expect(await edgeOf(keys)).toBe(await edgeOf(tile(page, "Vocals")))
+    await expect.poll(() => tipLines(page, tile(page, "Vocals"))).toEqual([])
+    // Its port is there, so it has no edge, as an audio tile has none.
+    await expect(keys.locator("[data-edge]")).toHaveCount(0)
   })
 
   test("a MIDI tile fills from its bottom edge with the notes of its own port", async ({ page }) => {
@@ -320,7 +294,7 @@ test.describe("recording", () => {
         new Promise<{ fill: boolean; onBottom: boolean; inside: boolean; border: string }[]>((done) => {
           const out: { fill: boolean; onBottom: boolean; inside: boolean; border: string }[] = []
           const timer = setInterval(() => {
-            const f = el.querySelector("[data-midi-fill]")
+            const f = el.querySelector("[data-fill]")
             const t = el.getBoundingClientRect()
             const r = f?.getBoundingClientRect()
             out.push({
@@ -338,8 +312,8 @@ test.describe("recording", () => {
     )
     expect(seen.filter((s) => s.fill).length).toBeGreaterThan(20)
     expect(seen.every((s) => s.onBottom && s.inside)).toBe(true)
-    const accent = await colourOf(page, { color: "var(--primary)" })
-    expect(new Set(seen.filter((s) => s.fill).map((s) => s.border))).toEqual(new Set([accent]))
+    const grey = await mixed(page, "--foreground", 60)
+    expect(new Set(seen.filter((s) => s.fill).map((s) => s.border))).toEqual(new Set([grey]))
   })
 
   test("a MIDI tile never turns grey when nothing plays", async ({ page }) => {
@@ -350,38 +324,38 @@ test.describe("recording", () => {
     const keys = tile(page, "Keys")
     await expect(keys).not.toHaveAttribute("data-silent")
     await expect(keys).not.toContainText("silent")
-    expect(await keys.evaluate((el) => getComputedStyle(el).opacity)).toBe("1")
+    expect(await keys.locator("[data-face]").evaluate((el) => getComputedStyle(el).opacity)).toBe("1")
     expect(await notesOn(keys)).toBe(0)
     // And not for a long while either.
     await page.waitForTimeout(2000)
     await expect(keys).not.toHaveAttribute("data-silent")
-    expect(await keys.evaluate((el) => getComputedStyle(el).opacity)).toBe("1")
+    expect(await keys.locator("[data-face]").evaluate((el) => getComputedStyle(el).opacity)).toBe("1")
   })
 
-  test("a port that is not connected gives an amber edge and says so", async ({ page }) => {
+  test("a port that is not connected gives a warn edge and says so", async ({ page }) => {
     await recording(page, { before: "window.__MIDI_GONE__ = ['Launchkey Mini MK3'];" })
     const keys = tile(page, "Keys")
+    const warned = (t: Locator) => t.locator("[data-edge='port']")
     await expect(keys).toContainText("not connected")
     await expect(keys).toHaveAttribute("data-not-connected")
-    const amber = await colourOf(page, { className: "border border-amber-500/60" })
-    expect(await edgeOf(keys)).toBe(amber)
+    await expect(warned(keys)).toHaveCount(1)
     // It is a pause in the notes, not a fault with the sound: not grey.
     await expect(keys).not.toHaveAttribute("data-silent")
-    // The ones that are plugged in say nothing of it, and keep their edge.
+    // The ones that are plugged in say nothing of it, and have no edge.
     await expect(tile(page, "Drums")).not.toContainText("not connected")
-    expect(await edgeOf(tile(page, "Drums"))).not.toBe(amber)
-    expect(await edgeOf(tile(page, "Vocals"))).not.toBe(amber)
+    await expect(warned(tile(page, "Drums"))).toHaveCount(0)
+    await expect(warned(tile(page, "Vocals"))).toHaveCount(0)
 
     // Plugged in: the notes start, and the tile is as any other.
     await setFake(page, "__MIDI_GONE__", [])
     await expect(keys).not.toHaveAttribute("data-not-connected")
     await expect(keys.getByText("not connected")).toBeHidden()
-    expect(await edgeOf(keys)).not.toBe(amber)
+    await expect(warned(keys)).toHaveCount(0)
     // And pulled out again, the tile waits again.
     await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
     await expect(keys).toHaveAttribute("data-not-connected")
     await expect(keys.getByText("not connected")).toBeVisible()
-    expect(await edgeOf(keys)).toBe(amber)
+    await expect(warned(keys)).toHaveCount(1)
   })
 
   test("a Both track whose port is gone keeps recording its audio and says it waits for the notes", async ({
@@ -390,10 +364,10 @@ test.describe("recording", () => {
     await recording(page, { before: "window.__MIDI_GONE__ = ['TD-17'];" })
     const drums = tile(page, "Drums")
     await expect(drums).toContainText("not connected")
-    expect(await edgeOf(drums)).toBe(await colourOf(page, { className: "border border-amber-500/60" }))
+    await expect(drums.locator("[data-edge='port']")).toHaveCount(1)
     // Its levels are there as before.
-    await expect(drums.locator("[data-side]")).toHaveCount(1)
-    await expect(drums.locator("[data-side]")).toHaveAttribute("data-level", "50")
+    await expect(levelSides(drums)).toHaveCount(1)
+    await expect(levelSides(drums)).toHaveAttribute("data-level", "50")
     await expect(drums.locator("[data-midi-column]")).toContainText("MIDI")
     expect(await notesOn(drums)).toBe(-1)
   })
@@ -408,9 +382,8 @@ test.describe("recording", () => {
     // tile still says why its notes are not coming.
     await expect(drums).toHaveAttribute("data-clipped")
     await expect(drums).toContainText("not connected")
-    expect(await edgeOf(drums)).toBe(
-      await colourOf(page, { className: "border border-destructive/70" })
-    )
+    await expect(drums.locator("[data-edge]")).toHaveCount(1)
+    await expect(drums.locator("[data-edge]")).toHaveAttribute("data-edge", "clip")
   })
 
   test("a port coming and going moves nothing on the tile", async ({ page }) => {
@@ -464,9 +437,9 @@ test.describe("recording", () => {
     expect(stood).toHaveLength(1)
   })
 
-  test("on a narrow tile the MIDI label gives way to the dashed column", async ({ page }) => {
+  test("on a narrow tile the MIDI label gives way to the column", async ({ page }) => {
     // Sixteen to a row, the label would run into the name; what does not fit
-    // goes, leaving the column's dashed edge and its fill to say it.
+    // goes, leaving the column's edge and its fill to say it.
     const band = Array.from({ length: 16 }, (_, i) =>
       i === 0
         ? { name: "Kick", channel: 1, icon: "drums", mode: "both", midi_port: { name: "TD-17" } }
@@ -481,7 +454,34 @@ test.describe("recording", () => {
     await expect(kick.locator("[data-notes]")).toBeHidden()
     expect(await column.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(12)
     // Its fill still jumps.
-    await expect(column.locator("[data-midi-fill]")).toBeVisible()
+    await expect(column.locator("[data-fill]")).toBeVisible()
+  })
+
+  test("a Both tile's name and its input line stop short of the notes column", async ({ page }) => {
+    // Eight tracks at 1180 px, a tile of 134 px, and the kit's name long
+    // enough to take two lines: fitted to the whole tile, "Input 1" ran 3 px
+    // into the column. The name is fitted to the levels' width.
+    const { band, levels } = bandOf(8)
+    band[0] = { ...band[0], name: "Electronic drums kit" }
+    await recording(page, {
+      band,
+      levels: { ...levels, "Electronic drums kit": levels.Drums, Drums: undefined },
+    })
+    await fitted(page, { width: 1180, height: 820 })
+    const kit = tile(page, "Electronic drums kit")
+    const seen = await kit.evaluate((el) => {
+      const column = el.querySelector("[data-midi-column]")!.getBoundingClientRect().left
+      const name = el.querySelector("[data-name]")!
+      const input = el.querySelector("[data-side-line]")!
+      const room = (e: Element) => {
+        const r = e.getBoundingClientRect()
+        return r.width > 0 ? Math.round((column - r.right) * 10) / 10 : null
+      }
+      return { lines: name.getAttribute("data-lines"), name: room(name), input: room(input) }
+    })
+    expect(seen.lines, "the name's lines").toBe("2")
+    expect(seen.name, "room between the name and the column").toBeGreaterThan(0)
+    if (seen.input !== null) expect(seen.input, "room between the input line and the column").toBeGreaterThan(0)
   })
 
   // Tiles between 112 and 160 px wide are the 7 to 12 tracks of a band: the
@@ -555,18 +555,20 @@ test.describe("recording", () => {
     const keys = tile(page, "Keys")
     await expect(drums).toHaveAttribute("data-clipped")
     expect((await drums.boundingBox())!.width).toBeLessThan(152)
-    await expect(drums).not.toHaveAttribute("title")
-    await expect(keys).toHaveAttribute("title", "Launchkey Mini MK3")
+    await expect.poll(() => tipLines(page, drums)).toEqual([])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT])
 
     await setFake(page, "__MIDI_GONE__", ["TD-17", "Launchkey Mini MK3"])
-    await expect(drums).toHaveAttribute("title", notThere("TD-17", "Drums"))
-    await expect(keys).toHaveAttribute("title", keysTip(notThere(KEYS_PORT, "Keys")))
+    await expect(drums).toHaveAttribute("data-not-connected")
+    await expect.poll(() => tipLines(page, drums)).toEqual([notThere("TD-17", "Drums")])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, notThere(KEYS_PORT, "Keys")])
     await expect(drums.locator("[data-notes]").getByText("not connected")).toBeHidden()
 
     // Plugged in again: the Both tile has none, the MIDI tile its port's name.
     await setFake(page, "__MIDI_GONE__", [])
-    await expect(drums).not.toHaveAttribute("title")
-    await expect(keys).toHaveAttribute("title", "Launchkey Mini MK3")
+    await expect(drums).not.toHaveAttribute("data-not-connected")
+    await expect.poll(() => tipLines(page, drums)).toEqual([])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT])
   })
 
   test("a count that does not fit a narrow tile is hidden, never shown cut, and the tooltip has it", async ({
@@ -599,36 +601,39 @@ test.describe("recording", () => {
           return {
             visible: getComputedStyle(chip).visibility === "visible",
             inside: chip.getBoundingClientRect().right <= el.getBoundingClientRect().right,
-            title: el.getAttribute("title"),
           }
         })
+        // The tooltip is read on the first count seen and the first hidden:
+        // each hover waits for it, and what it says follows from whether the
+        // count is seen, which every count is checked for.
         if (seen.visible) {
           whole++
           // Seen, it is seen whole, inside the tile.
           expect(seen.inside, `${shown} at ${width} px`).toBe(true)
-          expect(seen.title).toBe("Launchkey Mini MK3")
+          if (whole === 1) await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT])
         } else {
           hidden++
-          expect(seen.title, `${shown} at ${width} px`).toBe(keysTip(`${shown} notes`))
+          if (hidden === 1)
+            await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, `${shown} notes`])
         }
       }
       expect(whole, `some counts fit at ${width} px`).toBeGreaterThan(0)
       expect(hidden, `some counts do not at ${width} px`).toBeGreaterThan(0)
-
-      // A port that is gone or held has its own sentence, hidden count or not.
-      await setFake(page, "__NOTES__", 123456)
-      await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
-      await expect(keys).toHaveAttribute("title", keysTip(notThere(KEYS_PORT, "Keys")))
-      await setFake(page, "__MIDI_GONE__", [])
-      await setFake(page, "__MIDI_BUSY__", ["Launchkey Mini MK3"])
-      await expect(keys).toHaveAttribute(
-        "title",
-        keysTip("\u201cLaunchkey Mini MK3\u201d is in use by another app.")
-      )
-      await setFake(page, "__MIDI_BUSY__", [])
-      await expect(keys).toHaveAttribute("title", keysTip("123,456 notes"))
       await setFake(page, "__NOTES__", 99)
     }
+
+    // A port that is gone or held has its own sentence over a hidden count,
+    // and the count is back when the port is. Said whatever the tile's width,
+    // so read in the narrower window only.
+    const keys = tile(page, "Keys")
+    await setFake(page, "__NOTES__", 123456)
+    await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, notThere(KEYS_PORT, "Keys")])
+    await setFake(page, "__MIDI_GONE__", [])
+    await setFake(page, "__MIDI_BUSY__", ["Launchkey Mini MK3"])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, "\u201cLaunchkey Mini MK3\u201d is in use by another app."])
+    await setFake(page, "__MIDI_BUSY__", [])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, "123,456 notes"])
   })
 
   test("a port another app holds reads not connected, and its tooltip says why", async ({ page }) => {
@@ -637,20 +642,81 @@ test.describe("recording", () => {
     const drums = tile(page, "Drums")
     await expect(keys).toContainText("not connected")
     await expect(keys).toHaveAttribute("data-not-connected")
-    await expect(keys).toHaveAttribute(
-      "title",
-      keysTip("\u201cLaunchkey Mini MK3\u201d is in use by another app.")
-    )
-    await expect(drums).toHaveAttribute("title", "\u201cTD-17\u201d is in use by another app.")
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, "\u201cLaunchkey Mini MK3\u201d is in use by another app."])
+    await expect.poll(() => tipLines(page, drums)).toEqual(["\u201cTD-17\u201d is in use by another app."])
     // Let go of: the port's own name again, and none on a Both tile.
     await setFake(page, "__MIDI_BUSY__", [])
     await expect(keys).not.toHaveAttribute("data-not-connected")
-    await expect(keys).toHaveAttribute("title", "Launchkey Mini MK3")
-    await expect(drums).not.toHaveAttribute("title")
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT])
+    await expect.poll(() => tipLines(page, drums)).toEqual([])
     // One that is not plugged in says nothing of another app.
     await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
     await expect(keys).toHaveAttribute("data-not-connected")
-    await expect(keys).toHaveAttribute("title", keysTip(notThere(KEYS_PORT, "Keys")))
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, notThere(KEYS_PORT, "Keys")])
+  })
+
+  test("a port that is gone draws a warn edge", async ({ page }) => {
+    await recording(page, { before: "window.__MIDI_GONE__ = ['Launchkey Mini MK3', 'TD-17'];" })
+    const warn = await colour(page, "--warn")
+    for (const name of ["Keys", "Drums"]) {
+      const t = tile(page, name)
+      await expect(t).toHaveAttribute("data-not-connected")
+      const edge = t.locator("[data-edge='port']")
+      await expect(edge).toHaveCount(1)
+      // The theme's warn, 2 px inside the tile.
+      expect(await style(edge, ...EDGE), name).toEqual(
+        Object.fromEntries(EDGE.map((p) => [p, p.endsWith("color") ? warn : "2px"]))
+      )
+    }
+    await expect(tile(page, "Vocals").locator("[data-edge]")).toHaveCount(0)
+  })
+
+  test("notes coming in are grey", async ({ page }) => {
+    await recording(page)
+    const drums = tile(page, "Drums")
+    const column = drums.locator("[data-midi-column]")
+    // The fill: a line of the text's colour at 60 % on 15 %, as the start
+    // screen's notes check draws it.
+    const fill = `${await mixed(page, "--foreground", 60)} on ${await mixed(page, "--foreground", 15)}`
+    await expect
+      .poll(() =>
+        column.locator("[data-fill]").evaluateAll((els) =>
+          els.map((el) => `${getComputedStyle(el).borderTopColor} on ${getComputedStyle(el).backgroundColor}`)
+        )
+      )
+      .toContain(fill)
+    // The MIDI sign beside a count, and the label up the column: the muted
+    // text they stand in, as the sign is on the start screen. Never the accent.
+    const muted = await colour(page, "--muted-foreground")
+    const accent = await colour(page, "--primary")
+    expect(muted).not.toBe(accent)
+    for (const name of ["Drums", "Keys"]) {
+      const sign = tile(page, name).locator("[data-notes] svg").first()
+      expect(await sign.evaluate((el) => getComputedStyle(el).color), `${name}'s sign`).toBe(muted)
+    }
+    const label = column.getByText("MIDI", { exact: true })
+    const look = await style(label, "color", "font-size")
+    expect(look.color).toBe(muted)
+    expect(Math.abs(parseFloat(look["font-size"]) - 12)).toBeLessThanOrEqual(1)
+  })
+
+  test("a Both track's notes are split from its levels by a 1 px line", async ({ page }) => {
+    await recording(page)
+    const column = tile(page, "Drums").locator("[data-midi-column]")
+    expect(await style(column, "border-left-width", "border-left-style", "border-left-color")).toEqual({
+      "border-left-width": "1px",
+      "border-left-style": "solid",
+      "border-left-color": await colour(page, "--border"),
+    })
+  })
+
+  test("a tile's port sentence is a tooltip, not a title", async ({ page }) => {
+    await recording(page, { before: "window.__MIDI_GONE__ = ['TD-17', 'Launchkey Mini MK3'];" })
+    await expect(tile(page, "Keys")).toHaveAttribute("data-not-connected")
+    await expect(tile(page, "Drums")).toHaveAttribute("data-not-connected")
+    await expect(page.locator("main [title]")).toHaveCount(0)
+    await expect.poll(() => tipLines(page, tile(page, "Drums"))).toEqual([notThere("TD-17", "Drums")])
+    await expect.poll(() => tipLines(page, tile(page, "Keys"))).toEqual([KEYS_PORT, notThere(KEYS_PORT, "Keys")])
   })
 
   test("the tiles are polled with the levels, and no longer when the screen has gone", async ({
@@ -715,7 +781,7 @@ test.describe("recording", () => {
       [1180, 820],
       [960, 700],
     ]) {
-      await page.setViewportSize({ width, height })
+      await fitted(page, { width, height })
       await expect
         .poll(
           () =>

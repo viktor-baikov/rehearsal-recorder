@@ -4,8 +4,8 @@ import { HealthLine } from "@/components/HealthLine"
 import { Shell } from "@/components/Shell"
 import { StopTake } from "@/components/StopTake"
 import { GoTitle } from "@/components/TakeTitle"
-import { MidiTile } from "@/components/midi/MidiTile"
 import { TrackTile } from "@/components/TrackTile"
+import { Progress } from "@/components/ui/progress"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
@@ -34,6 +34,16 @@ const SAID = "recording"
 // The clock is as big as the window's height allows, and the take's name
 // over it half that, so the two read from the same distance.
 const CLOCK_SIZE = "clamp(4rem, 19vh, 9.5rem)"
+/** The size the fit sets (--clock, see Recording), or the window's. */
+const CLOCK = `var(--clock, ${CLOCK_SIZE})`
+/** How far the clock gives way for the tiles, at most. */
+const CLOCK_FLOOR_REM = 3
+/** How far the tiles give way after it, from their 12.5rem: the 6rem they
+ *  had before. */
+const TILE_FLOOR_REM = 6
+/** The widest the clock reads in a take under 100 h: eight tabular figures,
+ *  as wide as any of 10:00:00 to 99:59:59. */
+const CLOCK_WIDEST = "10:00:00"
 
 /** What a track that takes notes is showing: where its fill stands (the
  *  loudest note lately, falling back between notes as a meter does), how many
@@ -70,10 +80,13 @@ function noteStep(
 
 /**
  * The take while it records, laid out to be read from behind the kit: nobody
- * stands at the laptop while they play. What is being recorded, big, over a
- * big clock; how far into the song the band is against the last go at it;
- * and a tile per track that lights up with its level and turns red if it
- * clips. Running out of disk is said where the free space always is.
+ * stands at the laptop while they play. Two groups and a footer, with no
+ * header (Q1, «Статус у Stop»): the take, what is being recorded, big, over a
+ * big clock, and how far into the song the band is against the last go at
+ * it; then a tile per track that lights up with its level and turns red if
+ * it clips. Recording, the take's number and the disk line are in the
+ * footer's left, beside Stop. Running out of disk is said where the free
+ * space always is.
  *
  * A track on Both has a column of notes beside its levels, and one on MIDI
  * alone a tile of its own. Their notes are polled with the levels.
@@ -197,7 +210,7 @@ export function Recording({
   useSpacebar(stop, !stopping)
 
   // A take nobody named is "Take 3" big, the sign that a name was forgotten,
-  // and the number up top would only say it again.
+  // and the number by Stop would only say it again.
   const named = takeName !== `Take ${takeNumber}`
 
   // Watch that the interface is still there and the disk is not filling up.
@@ -235,91 +248,205 @@ export function Recording({
     }
   }, [])
 
+  const column = useRef<HTMLDivElement>(null)
+  const nameAndClock = useRef<HTMLDivElement>(null)
+  const tilesRef = useRef<HTMLDivElement>(null)
+
+  // What gives way in a window too short for everything, fitted as the
+  // screen comes up and again only when the window, the scale or the name's
+  // lines change; nothing in it changes while a take records, so it never
+  // moves anything mid-take. Each fit starts from the window's sizes:
+  // 1. The clock grows to the left from where "0:00" ends, so it is never
+  //    bigger than lets its widest reading, 10:00:00, start inside the
+  //    screen's air.
+  // 2. While the tiles reach past the screen's bottom, the clock gives way,
+  //    and the take's name over it with it (half its size), down to 3rem.
+  // 3. Then the tiles' least height gives way, from 12.5rem down to 6rem.
+  // Only past that does the screen scroll.
+  useLayoutEffect(() => {
+    const el = column.current
+    const main = el?.closest("main")
+    if (!el || !main) return
+    const fit = () => {
+      const block = nameAndClock.current
+      const tiles = tilesRef.current
+      const clock = el.querySelector<HTMLElement>("[role=timer]")
+      const widest = el.querySelector<HTMLElement>("[data-clock-widest]")
+      if (!block || !tiles || !clock || !widest) return
+      el.style.removeProperty("--clock")
+      tiles.style.removeProperty("--tile-min")
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
+      const size = () => parseFloat(getComputedStyle(clock).fontSize)
+
+      // 1. At a size f, the clock's box is "0:00", a·f wide and centred, and
+      //    the widest reading, b·f wide, ends at its right edge: it starts
+      //    inside the air while f·(b − a/2) is no more than half the room.
+      const px = size()
+      const half = el.getBoundingClientRect().width / 2
+      const a = clock.getBoundingClientRect().width / px
+      const b = widest.getBoundingClientRect().width / px
+      const cap = Math.floor((half / (b - a / 2)) * 10) / 10
+      if (cap < px) el.style.setProperty("--clock", `${cap}px`)
+
+      // How far the tiles' group reaches past the room the screen has for it,
+      // as if the screen were not scrolled.
+      const over = () => {
+        const inside = parseFloat(getComputedStyle(tiles).paddingBottom) || 0
+        const low = Math.max(
+          tiles.getBoundingClientRect().bottom,
+          ...[...tiles.children].map((t) => t.getBoundingClientRect().bottom + inside)
+        )
+        const room =
+          main.getBoundingClientRect().top +
+          main.clientHeight -
+          parseFloat(getComputedStyle(main).paddingBottom)
+        return low + main.scrollTop - room
+      }
+
+      // 2. The name and the clock get smaller together, so the block they
+      //    make is smaller by about as much as the tiles are over.
+      const clockFloor = CLOCK_FLOOR_REM * rem
+      for (let i = 0; i < 4; i++) {
+        const by = over()
+        const now = size()
+        if (by <= 0.5 || now <= clockFloor + 0.5) break
+        const next = Math.max(clockFloor, now * (1 - by / block.getBoundingClientRect().height) - 0.5)
+        el.style.setProperty("--clock", `${next}px`)
+      }
+
+      // Steps that fell short of the room take the clock the rest of the
+      // way: the tiles give way only once it is at its floor.
+      if (over() > 0.5 && size() > clockFloor + 0.5)
+        el.style.setProperty("--clock", `${clockFloor}px`)
+
+      // 3. The tiles stand at their least height when they reach past it.
+      const by = over()
+      const first = tiles.firstElementChild
+      if (by > 0.5 && first) {
+        const least = parseFloat(getComputedStyle(first).minHeight)
+        tiles.style.setProperty("--tile-min", `${Math.max(TILE_FLOOR_REM * rem, least - by)}px`)
+      }
+    }
+    fit()
+    // The window and the scale, and the name once it has settled on its lines.
+    const watch = new ResizeObserver(fit)
+    watch.observe(main)
+    if (nameAndClock.current) watch.observe(nameAndClock.current)
+    return () => watch.disconnect()
+  }, [])
+
+  // Recording, as written: no capitals by CSS.
+  const recordingLine = (
+    <div data-recording-line className="flex items-center gap-2 text-sm">
+      {/* Still, as nothing else here moves either (F11): a pulse in the
+          corner draws the eye from across the room. */}
+      <span className="flex size-2.5 shrink-0 rounded-full bg-destructive" />
+      <span className="font-semibold text-destructive">Recording</span>
+      {named && <span className="text-muted-foreground">Take {takeNumber}</span>}
+    </div>
+  )
+
+  // The status row, at the footer's left beside Stop: Recording over the
+  // disk line.
+  const statusRow = (
+    <div data-status-row className="flex flex-col items-start gap-2">
+      {recordingLine}
+      <HealthLine health={health} />
+    </div>
+  )
+
+  const against = lastAttempt && lastAttempt.duration_sec > 0 && (
+    <div data-against className="flex w-full max-w-xl flex-col gap-2">
+      {/* The shared bar, in grey as it was, not the accent: it is not the
+          main action or what plays. It is a reading, so it follows the clock
+          with no transition of its own. */}
+      <Progress
+        value={Math.min(100, (elapsed / lastAttempt.duration_sec) * 100)}
+        aria-label="Against the last take"
+        aria-valuetext={`${formatMMSS(Math.min(elapsed, lastAttempt.duration_sec))} of ${formatMMSS(lastAttempt.duration_sec)}`}
+        className="h-1.5 bg-muted [&>[data-slot=progress-indicator]]:bg-foreground/55 [&>[data-slot=progress-indicator]]:transition-none"
+      />
+      <div className="flex justify-between gap-4 text-sm text-muted-foreground">
+        <span className="tnum">0:00</span>
+        {/* The song is over the clock already. The first go of the evening
+            is measured against the go before tonight (its newest ★ go, else
+            the last at its latest rehearsal), and says which day that was. */}
+        <span>
+          Took {formatMMSS(lastAttempt.duration_sec)}{" "}
+          {lastAttempt.created_at ? `on ${formatDate(lastAttempt.created_at)}` : "last time"}
+        </span>
+      </div>
+    </div>
+  )
+
   return (
     <Shell
       activity={false}
+      // The start screen's air: 32 round the screen.
+      air
+      className="px-8 [--screen-pad-y:2rem]"
       footer={
-        <FooterRow error={error}>
+        <FooterRow error={error} left={statusRow}>
           <StopTake onStop={stop} stopping={stopping} saving={saving} />
         </FooterRow>
       }
     >
-      <div className="flex h-full min-h-0 flex-col items-center gap-[2.5vh]">
-        <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-1">
-          <div data-recording-line className="flex items-center gap-2.5 text-sm">
-            {/* Still, as nothing else here moves either (F11): a pulse in
-                the corner draws the eye from across the room. */}
-            <span className="flex size-2.5 shrink-0 rounded-full bg-destructive" />
-            <span className="font-semibold tracking-wide text-destructive uppercase">
-              Recording
-            </span>
-            {named && <span className="text-muted-foreground">Take {takeNumber}</span>}
-          </div>
-
-          <HealthLine health={health} />
-        </div>
-
-        {/* The name was the smallest thing here, grey in the corner, and it
-            is what most often goes wrong: the band has moved on to another
-            song and nobody changed it. Only shown — a field would invite a
-            keypress, and Space stops the take. One line, cut short, so that
-            a long name never pushes the clock or the tiles about. */}
-        <div className="flex max-w-full flex-col items-center gap-1">
-          <h1
-            className="flex max-w-full pb-[0.08em] leading-none font-semibold tracking-tight"
-            // design-ok(px-text): half the clock's size, so it follows the window's height too
-            style={{ fontSize: `calc(${CLOCK_SIZE} / 2)` }}
-          >
-            <GoTitle title={takeName} go={takeGo} cut />
-          </h1>
-          {/* Digits stand on the baseline, and the room a line keeps under
-              it for "g" and "y" was empty space that the tiles needed back
-              for the name over the clock. Trimmed only below: above, it is
-              the gap between the name and the digits. */}
-          <div
-            role="timer"
-            aria-label="Take time"
-            className="leading-none font-semibold tracking-tight tabular-nums [text-box:trim-end_cap_alphabetic]"
-            // design-ok(px-text): the recording clock is sized from the window's height (CLOCK_SIZE)
-            style={{ fontSize: CLOCK_SIZE }}
-          >
-            {formatClock(elapsed)}
-          </div>
-        </div>
-
-        {lastAttempt && lastAttempt.duration_sec > 0 && (
-          <div className="flex w-full max-w-xl flex-col gap-2">
-            <div
-              role="progressbar"
-              aria-label="Against the last take"
-              aria-valuemin={0}
-              aria-valuemax={Math.round(lastAttempt.duration_sec)}
-              aria-valuenow={Math.round(Math.min(elapsed, lastAttempt.duration_sec))}
-              className="relative h-1.5 overflow-hidden rounded-full bg-muted"
+      <div ref={column} className="flex h-full min-h-0 flex-col items-center gap-12">
+        {/* The take, one group: the name over the clock, and 24 under them
+            the bar against the last take. */}
+        <div data-take className="flex w-full flex-col items-center gap-6">
+          {/* The name was the smallest thing here, grey in the corner, and it
+              is what most often goes wrong: the band has moved on to another
+              song and nobody changed it. Only shown — a field would invite a
+              keypress, and Space stops the take. Up to two lines, then cut
+              with the song's go kept, whole on hover; set before the take,
+              so it never moves. */}
+          <div ref={nameAndClock} className="flex w-full flex-col items-center gap-1">
+            <h1
+              className="flex w-full justify-center pb-[0.08em] leading-none font-semibold tracking-tight"
+              // design-ok(px-text): half the clock's size, so it follows the window's height too
+              style={{ fontSize: `calc(${CLOCK} / 2)` }}
             >
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-foreground/55"
-                style={{
-                  width: `${Math.min(100, (elapsed / lastAttempt.duration_sec) * 100)}%`,
-                }}
+              <GoTitle title={takeName} go={takeGo} cut lines={2} />
+            </h1>
+            {/* The clock grows to the left. Its box is as wide as "0:00",
+                centred under the name, and the figures stand at its right
+                edge, so the seconds never move when it gains a figure (10:00,
+                1:00:00). Digits stand on the baseline, and the room a line
+                keeps under it for "g" and "y" is trimmed. The two unseen
+                readings are drawn from an attribute, not written in the page:
+                the clock's words are its reading alone. */}
+            <div
+              role="timer"
+              aria-label="Take time"
+              className="relative leading-none font-semibold tracking-tight tnum [text-box:trim-end_cap_alphabetic]"
+              // design-ok(px-text): the recording clock is sized from the window's height (CLOCK_SIZE)
+              style={{ fontSize: CLOCK }}
+            >
+              <span aria-hidden data-text="0:00" className="invisible before:content-[attr(data-text)]" />
+              <span data-clock className="absolute top-0 right-0 whitespace-nowrap">
+                {formatClock(elapsed)}
+              </span>
+              {/* The widest it can read, unseen, for the fit above. */}
+              <span
+                aria-hidden
+                data-clock-widest
+                data-text={CLOCK_WIDEST}
+                className="pointer-events-none invisible absolute top-0 right-0 whitespace-nowrap before:content-[attr(data-text)]"
               />
             </div>
-            <div className="flex justify-between gap-4 text-sm text-muted-foreground">
-              <span className="tnum">0:00</span>
-              {/* The song is over the clock already. The first go of the
-                  evening is measured against the go before tonight (its
-                  newest ★ go, else the last at its latest rehearsal), and
-                  says which day that was. */}
-              <span>
-                Took {formatMMSS(lastAttempt.duration_sec)}{" "}
-                {lastAttempt.created_at ? `on ${formatDate(lastAttempt.created_at)}` : "last time"}
-              </span>
-            </div>
           </div>
-        )}
+          {against}
+        </div>
 
+        {/* The tiles, one group on one fill, each tile's fill on a well of
+            its own with 3 px of the group's round it («Волна на подложке»).
+            Their least height is 12.5rem: the clock and the name give way
+            first (the fit above). */}
         <div
-          className="grid min-h-0 w-full flex-1 gap-[clamp(0.25rem,0.8vw,0.75rem)]"
+          ref={tilesRef}
+          data-tiles
+          className="grid min-h-0 w-full flex-1 gap-1.5 rounded-xl bg-card p-[3px] [--tile-min:12.5rem]"
           style={{
             gridTemplateColumns: `repeat(${Math.max(1, tracks.length)}, minmax(0, 1fr))`,
           }}
@@ -348,8 +475,9 @@ export function Recording({
               : undefined
             if (heard && !recordsAudio(t))
               return (
-                <MidiTile
+                <TrackTile
                   key={t.name}
+                  kind="notes"
                   name={t.name}
                   icon={t.icon}
                   port={port}

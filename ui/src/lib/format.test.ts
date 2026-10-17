@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 import {
   aboutDuration,
   against,
+  countOf,
   daysAgo,
   describeRescan,
+  diskLine,
   formatBytes,
   formatClock,
   formatDate,
@@ -18,6 +20,7 @@ import {
   inputsLabel,
   longAgo,
   notConnected,
+  nounFor,
   peakToDb,
   rehearsalsLabel,
   savedLine,
@@ -107,6 +110,29 @@ describe("amounts", () => {
     expect(formatDuration(49 * 60)).toBe("many hours")
     expect(aboutDuration(200)).toBe("about 3 h 20 min")
     expect(aboutDuration(49 * 60)).toBe("many hours")
+  })
+  it("says the free space one way for the start screen and the recording screen", () => {
+    expect(diskLine(180, false)).toBe("Room for about 3 h of recording")
+    expect(diskLine(5, false)).toBe("Room for about 5 min of recording")
+    expect(diskLine(5, true)).toBe("Low disk space: room for about 5 min")
+    // An estimate past two days takes no about, low or not.
+    expect(diskLine(49 * 60, false)).toBe("Room for many hours of recording")
+    expect(diskLine(49 * 60, true)).toBe("Low disk space: room for many hours")
+  })
+  it("counts a thing in the singular and the plural, with thousands set apart", () => {
+    expect(countOf(0, "note")).toBe("0 notes")
+    expect(countOf(1, "note")).toBe("1 note")
+    expect(countOf(2, "note")).toBe("2 notes")
+    expect(countOf(1234, "note")).toBe("1,234 notes")
+    expect(countOf(1_234_567, "note")).toBe("1,234,567 notes")
+    expect(countOf(2, "box", "boxes")).toBe("2 boxes")
+    expect(countOf(1, "box", "boxes")).toBe("1 box")
+  })
+  it("names the noun alone for a count drawn apart from it", () => {
+    expect(nounFor(1, "take")).toBe("take")
+    expect(nounFor(2, "take")).toBe("takes")
+    expect(nounFor(0, "take")).toBe("takes")
+    expect(nounFor(2, "box", "boxes")).toBe("boxes")
   })
   it("writes a peak as dBFS", () => {
     expect(peakToDb(0.5)).toBe("-6.0")

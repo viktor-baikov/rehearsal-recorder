@@ -55,7 +55,7 @@ describe("the accent", () => {
   })
 
   it("leaves what is selected, and Stop, neutral", () => {
-    expect(value(light, "--selected")).toBe("oklch(0.92 0.004 286.3)")
+    expect(value(light, "--selected")).toBe("oklch(0.885 0.004 286.3)")
     expect(value(dark, "--selected")).toBe("oklch(0.31 0.009 286.3)")
     expect(value(light, "--strong")).toBe("oklch(0.21 0.006 285.9)")
     expect(value(light, "--strong-foreground")).toBe(WHITE)
@@ -85,11 +85,59 @@ describe("the labels", () => {
   })
 })
 
+/** An oklch's numbers, as written in a block. */
+function numbers(blockText: string, name: string): [number, number, number] {
+  const v = value(blockText, name)
+  const m = v && /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/.exec(v)
+  if (!m) throw new Error(`${name} is not an oklch colour: ${v}`)
+  return [Number(m[1]), Number(m[2]), Number(m[3])]
+}
+
+/** WCAG's relative luminance of an oklch colour, through linear sRGB. */
+function luminance([l, c, h]: [number, number, number]): number {
+  const a = c * Math.cos((h * Math.PI) / 180)
+  const b = c * Math.sin((h * Math.PI) / 180)
+  const L = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3
+  const M = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3
+  const S = (l - 0.0894841775 * a - 1.291485548 * b) ** 3
+  const clip = (x: number) => Math.min(1, Math.max(0, x))
+  const r = clip(4.0767416621 * L - 3.3077115913 * M + 0.2309699292 * S)
+  const g = clip(-1.2684380046 * L + 2.6097574011 * M - 0.3413193965 * S)
+  const bl = clip(-0.0041960863 * L - 0.7034186147 * M + 1.707614701 * S)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * bl
+}
+
+function contrast(theme: string, fore: string, back: string): number {
+  const [x, y] = [luminance(numbers(theme, fore)), luminance(numbers(theme, back))]
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
+}
+
 describe("a group", () => {
-  it("shows against the page in both themes: the card is at least 0.03 lighter than the background", () => {
+  it("shows in dark as a card at least 0.03 lighter than the page", () => {
+    expect(lightness(dark, "--card") - lightness(dark, "--background")).toBeGreaterThanOrEqual(0.03 - 1e-9)
+  })
+
+  it("sits on a white page in light, and a card shows at least 0.03 lighter than a side panel", () => {
+    expect(value(light, "--background")).toBe("oklch(1 0 0)")
+    expect(lightness(light, "--card") - lightness(light, "--panel")).toBeGreaterThanOrEqual(0.03 - 1e-9)
+  })
+})
+
+describe("grey text", () => {
+  it("reads at 4.5 to 1 or more on every fill in both themes", () => {
     for (const theme of [light, dark]) {
-      expect(lightness(theme, "--card") - lightness(theme, "--background")).toBeGreaterThanOrEqual(0.03 - 1e-9)
+      for (const fill of ["--background", "--card", "--panel", "--muted", "--secondary", "--accent", "--selected"]) {
+        expect(contrast(theme, "--muted-foreground", fill), fill).toBeGreaterThanOrEqual(4.5)
+      }
     }
+  })
+})
+
+describe("a well", () => {
+  it("is the side panel's colour in both themes, so it shows on a group's card", () => {
+    expect(value(light, "--well")).toBe("var(--panel)")
+    expect(value(dark, "--well")).toBe("var(--panel)")
+    expect(css).toContain("--color-well: var(--well);")
   })
 })
 

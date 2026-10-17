@@ -18,18 +18,18 @@ shows the app as it is; the site keeps its own big headings and layout
 
 The foundation is in: the theme values, the shared components, Undo, the
 showcase and the check. The start screen is redone on it, and so are the
-rehearsal screen and the big player, which Review and History open takes in
-too: their pieces are the shared ones, and their files are off the check's
-[allow-list](#the-check). The one piece the start screen still builds on
-its own is the song list in New set, which it shares with Settings' Sets
-and which is redone with Settings. The other screens follow, one pull
-request each, in this order: recording, Review, History, Drafts, and
-Settings. Until its turn a screen is on the allow-list and may still break
-the rules it is listed for. Where a rule below says "as each screen is
-redone", the screens' pull requests carry it out, and so far the start
-screen's and the rehearsal screen's have. On reha.stream the pieces of the
-app are the real components and follow the theme already, but the page
-itself takes only the accent from it so far
+rehearsal screen, the recording screen and the big player, which Review and
+History open takes in too: their pieces are the shared ones, and their
+files are off the check's [allow-list](#the-check). The one piece the start
+screen still builds on its own is the song list in New set, which it
+shares with Settings' Sets and which is redone with Settings. The other
+screens follow, one pull request each, in this order: Review, History,
+Drafts, and Settings. Until its turn a screen is on the allow-list and may
+still break the rules it is listed for. Where a rule below says "as each
+screen is redone", the screens' pull requests carry it out, and so far the
+start screen's, the rehearsal screen's and the recording screen's have. On
+reha.stream the pieces of the app are the real components and follow the
+theme already, but the page itself takes only the accent from it so far
 (`--page-accent: var(--primary)` in `site/src/page/page.css`). After the
 last screen, reha.stream's own background, text colours and font
 (Instrument Sans) take the shared ones, and the release comes when the
@@ -65,12 +65,20 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   no library needs a migration, and is drawn with `--label-orange`
   (`lib/labels.ts`); orange stands sixth in Settings' picker, where blue
   was.
-- **F4. A group is set apart by its fill, with no border.** An outline round
-  every panel made the screens busy; a card a shade off the page does the
-  same job quietly. `--card` against `--background`, at least 0.03 apart in
-  lightness in both themes (`lib/theme.test.ts` checks it), and the `Card`
-  component (C7). Fields, buttons and dialogs keep their frames. The
-  bordered panels lose theirs as each screen is redone.
+- **F4. A group has no border.** An outline round every panel made the
+  screens busy. In the dark theme a card a shade lighter than the page sets
+  a group apart quietly. In the light theme the page is white, as the card
+  is: a grey page with grey fills on it read as grey on grey, and grey text
+  on them fell under 4.5 to 1. So there air and the group's own lines set
+  it apart, and grey is left for a side panel, a well, what is selected, a
+  hover and a pill. On a side panel a card is white on the grey in light,
+  and lighter than the panel in dark. `lib/theme.test.ts` checks that the
+  card is at least 0.03 lighter than the page in dark and than a side panel
+  in light, and that grey text reads at 4.5 to 1 or more on every fill in
+  both themes: the page, a card, a side panel, a pill, a secondary button,
+  a hover and what is selected. The `Card` component
+  is C7. Fields, buttons and dialogs keep their frames. The bordered panels
+  lose theirs as each screen is redone.
 
 ### Type
 
@@ -103,7 +111,16 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   alone, since alignment needs its small odd offsets, so this document and
   the showcase carry it. `--screen-pad-y` is the space above and below a
   screen: Shell pads by it, and the player's master strip holds to the edge
-  past it, so the two cannot drift apart.
+  past it, so the two cannot drift apart. In a window too short for the
+  recording screen, things give way in one order. First the clock and the
+  take's name over it get smaller, down to the clock's 3 rem. Then the
+  tiles' least height gives way, from 12.5 rem down to 6 rem. Only then
+  does the screen scroll. The clock is also never bigger than 10:00:00 has
+  room for inside the screen's air (32 px round the screen, 48 between its
+  two groups and 24 inside one), so after ten hours it does not run off the
+  left edge. `screens/Recording.tsx` fits this as the screen comes up and
+  when the window or the Appearance scale changes, never because of
+  anything the take does, so nothing moves while the band plays (B4).
 - **F9. Three corner radii by role, plus round.** Nine radii said nothing;
   three say what a thing is. 4 px for small things (key chips, tags, take
   bars, M and S): `rounded-sm`, or bare `rounded`. 8 px for controls
@@ -242,22 +259,28 @@ piece of its own moves onto the shared one when it is redone.
   which keeps their 24 px touch areas apart (WCAG 2.5.8), and grey when on.
   The lanes are one group on the card's fill, with no lines between tracks:
   each lane's picture, a waveform or a lane of notes, sits on a well of its
-  own (`--background`, 8 px corners, 3 px of the group's fill above and below
-  it), and a Both track's audio and notes share one well split by a 1 px
-  line. That split is two class strings, said once in `Timeline.tsx`.
+  own (C7), with 3 px of the group's fill above and below it, and a Both
+  track's audio and notes share one well split by a 1 px line. That split
+  is two class strings, said once in `Timeline.tsx`.
   `LanePlate` is the plate beside a lane, the same for audio, notes and the
   master; `LanePlate grouped` is a plate in the group, with no fill or
   corners of its own. A notes lane is as tall as its plate needs. Master is
   its own group, a plate with the card's fill, sticky at the bottom in a
   band as wide as the lanes, so that no part of a lane shows beside it.
-- **C7. Group**, `Card`: a panel set apart by its fill (F4), with 12 px
+- **C7. Group**, `Card`: a panel set apart as F4 says, with 12 px
   corners, 16 px inside, and no border or shadow. A screen gives it more air
   with `className`. It takes the place of about 21 hand-made bordered boxes
   as each screen is redone. A group of rows, such as the start screen's
   tracks or the evening's songs on the rehearsal screen, splits them with
   1 px lines and lets each row keep its own padding. Where each row holds a
   picture of its own, as the player's lanes do, the pictures' wells split
-  the rows instead, and there are no lines.
+  the rows instead, and there are no lines. A well is where a picture or a
+  recording tile sits in its group: `bg-well`, with 8 px corners and 3 px of
+  the group's fill round it. `--well` is the side panel's colour,
+  `var(--panel)`, in both themes, a shade darker than the card it is on. The
+  page's colour was faint on the card in dark, and in light, where the page
+  is white as the card is (F4), it would not show at all.
+  `lib/theme.test.ts` checks that a well is the side panel's colour.
 - **C8. Everything else that is built more than once.** About thirty kinds
   of piece are built two to sixteen times each, and each copy drifts from
   the others. Each becomes one shared piece, taken from shadcn/ui where it
@@ -273,7 +296,13 @@ piece of its own moves onto the shared one when it is redone.
   (InputGroup), and our own set list for both screens, screen header, side
   panel and pane head. A take's name is written by `TakeTitle`
   (`components/TakeTitle.tsx`) everywhere, where today one list uses it and
-  the rest write the name their own way. A take drawn as a bar is as tall as
+  the rest write the name their own way. A track that records is one tile,
+  `TrackTile` (`components/TrackTile.tsx`), where the MIDI tile was a copy
+  of it: its levels, with a narrow column for its notes on Both, or with
+  `kind="notes"` a MIDI track's notes alone. Its fill is `Meter` up, and its
+  name is `TileName` (B6). On the recording screen the tiles are one group
+  on the card's fill, each tile on a well of its own (C7), and reha.stream
+  shows them so. A take drawn as a bar is as tall as
   it ran against the longest, through `drawnLength` (`lib/takeScale.ts`),
   never under a few pixels. "Selected" has two looks instead of seven: the
   white plate inside a switch, and a grey fill for a row, pill, tab or
@@ -375,11 +404,18 @@ The other shared components, each with its stories:
   what can be done at the end, in `default`, `outline` and `muted`. A row that
   goes somewhere is an `asChild` link or button, which Tab reaches and Enter
   follows, with the shared focus ring.
-- **Meter**, `meter.tsx`: one thin bar for a reading that moves, C8's meter:
+- **Meter**, `meter.tsx`: one meter for a reading that moves, C8's meter:
   the signal check's level (`tone="signal"`, the signal green) and the notes
-  check's velocity (`tone="notes"`, grey in the text's colour). `sides` are
-  values from 0 to 1; two split the bar along its length, the first above,
-  the second below, so a dead half of a pair shows. It follows its value over
+  check's velocity (`tone="notes"`, grey in the text's colour), and a
+  recording tile's level and notes. `sides` are values from 0 to 1. Across,
+  the default, it is one thin bar, and two sides split it along its length,
+  the first above, the second below, so a dead half of a pair shows. With
+  `direction="up"` it fills the box it is given, with no frame or ground of
+  its own, as the tile is its ground: each side rises from the bottom,
+  beside the other, with a line on its top, and a side at 0 draws nothing.
+  `held` draws a 2 px line where each side's peak stands, and a side in
+  `clipped` is drawn in the danger red. The tile keeps its own dB scale and
+  gives the meter how far each fill reaches. It follows its value over
   75 ms and keeps doing so under Reduce motion and while a take records: a
   meter is a reading, not motion. It is a picture, hidden from a screen
   reader, unless given a `label`, and then a `meter` at its largest side.
@@ -514,8 +550,10 @@ as the `cn` import.
   the footer has already; Mark is as wide as Open mark; and the player keeps
   one line between the transport and the map for what it has to say, one
   thing at a time (a load error, then Cropping, then the output's warning),
-  so the timeline never moves when it fills. These are the model; the rest
-  as each screen is redone.
+  so the timeline never moves when it fills. On the recording screen the
+  disk line holds the room of the longest thing it can say, and a tile's dB
+  figure holds the room of "-100.0", the widest it can read. These are the
+  model; the rest as each screen is redone.
 - **B5. Loading.** Under 1 s nothing shows, so a quick answer does not
   flash; from 1 s a spinner takes the place of what is loading; past 10 s it
   says what it is doing. `PlayButton` already waits its second
@@ -525,13 +563,19 @@ as the `cn` import.
   shadcn's Spinner.
 - **B6. Long names.** A name never gives way to a secondary figure: the name
   is what tells one thing from another. The figure wraps, goes first, or
-  hides and shows on hover, as the MIDI tile's count does; a cut name shows
-  whole on hover, and on keyboard focus when it is a button, a link or has a
-  `tabindex` (`useCut` and `WholeTip` round it; `Whole` is a plain text and
-  shows on hover only, unless it has `reach`, which makes it a Tab stop
-  while it is cut, as a track's name on its plate is); where a name has room
-  for a second line, it wraps; the figures beside it are `Figures`, which
-  drop whole, least needed first. As each screen is redone.
+  hides and shows on hover, as a recording tile's dB figure does; a cut
+  name shows whole on hover, and on keyboard focus when it is a button, a
+  link or has a `tabindex` (`useCut` and `WholeTip` round it; `Whole` is a
+  plain text and shows on hover only, unless it has `reach`, which makes it
+  a Tab stop while it is cut, as a track's name on its plate is); where a
+  name has room for a second line, it wraps; the figures beside it are
+  `Figures`, which drop whole, least needed first. As each screen is
+  redone. A recording tile's name runs up the tile and takes up to two
+  lines at 2.25 rem. A name still too long gets smaller, down to 1.5 rem,
+  and past that it is cut and whole in the tile's tooltip on hover. Short
+  names keep 2.25 rem. `TileName` fits it on an unseen copy, and again only
+  when its room changes size, so nothing that comes during a take changes
+  it.
 - **B7. Empty states.** An empty list that only says it is empty leaves the
   person to guess what to do next. So an empty list says, in its own place,
   what will appear there and how it gets there: an empty set under Next take
