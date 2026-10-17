@@ -89,6 +89,8 @@ test("the health piece is as wide as its words, with no room held for a longer s
     const box = (await health.boundingBox())!
     expect(box.width, `width at ${width} px`).toBeLessThanOrEqual(said.width + 2)
     expect(box.height, `height at ${width} px`).toBeLessThanOrEqual(said.height + 2)
+    // Its words start at the left, as the tile's heading does, when they wrap.
+    await expect(health).toHaveCSS("text-align", "start")
   }
 })
 

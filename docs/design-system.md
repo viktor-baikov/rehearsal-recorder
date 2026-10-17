@@ -70,8 +70,8 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   a group apart quietly. In the light theme the page is white, as the card
   is: a grey page with grey fills on it read as grey on grey, and grey text
   on them fell under 4.5 to 1. So there air and the group's own lines set
-  it apart, and grey is left for a side panel, what is selected, a hover
-  and a pill. On a side panel a card is white on the grey in both themes.
+  it apart, and grey is left for a side panel, a well, what is selected, a
+  hover and a pill. On a side panel a card is white on the grey in both themes.
   `lib/theme.test.ts` checks that the card is at least 0.03 lighter than
   the page in dark and than a side panel in light, and that grey text reads
   at 4.5 to 1 or more on every fill in both themes. The `Card` component
@@ -114,10 +114,11 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   take's name over it get smaller, down to the clock's 3 rem. Then the
   tiles' least height gives way, from 12.5 rem down to 6 rem. Only then
   does the screen scroll. The clock is also never bigger than 10:00:00 has
-  room for inside the screen's air, so after ten hours it does not run off
-  the left edge. `screens/Recording.tsx` fits this as the screen comes up
-  and when the window or the Appearance scale changes, never during a take,
-  so nothing moves while the band plays (B4).
+  room for inside the screen's air (32 px round the screen, 48 between its
+  two groups and 24 inside one), so after ten hours it does not run off the
+  left edge. `screens/Recording.tsx` fits this as the screen comes up and
+  when the window or the Appearance scale changes, never because of
+  anything the take does, so nothing moves while the band plays (B4).
 - **F9. Three corner radii by role, plus round.** Nine radii said nothing;
   three say what a thing is. 4 px for small things (key chips, tags, take
   bars, M and S): `rounded-sm`, or bare `rounded`. 8 px for controls
@@ -547,8 +548,10 @@ as the `cn` import.
   the footer has already; Mark is as wide as Open mark; and the player keeps
   one line between the transport and the map for what it has to say, one
   thing at a time (a load error, then Cropping, then the output's warning),
-  so the timeline never moves when it fills. These are the model; the rest
-  as each screen is redone.
+  so the timeline never moves when it fills. On the recording screen the
+  disk line holds the room of the longest thing it can say, and a tile's dB
+  figure holds the room of "-60.0". These are the model; the rest as each
+  screen is redone.
 - **B5. Loading.** Under 1 s nothing shows, so a quick answer does not
   flash; from 1 s a spinner takes the place of what is loading; past 10 s it
   says what it is doing. `PlayButton` already waits its second

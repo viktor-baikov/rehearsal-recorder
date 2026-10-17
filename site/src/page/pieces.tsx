@@ -160,7 +160,11 @@ export function shots({
       pieces: (
         <>
           <Piece label="Interface connected, room for about 28 hours 40 minutes of recording">
-            <HealthLine health={{ recording: true, minutes_left: 1720 }} align="start" hold={false} />
+            {/* Pretty wrapping, on the site only: the narrow tile would
+                otherwise leave one word on the second line. */}
+            <div className="text-pretty">
+              <HealthLine health={{ recording: true, minutes_left: 1720 }} align="start" hold={false} />
+            </div>
           </Piece>
           <Piece label="The Bass and Guitar tiles while recording; the Guitar tile is red and says clipped 3 times">
             <Tracks />

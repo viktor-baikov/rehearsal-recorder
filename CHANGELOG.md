@@ -124,21 +124,19 @@ opening.
   take is one group: its name over the clock, and the bar against the last
   take under them. The tracks are the other, a tile each, every tile on a
   darker well of its own. There is no header any more: the red *Recording*,
-  the take's number, and the line about the disk or the battery under them
-  are at the bottom left, beside **Stop**. A long track name takes two lines
+  the take's number when the take has a name, and the line about the disk
+  or the battery under them are at the bottom left, beside **Stop**. A long track name takes two lines
   up its tile, and gets smaller where it must, down to two thirds of its
   size; one still too long is cut, and pointing at its tile shows it whole.
   A tile's figure in dB is never cut short: where it has no room it hides,
   and pointing at the tile shows it. The clock always has room for ten
   hours, so a take past 10:00:00 no longer runs off the left of a narrow
-  window. In a short window the clock and the take's name get smaller
-  first, then the tiles get lower, and only then does the screen scroll;
-  this is settled as the screen opens or the window changes, never during a
-  take. The room on the disk is said one way on the start screen and while
-  a take records, "Room for about 3 h 20 min of recording", and when it
-  runs low, "Low disk space: room for about 12 min", with a yellow icon
-  beside words in the text's colour, which read better than yellow words
-  did.
+  window, and in a short window things get smaller before the screen
+  scrolls. The start screen and the recording screen say the room on the
+  disk in the same words, "Room for about 3 h 20 min of recording", and
+  when it runs low, "Low disk space: room for about 12 min", with a yellow
+  icon beside words in the text's colour, which read better than yellow
+  words did.
 
 ## 0.11.1
 
