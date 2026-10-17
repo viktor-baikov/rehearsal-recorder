@@ -71,10 +71,12 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   is: a grey page with grey fills on it read as grey on grey, and grey text
   on them fell under 4.5 to 1. So there air and the group's own lines set
   it apart, and grey is left for a side panel, a well, what is selected, a
-  hover and a pill. On a side panel a card is white on the grey in both themes.
-  `lib/theme.test.ts` checks that the card is at least 0.03 lighter than
-  the page in dark and than a side panel in light, and that grey text reads
-  at 4.5 to 1 or more on every fill in both themes. The `Card` component
+  hover and a pill. On a side panel a card is white on the grey in light,
+  and lighter than the panel in dark. `lib/theme.test.ts` checks that the
+  card is at least 0.03 lighter than the page in dark and than a side panel
+  in light, and that grey text reads at 4.5 to 1 or more on every fill in
+  both themes: the page, a card, a side panel, a pill, a secondary button,
+  a hover and what is selected. The `Card` component
   is C7. Fields, buttons and dialogs keep their frames. The bordered panels
   lose theirs as each screen is redone.
 

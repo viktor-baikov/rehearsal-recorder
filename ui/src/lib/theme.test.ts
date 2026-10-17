@@ -126,7 +126,7 @@ describe("a group", () => {
 describe("grey text", () => {
   it("reads at 4.5 to 1 or more on every fill in both themes", () => {
     for (const theme of [light, dark]) {
-      for (const fill of ["--background", "--card", "--panel", "--muted", "--selected"]) {
+      for (const fill of ["--background", "--card", "--panel", "--muted", "--secondary", "--accent", "--selected"]) {
         expect(contrast(theme, "--muted-foreground", fill), fill).toBeGreaterThanOrEqual(4.5)
       }
     }

@@ -130,7 +130,8 @@ opening.
   and gets smaller if it must, down to two thirds of its size. A name still
   too long is cut short; point at the tile to see it whole. The level in dB
   on a tile is never cut: where it has no room it hides, and pointing at
-  the tile shows it. The clock always has room for ten hours, so a take
+  the tile shows it. On a tile that also records notes, the notes are now
+  grey where they were blue. The clock always has room for ten hours, so a take
   past 10:00:00 no longer runs off the left of a narrow window. In a short
   window things get smaller before the screen scrolls. The start screen
   and the recording screen now say the room on the disk in the same words,
