@@ -89,6 +89,8 @@ test("the health piece is as wide as its words, with no room held for a longer s
     const box = (await health.boundingBox())!
     expect(box.width, `width at ${width} px`).toBeLessThanOrEqual(said.width + 2)
     expect(box.height, `height at ${width} px`).toBeLessThanOrEqual(said.height + 2)
+    // Its words start at the left, as the tile's heading does, when they wrap.
+    await expect(health).toHaveCSS("text-align", "start")
   }
 })
 
@@ -115,6 +117,25 @@ test("the tiles show the app's own pieces", async ({ page }) => {
   await expect(songs.locator("[data-song-row]")).toHaveCount(1)
   await expect(songs.locator("[data-song-row='Pałyn']")).toHaveAttribute("aria-current", "true")
   await expect(names.locator("[data-song-choice]")).toHaveCount(0)
+})
+
+test("the two recording tiles are on wells, as the app draws them", async ({ page }) => {
+  await page.goto("/")
+  const piece = page.locator("#features").getByRole("img", { name: /Bass and Guitar tiles/ })
+  await expect(piece.locator("[data-surface]")).toHaveCount(2)
+  // Each on a well, the side panel's grey, as on the recording screen: on
+  // the page's white, a tile on a card's white would not show.
+  const found = await piece.evaluate((el) => {
+    const probe = document.createElement("div")
+    probe.style.backgroundColor = "var(--panel)"
+    el.append(probe)
+    const panel = getComputedStyle(probe).backgroundColor
+    probe.remove()
+    const fill = (e: Element) => getComputedStyle(e).backgroundColor
+    return { tiles: [...el.querySelectorAll("[data-surface]")].map(fill), panel, ground: fill(el) }
+  })
+  expect(found.tiles).toEqual([found.panel, found.panel])
+  expect(found.ground).not.toBe(found.panel)
 })
 
 test("the sets tile shows a rehearsal mid-set", async ({ page }) => {

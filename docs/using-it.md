@@ -69,7 +69,8 @@ a stereo track needs sound on both sides.
 
 The free disk space is shown under the tracks, as recording time: "Room for
 about 29 h 25 min of recording". It takes the number of tracks and the
-recording quality into account.
+recording quality into account. When the disk is about to run out, its
+icon turns yellow and it says so: "Low disk space: room for about 12 min".
 
 ### Last time
 
@@ -219,7 +220,8 @@ laptop.
 - **The take's name** is over the clock, half its size, so you can see from
   where you stand what you are recording. A take nobody named says "Take 3"
   there: that is the sign the name was forgotten. Put it right after Stop.
-  The take's number is up top, beside the red RECORDING.
+  A take you named has its number at the bottom left, beside **Stop**,
+  after the red *Recording*.
 - **The clock** shows how long the take has been running.
 - **The bar under it** shows up when this is another take of a song you have
   already played in this rehearsal: "Took 2:21 last time". The evening's
@@ -240,10 +242,12 @@ laptop.
   nothing coming in, below −60 dB, goes dim, which is normal while someone
   is not playing.
 
-The top corner says that the interface is connected and how much recording
-time the disk has left. It turns yellow when the disk is about to run out,
-and when the laptop runs on its battery with 20% or less left: "Battery 14%:
-plug the laptop in".
+Under *Recording*, a line says that the interface is connected and how
+much recording time the disk has left: "Interface connected · room for
+about 3 h 20 min of recording". When the disk is about to run out, its icon
+turns yellow and it says "Low disk space: room for about 12 min. Free some
+up or finish the rehearsal." It does the same when the laptop runs on its
+battery with 20% or less left: "Battery 14%: plug the laptop in".
 
 While a take records, the laptop does not go to sleep and its screen does
 not go dark or lock, whatever the system's own settings say. After Stop,
