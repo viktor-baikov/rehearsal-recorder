@@ -171,7 +171,7 @@ export function NotesLane({
           "--nl-grid": "color-mix(in oklab, var(--color-border) 80%, transparent)",
         } as React.CSSProperties
       }
-      className={cn("relative w-full overflow-hidden rounded-md bg-background", className)}
+      className={cn("relative w-full overflow-hidden rounded-md bg-well", className)}
     >
       {/* Out of the flow: a canvas is as tall as it was last drawn, and in
           the flow it would hold the lane at that height. */}
@@ -195,7 +195,7 @@ export function NotesLane({
         >
           {notes.rows.map((row) => (
             <span key={row} className="flex flex-1 items-center">
-              <span className="rounded-sm bg-background/85 px-0.5 text-xs leading-none text-muted-foreground">
+              <span className="rounded-sm bg-well/85 px-0.5 text-xs leading-none text-muted-foreground">
                 {row}
               </span>
             </span>
@@ -209,7 +209,7 @@ export function NotesLane({
             .map((p) => (
               <span
                 key={p}
-                className="absolute -translate-y-full rounded-sm bg-background/85 px-0.5 text-xs leading-none whitespace-nowrap text-muted-foreground"
+                className="absolute -translate-y-full rounded-sm bg-well/85 px-0.5 text-xs leading-none whitespace-nowrap text-muted-foreground"
                 style={{ top: `${((notes.high - p + 1) / (notes.high - notes.low + 1)) * 100}%` }}
               >
                 C{p / 12 - 1}

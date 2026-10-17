@@ -122,7 +122,7 @@ export function Waveform({
         } as React.CSSProperties
       }
       className={cn(
-        "relative w-full overflow-hidden rounded-md bg-background",
+        "relative w-full overflow-hidden rounded-md bg-well",
         className
       )}
     >

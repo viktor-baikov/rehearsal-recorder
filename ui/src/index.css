@@ -30,6 +30,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-panel: var(--panel);
+  --color-well: var(--well);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   /* A selected tab, pill or row, and a switch that is on, are neutral, not
@@ -179,6 +180,10 @@ html[data-recording]
   /* A side panel set back from the screen it is beside, darker than the
      background in both themes, with cards on it as they are elsewhere. */
   --panel: oklch(0.94 0.003 286.3);
+  /* A well: where a recording tile or a lane's picture sits, on its group's
+     fill, with 8 px corners and 3 px of the fill round it. Today the
+     panel's colour, in both themes. */
+  --well: var(--panel);
   --card-foreground: oklch(0.21 0.006 285.9);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.006 285.9);
@@ -232,6 +237,7 @@ html[data-recording]
   --foreground: oklch(0.93 0.003 286.3);
   --card: oklch(0.22 0.007 285.9);
   --panel: oklch(0.15 0.006 285.9);
+  --well: var(--panel);
   --card-foreground: oklch(0.93 0.003 286.3);
   --popover: oklch(0.24 0.007 285.9);
   --popover-foreground: oklch(0.93 0.003 286.3);

@@ -63,7 +63,7 @@ const ZOOM_PER_PIXEL = 0.002
  * одной группой»): one fill for every track's lane, its plate and its picture
  * side by side in a row, and no line between the rows. What tells one lane
  * from the next is its picture, a waveform or a lane of notes, each on a well
- * of its own (the page's colour, 8 px corners) with 3 px of the group's fill
+ * of its own (--well, 8 px corners) with 3 px of the group's fill
  * above and below it, so 6 px between two tracks' wells. A Both track's audio
  * and notes share one well, split by a 1 px line. The master is its own group
  * under them.
@@ -542,7 +542,7 @@ export function Timeline({
                       />
                       <div className={cn("min-w-0", paired ? "pb-[3px]" : "py-[3px]")}>
                         {/* Its own well (NotesLane's rounded-md
-                            bg-background); under its audio, the lower part
+                            bg-well); under its audio, the lower part
                             of the track's one well, under the line. */}
                         <NotesLane
                           name={lane.name}
@@ -599,7 +599,7 @@ export function Timeline({
 
                     <div data-lane={m.name} className={cn("min-w-0", paired ? "pt-[3px]" : "py-[3px]")}>
                       {/* On its well (Waveform's own rounded-md
-                          bg-background), 50 px in the 56; above its notes,
+                          bg-well), 50 px in the 56; above its notes,
                           the upper part of the track's one well. */}
                       <Waveform
                         peaks={m.peaks}

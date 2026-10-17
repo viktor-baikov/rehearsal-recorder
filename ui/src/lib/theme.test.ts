@@ -93,6 +93,14 @@ describe("a group", () => {
   })
 })
 
+describe("a well", () => {
+  it("is the side panel's colour in both themes, so it shows on a group's card", () => {
+    expect(value(light, "--well")).toBe("var(--panel)")
+    expect(value(dark, "--well")).toBe("var(--panel)")
+    expect(css).toContain("--color-well: var(--well);")
+  })
+})
+
 describe("the corners", () => {
   it("are 4, 8 and 12 by role, in px, so the Appearance scale leaves them be", () => {
     expect(css).toMatch(/--radius-sm:\s*4px;/)
