@@ -41,12 +41,19 @@ const FOUR = [
  * each, by the names Python knows them by: the names they had when it began.
  */
 async function openFour(page: Page, levels: Record<string, number[]> = {}, before = "") {
-  await page.addInitScript((heard) => {
-    ;(window as unknown as { __MONITOR_LEVELS__: unknown }).__MONITOR_LEVELS__ = heard
-  }, levels)
+  // Both handed over as data, never written into the page's code.
+  await page.addInitScript(
+    ([heard, four]) => {
+      const w = window as unknown as { __MONITOR_LEVELS__: unknown; __FOUR__: unknown }
+      w.__MONITOR_LEVELS__ = heard
+      w.__FOUR__ = four
+    },
+    [levels, FOUR] as const
+  )
   await openApp(page, {
     before,
-    after: `window.pywebview.api.load_default_tracks = async () => ({tracks: ${JSON.stringify(FOUR)}});`,
+    after:
+      "window.pywebview.api.load_default_tracks = async () => ({tracks: structuredClone(window.__FOUR__)});",
   })
   await expect(rows(page)).toHaveCount(4)
 }
