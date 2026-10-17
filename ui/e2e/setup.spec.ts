@@ -213,6 +213,9 @@ test.describe("the signal check", () => {
   test("a check that could not reach Python can be asked for again", async ({ page, pageErrors }) => {
     await openApp(page)
     const check = page.getByRole("button", { name: "Check signal" })
+    // The screen up first: pulled while the app still opens, the bridge takes
+    // the start screen with it.
+    await expect(check).toBeVisible()
     // The bridge gone for a moment, as before Python is ready: the press
     // throws before anything is asked.
     await page.evaluate(() => {

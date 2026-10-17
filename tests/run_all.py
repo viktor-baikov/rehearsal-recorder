@@ -75,24 +75,58 @@ They are plain scripts rather than pytest modules, and that is deliberate:
 test_engine stubs the `sounddevice` module before importing anything that
 needs a sound card, which has to happen at import time and fights with how
 pytest collects. Each exits non-zero on failure, which is all CI needs.
+
+They run side by side, each in its own process: they share nothing (each
+points the app at temporary folders of its own), and one after another took
+75 s in a four-core container where side by side took 50, the time of
+test_engine alone (on CI's Mac, 145 s and 64). Each suite's output is
+printed whole as it finishes, so the log reads one suite at a time, as
+before. A suite still running after LIMIT seconds has hung: it is stopped
+and what it wrote so far is printed, which shows where it stuck.
 """
 
+import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SUITES = ("test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
           "test_midi.py")
 
+# Four times the longest any suite has taken (test_engine, 145 s on CI's Mac).
+LIMIT = 600
+
+
+def run(suite):
+    """One suite, its output and its errors kept together, as it wrote them."""
+    try:
+        return subprocess.run(
+            [sys.executable, str(HERE / suite)],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=LIMIT,
+            # Each line as it is written, so a hung suite's last lines are
+            # caught too, and an error lands among them where it happened.
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        )
+    except subprocess.TimeoutExpired as hung:
+        stopped = f"\n{suite} still running after {LIMIT} s: stopped.\n".encode()
+        return subprocess.CompletedProcess(hung.cmd, 1, (hung.output or b"") + stopped)
+
 
 def main():
     failed = []
-    for suite in SUITES:
-        print(f"\n{'=' * 60}\n{suite}\n{'=' * 60}")
-        result = subprocess.run([sys.executable, str(HERE / suite)])
-        if result.returncode != 0:
-            failed.append(suite)
+    with ThreadPoolExecutor(len(SUITES)) as pool:
+        runs = {pool.submit(run, suite): suite for suite in SUITES}
+        for done in as_completed(runs):
+            suite, result = runs[done], done.result()
+            print(f"\n{'=' * 60}\n{suite}\n{'=' * 60}", flush=True)
+            # The bytes as the suite wrote them: decoded and encoded again,
+            # a character the console cannot show would fail here instead.
+            sys.stdout.buffer.write(result.stdout)
+            sys.stdout.buffer.flush()
+            if result.returncode != 0:
+                failed.append(suite)
 
     print(f"\n{'=' * 60}")
     if failed:
