@@ -12,6 +12,7 @@ import {
   style,
   test,
   themed,
+  tileNames,
   tipLines,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
@@ -65,18 +66,9 @@ const wideFont = (page: Page) =>
   page.addStyleTag({ content: "html, body { font-family: Arial, sans-serif !important; }" })
 
 /** The track names a tile cuts short: no worse than it is without the take's
- *  name over the clock, at each size checked. A name cut on two lines keeps
- *  only what fits, so it says it is cut; one cut on one line runs out of its
- *  box. */
-const cutNames = (page: Page) =>
-  page.evaluate(() =>
-    [...document.querySelectorAll("main [role=group]")]
-      .filter((t) => {
-        const el = t.querySelector("[data-name]")!
-        return el.hasAttribute("data-cut") || el.scrollHeight > el.clientHeight + 1
-      })
-      .map((t) => t.getAttribute("aria-label"))
-  )
+ *  name over the clock, at each size checked. */
+const cutNames = async (page: Page) =>
+  (await tileNames(page)).filter((n) => !n.whole).map((n) => n.name)
 
 /** How far up its side the Vocals tile's fill reaches, 0..1. */
 const reach = (page: Page) =>
@@ -89,38 +81,19 @@ const reach = (page: Page) =>
   })
 
 /** How each tile writes its track's name: up the tile, whole, from its
- *  bottom left corner, on two lines at most, and on two only where it has a
- *  space to break at — "Overheads" broken into "Overhea / ds" across a
- *  narrow tile is what this replaced. Up the tile a line is as wide as its
- *  line height. Returns the ones that do not. */
-const badNames = (page: Page) =>
-  page.evaluate(() =>
-    [...document.querySelectorAll("main [role=group]")]
-      .map((t) => {
-        const el = t.querySelector("[data-name]")
-        const name = t.getAttribute("aria-label")
-        if (!el) return { name, found: false }
-        const tile = t.getBoundingClientRect()
-        const r = el.getBoundingClientRect()
-        const cs = getComputedStyle(el)
-        const lines = r.width / parseFloat(cs.lineHeight)
-        return {
-          name,
-          found: true,
-          upward: cs.writingMode === "vertical-rl" && cs.transform !== "none",
-          lines:
-            ["1", "2"].includes(el.getAttribute("data-lines") ?? "") &&
-            lines < 2.5 &&
-            (lines < 1.5 || /\s/.test(el.textContent ?? "")),
-          whole:
-            !el.hasAttribute("data-cut") &&
-            el.textContent === name &&
-            el.scrollHeight <= el.clientHeight + 1,
-          corner: r.left - tile.left < 24 && tile.bottom - r.bottom < 24,
-        }
-      })
-      .filter((n) => !Object.values(n).every(Boolean))
-  )
+ *  bottom left corner, on the lines it says it has, and on two only where it
+ *  has a space to break at — "Overheads" broken into "Overhea / ds" across a
+ *  narrow tile is what this replaced. Returns the ones that do not. */
+const badNames = async (page: Page) =>
+  (await tileNames(page))
+    .map((n) => ({
+      name: n.name,
+      upward: n.upward,
+      lines: n.lines >= 1 && n.said === n.lines && (n.lines === 1 || /\s/.test(n.text)),
+      whole: n.whole,
+      corner: n.corner,
+    }))
+    .filter((n) => !Object.values(n).every(Boolean))
 
 test("a first take says what is recording, what clipped and what is silent", async ({ page }) => {
   // The fake holds Guitar at the top and Vocals at nothing, unless a test

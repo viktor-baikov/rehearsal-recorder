@@ -12,10 +12,11 @@ import { cn } from "@/lib/utils"
 
   The size, the lines and the cut are fitted from the room the name has,
   measured on an unseen copy, and fitted again only when that room changes
-  size: the window or the scale. Nothing that comes during a take changes the
-  room (a tile's header keeps the room of its status line from the start), so
-  a clip, a silence, a port that goes or the clock passing 10:00 never changes
-  a name's size or where it is cut.
+  size (the window or the scale) or a web font comes in (the app draws in the
+  system's fonts, so only reha.stream sees that). Nothing that comes during a
+  take changes the room (a tile's header keeps the room of its status line
+  from the start), so a clip, a silence, a port that goes or the clock passing
+  10:00 never changes a name's size or where it is cut.
 */
 
 /** A name's size, where it fits whole. */
@@ -171,7 +172,13 @@ export function TileName({
     if (!box) return
     const watch = new ResizeObserver(measure)
     watch.observe(box)
-    return () => watch.disconnect()
+    // A web font that comes after the fit (reha.stream's, which swaps in)
+    // changes how long the name is, not the room: fitted again then.
+    document.fonts.addEventListener("loadingdone", measure)
+    return () => {
+      watch.disconnect()
+      document.fonts.removeEventListener("loadingdone", measure)
+    }
   }, [measure])
   useEffect(() => {
     onFit?.({ cut: fit.cut, sideGone: !fit.side })
