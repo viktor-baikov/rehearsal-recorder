@@ -25,7 +25,14 @@ export default defineConfig({
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
-    trace: "retain-on-failure",
+    // Every test records a trace, kept when it fails: each step, the page as
+    // it stood at that step, the console. Not the film of screenshots a trace
+    // takes by default: in a four-core cloud container, where Claude runs the
+    // suite, encoding it was a third of the time, for every test, passed or
+    // not; on CI's runner it costs little. A failed test still leaves a
+    // picture of where it stopped.
+    trace: { mode: "retain-on-failure", screenshots: false },
+    screenshot: "only-on-failure",
   },
   projects: [
     {

@@ -186,7 +186,10 @@ Build first: the browser tests drive `ui/dist`, not `ui/src`. The first time,
 `cd ui && npx playwright install chromium` fetches the browser.
 
 CI runs both once, on Linux: they run in a browser against a faked Python
-side, and nothing in them depends on the system underneath.
+side, and nothing in them depends on the system underneath. The browser tests
+run in three parts on three machines at once (`--shard`), since on one they
+took longer than everything else together. To run one part here, as CI does:
+`npm run test:e2e -- --shard=1/3`.
 
 ## docs_screenshots.py — the pictures in the docs
 
