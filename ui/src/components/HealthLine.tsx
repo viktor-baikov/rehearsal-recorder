@@ -1,11 +1,56 @@
 import { BatteryLow, HardDrive } from "lucide-react"
 import type { RecordingHealth } from "@/lib/api"
-import { aboutDuration } from "@/lib/format"
+import { diskLine } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 /** At or under this charge, on battery, the line asks for the charger. 20%
  *  is where Windows turns its own battery saver on. */
 export const LOW_BATTERY = 20
+
+/** Python calls the space low under this many minutes (api.py
+ *  LOW_SPACE_MINUTES), so a low line never says more than 14. */
+const LOW_SPACE_MINUTES = 15
+
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
+/** The free space while the interface sends: the start screen's sentence,
+ *  led by the interface. */
+const connected = (minutes: number) => `Interface connected · ${lower(diskLine(minutes, false))}`
+const lowSpace = (minutes: number) =>
+  `${diskLine(minutes, true)}. Free some up or finish the rehearsal.`
+
+/** The longest the line can say, held unseen under it from the start, so the
+ *  room it takes never changes while a take records (B4). Past 48 h the
+ *  estimate is "many hours", so 48 h 59 min is the longest it writes. */
+const LONGEST = [connected(48 * 60 + 59), lowSpace(LOW_SPACE_MINUTES - 1)]
+
+function Line({
+  icon,
+  text,
+  warn,
+  unseen,
+}: {
+  icon: "disk" | "battery"
+  text: string
+  warn?: boolean
+  unseen?: boolean
+}) {
+  const Icon = icon === "battery" ? BatteryLow : HardDrive
+  return (
+    <div
+      aria-hidden={unseen || undefined}
+      className={cn("col-start-1 row-start-1 flex items-start gap-2", unseen && "invisible")}
+    >
+      <Icon className={cn("mt-px size-3.5 shrink-0", warn && "text-warn")} />
+      {unseen ? (
+        // Drawn from an attribute, not written in the page: a copy that only
+        // holds room is not a second line of text to find, read or select.
+        <span data-text={text} className="before:content-[attr(data-text)]" />
+      ) : (
+        <span>{text}</span>
+      )}
+    </div>
+  )
+}
 
 /**
  * The recording screen's status line: room left on the drive and whether
@@ -13,44 +58,54 @@ export const LOW_BATTERY = 20
  * end the take. The website shows it too, in a tile.
  *
  * Always there, not only when something is wrong: you should be able to
- * see at a glance that the recording is healthy.
+ * see at a glance that the recording is healthy. The free space is said in
+ * the start screen's words (diskLine), and running low is a warning on both
+ * screens: the icon in warn and the words in the text's colour, as Alert
+ * draws it.
+ *
+ * It holds the room of the longest thing it can say, so it never moves what
+ * is beside it.
  */
-export function HealthLine({ health }: { health: RecordingHealth | null }) {
+export function HealthLine({
+  health,
+  align = "end",
+}: {
+  health: RecordingHealth | null
+  /** Where the line stands in the room it holds: flush right at the top of
+   *  the screen, flush left in the footer. */
+  align?: "start" | "end"
+}) {
   const battery = health?.battery_percent
   const lowBattery = battery != null && battery <= LOW_BATTERY
+  const warn = !health?.error && (!!health?.low_space || lowBattery)
+  const text = health?.error
+    ? health.error
+    : health === null
+      ? "Checking free space…"
+      : health.low_space
+        ? lowSpace(health.minutes_left ?? 0)
+        : lowBattery
+          ? `Battery ${battery}%: plug the laptop in`
+          : connected(health.minutes_left ?? 0)
   return (
     <div
+      data-health
       className={cn(
-        "flex items-center gap-2 text-xs",
-        health?.error
-          ? "text-destructive"
-          : health?.low_space || lowBattery
-            ? "text-warn"
-            : "text-muted-foreground"
+        // Tabular figures: every digit as wide as the next, so the longest
+        // sentence is the longest whatever the minutes are.
+        "tnum grid text-xs",
+        align === "end" ? "justify-items-end text-right" : "justify-items-start",
+        health?.error ? "text-destructive" : warn ? "text-foreground" : "text-muted-foreground"
       )}
     >
-      {lowBattery && !health?.error && !health?.low_space ? (
-        <BatteryLow className="size-3.5 shrink-0" />
-      ) : (
-        <HardDrive className="size-3.5 shrink-0" />
-      )}
-      {health?.error ? (
-        <span>{health.error}</span>
-      ) : health === null ? (
-        <span>Checking free space…</span>
-      ) : health.low_space ? (
-        <span>
-          Running out of space: {aboutDuration(health.minutes_left ?? 0)}{" "}
-          left. Free some up or finish the rehearsal.
-        </span>
-      ) : lowBattery ? (
-        <span>Battery {battery}%: plug the laptop in</span>
-      ) : (
-        <span>
-          Interface connected · room for{" "}
-          {aboutDuration(health.minutes_left ?? 0)} more
-        </span>
-      )}
+      {LONGEST.map((t) => (
+        <Line key={t} icon="disk" text={t} unseen />
+      ))}
+      <Line
+        icon={lowBattery && !health?.error && !health?.low_space ? "battery" : "disk"}
+        text={text}
+        warn={warn}
+      />
     </div>
   )
 }

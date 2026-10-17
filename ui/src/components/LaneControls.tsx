@@ -3,10 +3,8 @@ import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { LanePlate } from "@/components/ui/lane-plate"
 import { Toggle } from "@/components/ui/toggle"
 import { Whole } from "@/components/ui/whole"
+import { CLIP_THRESHOLD } from "@/lib/levels"
 import { cn } from "@/lib/utils"
-
-/** At or above this the track is at full scale where the playhead stands. */
-const CLIP_THRESHOLD = 0.97
 
 /**
  * A fader over its own meter. One control instead of two bars: the thumb
@@ -44,7 +42,7 @@ function MeteredFader({
 }) {
   const sides = Array.from({ length: channels > 1 ? 2 : 1 }, (_, i) => levels[i] ?? 0)
   const level = Math.max(0, ...sides)
-  const clipping = level >= CLIP_THRESHOLD
+  const clipping = level > CLIP_THRESHOLD
   const split = sides.length > 1
 
   return (
@@ -68,7 +66,7 @@ function MeteredFader({
             className={cn(
               "absolute left-0 transition-[width] duration-75",
               !split && "rounded-full",
-              side >= CLIP_THRESHOLD ? "bg-destructive" : "bg-signal"
+              side > CLIP_THRESHOLD ? "bg-destructive" : "bg-signal"
             )}
             style={{
               width: `${Math.min(100, Math.max(0, side * 100))}%`,

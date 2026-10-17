@@ -204,6 +204,26 @@ export function aboutDuration(minutes: number): string {
   return said === "many hours" ? said : `about ${said}`
 }
 
+/** The free space, said one way on the start screen and while a take
+ *  records (C8, B8): "Room for about 3 h of recording", or, when it runs low,
+ *  "Low disk space: room for about 5 min". */
+export function diskLine(minutes: number, low: boolean): string {
+  return low
+    ? `Low disk space: room for ${aboutDuration(minutes)}`
+    : `Room for ${aboutDuration(minutes)} of recording`
+}
+
+/** "3 notes", "1 note", "1,234 notes": a count and its noun, one place for
+ *  the plural (B8). */
+export function countOf(n: number, one: string, many = `${one}s`): string {
+  return `${n.toLocaleString("en-US")} ${nounFor(n, one, many)}`
+}
+
+/** The noun alone, for a count drawn apart from it. */
+export function nounFor(n: number, one: string, many = `${one}s`): string {
+  return n === 1 ? one : many
+}
+
 /** Peak 0..1 as dBFS, for the meter caption. */
 export function peakToDb(peak: number): string {
   if (peak <= 0) return "−∞"

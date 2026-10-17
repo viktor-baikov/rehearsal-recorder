@@ -11,6 +11,7 @@ const FAKE = fileURLToPath(new URL("./fake-bridge.js", import.meta.url))
 const BAND = fileURLToPath(new URL("./band.js", import.meta.url))
 const STRESS = fileURLToPath(new URL("./stress.js", import.meta.url))
 const STRESS_REHEARSAL = fileURLToPath(new URL("./stress-rehearsal.js", import.meta.url))
+const STRESS_RECORDING = fileURLToPath(new URL("./stress-recording.js", import.meta.url))
 
 /**
  * Every test fails on an error in the page: an exception, or anything the
@@ -59,23 +60,41 @@ export function expectedError(errors: string[], pattern: RegExp) {
  * `before` runs ahead of the fake, to set it up: window.__LEVELS__,
  * window.__DRAFTS__ and the rest that fake-bridge.js reads. `after` runs once
  * the fake is in place, to change one of its answers.
+ *
+ * With `stress: "recording"`, the band and stress-rehearsal.js are under the
+ * fake and stress-recording.js over them: take 33, the second of the longest
+ * song name, is recording when the app comes up, and this returns once its
+ * clock is on screen. `before` and `after` still wrap it.
  */
 export async function openApp(
   page: Page,
   {
     before,
     after,
+    stress,
     waitUntil = "load",
   }: {
     before?: string
     after?: string
+    stress?: "recording"
     waitUntil?: "load" | "domcontentloaded" | "networkidle"
   } = {}
 ) {
   if (before) await page.addInitScript(before)
-  await page.addInitScript({ path: FAKE })
+  if (stress) {
+    // One script, not two, as in openBandApp: the fake's top-level `let`s are
+    // not seen from a second init script.
+    const source = [FAKE, BAND, STRESS_REHEARSAL, STRESS_RECORDING]
+      .map((f) => readFileSync(f, "utf-8"))
+      .join("\n")
+    await page.addInitScript(source)
+  } else {
+    await page.addInitScript({ path: FAKE })
+  }
   if (after) await page.addInitScript(after)
   await page.goto("/", { waitUntil })
+  // The fixture presses Record itself: the screen is up once the clock is.
+  if (stress) await expect(page.locator("[role=timer]")).toBeVisible()
 }
 
 /**

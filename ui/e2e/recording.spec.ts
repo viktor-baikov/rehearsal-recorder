@@ -1,4 +1,16 @@
-import { expect, keyOn, nameTake, openApp, setFake, startRehearsal, test } from "./app.ts"
+import {
+  colour,
+  expect,
+  keyOn,
+  nameTake,
+  openApp,
+  setFake,
+  settled,
+  startRehearsal,
+  style,
+  test,
+  themed,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // The recording screen is read from across the room. Nobody stands at the
@@ -9,9 +21,9 @@ import type { Page } from "@playwright/test"
 // without waiting for it.
 
 /** The second go at "Viasna", recording, both tracks at half scale. */
-async function secondGo(page: Page, song = "Viasna") {
+async function secondGo(page: Page, song = "Viasna", before = "") {
   await page.clock.install()
-  await openApp(page, { before: "window.__LEVELS__ = {'Guitar': [0.5], 'Vocals': [0.5]};" })
+  await openApp(page, { before: `window.__LEVELS__ = {'Guitar': [0.5], 'Vocals': [0.5]};${before}` })
   await startRehearsal(page)
   await page.getByRole("button", { name: /Record take 1/ }).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
@@ -36,6 +48,9 @@ const tile = (page: Page, name: string) => page.getByRole("group", { name })
 const takeName = (page: Page) => page.getByRole("heading", { level: 1 })
 /** The line up top, beside the red RECORDING. */
 const topLine = (page: Page) => page.locator("[data-recording-line]")
+/** The disk line up top, with the battery and what is wrong with the interface:
+ *  one box that keeps its size whatever it says. */
+const health = (page: Page) => page.locator("[data-health]")
 /** The pill in the middle that said all was well, or what was not. */
 const pill = (page: Page) => page.getByRole("status", { name: "Take status" })
 
@@ -109,7 +124,9 @@ test("a first take says what is recording, what clipped and what is silent", asy
   await expect(tile(page, "Vocals")).toContainText("silent")
   // An estimate under two days keeps its about.
   await expect(
-    page.getByText("Interface connected · room for about 10 h 40 min more", { exact: true })
+    page.getByText("Interface connected · room for about 10 h 40 min of recording", {
+      exact: true,
+    })
   ).toHaveCount(1)
   // Guitar at the top the whole time is one clip that has not ended, not
   // one for every poll, said on its tile and nowhere else.
@@ -270,7 +287,11 @@ test("running out of disk is said on the disk line, and past an hour the clock s
   await setFake(page, "__LOW_SPACE__", true)
   // Said where the free space always is, for as long as it holds: not a
   // notice over the tiles, and not instead of the clip.
-  await expect(page.getByText(/^Running out of space: .* left\./)).toHaveCount(1)
+  await expect(
+    page.getByText("Low disk space: room for about 5 min. Free some up or finish the rehearsal.", {
+      exact: true,
+    })
+  ).toHaveCount(1)
   await expect(page.locator("[data-notice]")).toHaveCount(0)
   await expect(pill(page)).toHaveCount(0)
   await expect(tile(page, "Vocals")).toHaveAttribute("data-clipped")
@@ -301,6 +322,81 @@ test("a battery running low is said on the status line, and nothing moves", asyn
   await expect(page.getByText(/^Battery 14%/)).toHaveCount(1)
   await setFake(page, "__BATTERY__", null)
   await expect(page.getByText(/^Interface connected · room for/)).toHaveCount(1)
+})
+
+test("the recording disk line says the start screen's words", async ({ page }) => {
+  await secondGo(page)
+  // The start screen says "Room for about 10 h 40 min of recording"; here
+  // the line leads with the interface, and the rest is the same sentence.
+  await expect(health(page).getByText(/^Interface connected · room for /)).toHaveCount(1)
+  await expect(
+    page.getByText("Interface connected · room for about 10 h 40 min of recording", {
+      exact: true,
+    })
+  ).toHaveCount(1)
+  // Low space is the start screen's "Low disk space: room for about 5 min",
+  // and what to do about it.
+  await setFake(page, "__LOW_SPACE__", true)
+  await expect(
+    page.getByText("Low disk space: room for about 5 min. Free some up or finish the rehearsal.", {
+      exact: true,
+    })
+  ).toHaveCount(1)
+  await expect(page.getByText(/^Running out of space/)).toHaveCount(0)
+  await expect(page.getByText(/^Interface connected/)).toHaveCount(0)
+  await setFake(page, "__LOW_SPACE__", false)
+  await expect(page.getByText(/^Interface connected · room for /)).toHaveCount(1)
+})
+
+for (const theme of ["dark", "light"] as const) {
+  test(`the low disk line on the recording screen is a warning in the text colour, in the ${theme} theme`, async ({
+    page,
+  }) => {
+    await secondGo(page, "Viasna", themed(theme))
+    expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
+      theme === "dark"
+    )
+    await setFake(page, "__LOW_SPACE__", true)
+    const words = page.getByText(/^Low disk space: room for about 5 min\./)
+    await expect(words).toHaveCount(1)
+    // The shared warning look (Alert's): the icon in warn, the words in the
+    // text's colour. The same as on the start screen.
+    expect(await style(words, "color")).toEqual({ color: await colour(page, "--foreground") })
+    expect(await style(words.locator("..").locator("svg"), "color")).toEqual({
+      color: await colour(page, "--warn"),
+    })
+    // Quiet when all is well.
+    await setFake(page, "__LOW_SPACE__", false)
+    const fine = page.getByText(/^Interface connected · room for /)
+    await expect(fine).toHaveCount(1)
+    expect(await style(fine, "color")).toEqual({ color: await colour(page, "--muted-foreground") })
+  })
+}
+
+test("the health line keeps its size when low space comes", async ({ page }) => {
+  await secondGo(page)
+  for (const width of [1180, 640]) {
+    await page.setViewportSize({ width, height: 820 })
+    await settled(page)
+    const line = health(page)
+    const said = () => line.evaluate((e) => (e as HTMLElement).innerText)
+    const was = await said()
+    const before = (await line.boundingBox())!
+    // The longest it says is held, unseen, from the start; whatever it says
+    // after that, it takes the same room.
+    for (const [name, value] of [
+      ["__LOW_SPACE__", true],
+      ["__BATTERY__", 14],
+    ] as const) {
+      await setFake(page, name, value)
+      await expect.poll(said, { message: `${name} at ${width}` }).not.toBe(was)
+      const after = (await line.boundingBox())!
+      for (const key of ["x", "y", "width", "height"] as const)
+        expect(Math.abs(after[key] - before[key]), `${key} at ${width} with ${name}`).toBeLessThanOrEqual(0.5)
+      await setFake(page, name, name === "__BATTERY__" ? null : false)
+      await expect.poll(said, { message: `${name} gone at ${width}` }).toBe(was)
+    }
+  }
 })
 
 test("sixteen tracks still fit in one row, a stereo one split down the middle", async ({
