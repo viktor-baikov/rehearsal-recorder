@@ -126,8 +126,15 @@ describe("Meter, upright", () => {
     const out = up({ sides: [0.5, 0.5], held: [0.7, 0] })
     expect(out.match(/data-held/g)).toHaveLength(1)
     expect(out).toContain("absolute inset-x-0 h-0.5 bg-foreground/35")
-    expect(out).toContain("bottom:70%")
+    expect(out).toContain("bottom:calc(70% - 1.4px)")
     expect(up({ sides: [0.5] })).not.toContain("data-held")
+  })
+
+  it("keeps a held line at full scale inside its box, as the top 2 px of it", () => {
+    // At 100 % the line would stand on the box's top, all of it outside.
+    const out = up({ sides: [1], held: [1] })
+    expect(out).toContain("bottom:calc(100% - 2px)")
+    expect(out).not.toMatch(/bottom:100%/)
   })
 
   it("follows its value over 75 ms, as across does", () => {

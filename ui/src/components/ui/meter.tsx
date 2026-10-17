@@ -15,7 +15,8 @@ import { cn } from "@/lib/utils"
   bottom, side by side 2 px apart, with a 2 px line on top of its fill; a
   side at 0 draws nothing, as a lit line along the bottom of a dead input
   would read as a little signal. A held value draws a 2 px line where it
-  stands, and a clipped side is drawn in destructive.
+  stands, inside the box even at full scale, and a clipped side is drawn in
+  destructive.
 
   The signal is the level's green. Notes are grey, in the text's colour: they
   are not a sound and have no level to set. A fill follows its value over
@@ -110,7 +111,9 @@ function Meter({
                 <div
                   data-held
                   className="absolute inset-x-0 h-0.5 bg-foreground/35"
-                  style={{ bottom: `${line * 100}%` }}
+                  // Its 2 px stand inside the box all the way up: at full
+                  // scale it is the box's top 2 px, not 2 px over it.
+                  style={{ bottom: `calc(${line * 100}% - ${line * 2}px)` }}
                 />
               )}
             </div>

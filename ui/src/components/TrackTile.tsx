@@ -103,7 +103,9 @@ const FIGURES = { card: "[&>span]:bg-card/85", well: "[&>span]:bg-well/85" } as 
  * fade (F11); on a well, the well keeps its own colour and dims what is on
  * it, so the row keeps its shape. A clip or a port that is gone is a 2 px
  * edge inside the box, over everything in it. `tip` is the tooltip's lines;
- * with none, none shows.
+ * with none, none opens, so nothing points at one that is not there. It
+ * stays wrapped in the tooltip either way: unwrapped, the box would be a new
+ * one, and what watches its size would be watching the old.
  */
 function TileBox({
   surface,
@@ -122,8 +124,13 @@ function TileBox({
 }) {
   const well = surface === "well"
   const corners = well ? "rounded-md" : "rounded-xl"
+  // Held here the whole time, as WholeTip's is: left to Radix only while
+  // there is something to say, it would switch between held and not, which
+  // Radix warns of.
+  const says = tip.length > 0
+  const [open, setOpen] = useState(false)
   return (
-    <Tooltip>
+    <Tooltip open={says && open} onOpenChange={(next) => setOpen(says && next)}>
       <TooltipTrigger asChild>
         <div
           data-surface={surface}
@@ -154,7 +161,7 @@ function TileBox({
           )}
         </div>
       </TooltipTrigger>
-      {tip.length > 0 && (
+      {says && (
         <TooltipContent>
           {tip.map((line) => (
             <div key={line}>{line}</div>
@@ -226,6 +233,48 @@ function TileIcon({ icon, surface }: { icon?: string; surface: TileSurface }) {
     <span className={cn("shrink-0 rounded p-0.5", BACKING[surface])}>
       <InstrumentIcon icon={icon} className="size-[clamp(1rem,14cqi,1.75rem)]" />
     </span>
+  )
+}
+
+/** The size of the figure at the top of the header, the dB or the count. */
+// design-ok(px-text): sized from the tile's width (8cqi), so the readout fits at any window size
+const READOUT = { fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }
+
+/**
+ * What both kinds lay out over their fill: the header across the top, with
+ * the icon in its corner and, opposite it, `children`, the figures, each a
+ * span on the surface's colour, the readout (sized `READOUT`) first; and
+ * under it `name`, the name and what stands beside it.
+ */
+function TileLayout({
+  icon,
+  surface,
+  name,
+  children,
+}: {
+  icon?: string
+  surface: TileSurface
+  name: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div className="relative grid h-full grid-rows-[auto_minmax(0,1fr)] gap-2 p-[clamp(0.375rem,7cqi,1.25rem)]">
+      {/* On the surface's colour, the icon and the figures alike: in dB a
+          level that is set well stands near the top, and the fill and its
+          line ran through the figure. */}
+      <div data-header className="flex items-start justify-between gap-1">
+        <TileIcon icon={icon} surface={surface} />
+        <div
+          className={cn(
+            "flex min-w-0 flex-col items-end gap-1 text-right [&>span]:rounded [&>span]:px-1",
+            FIGURES[surface]
+          )}
+        >
+          {children}
+        </div>
+      </div>
+      {name}
+    </div>
   )
 }
 
@@ -303,98 +352,88 @@ function LevelsTile({
         )}
       </div>
 
-      <div className="relative grid h-full grid-rows-[auto_minmax(0,1fr)] gap-2 p-[clamp(0.375rem,7cqi,1.25rem)]">
-        {/* On the surface's colour, the icon and the figure alike: in dB a
-            level that is set well stands near the top, and the fill and its
-            line ran through the figure. */}
-        <div data-header className="flex items-start justify-between gap-1">
-          <TileIcon icon={icon} surface={surface} />
-          <div
-            className={cn(
-              "flex min-w-0 flex-col items-end gap-1 text-right [&>span]:rounded [&>span]:px-1",
-              FIGURES[surface]
-            )}
-          >
-            <span
-              ref={figure}
-              data-db
-              className={cn(
-                "tnum grid justify-items-end",
-                peak > CLIP_THRESHOLD ? "text-destructive" : "text-muted-foreground",
-                !fits && "invisible"
-              )}
-              // design-ok(px-text): sized from the tile's width (8cqi), so the readout fits at any window size
-              style={{ fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }}
+      <TileLayout
+        icon={icon}
+        surface={surface}
+        name={
+          // The name runs up the tile from its bottom left corner, as on the
+          // spine of a book: a tile is tall and, sixteen to a row, narrow,
+          // and "Overheads" across one came out as "Overhea / ds". Written
+          // the same way on a wide tile, so there is one way to read them.
+          <div className="flex min-h-0 items-end gap-1.5">
+            <div
+              data-name
+              className="max-h-full overflow-hidden leading-none font-semibold text-ellipsis whitespace-nowrap"
+              style={{
+                writingMode: "vertical-rl",
+                transform: "rotate(180deg)",
+                // design-ok(px-text): sized from the tile's width (18cqi), so the name fits at any window size
+                fontSize: "clamp(0.875rem, 18cqi, 2.25rem)",
+              }}
             >
-              <span aria-hidden className="invisible col-start-1 row-start-1">
-                -60.0<span className="@max-[7rem]:hidden"> dB</span>
-              </span>
-              <span className="col-start-1 row-start-1">
-                {peakToDb(peak)}
-                <span className="@max-[7rem]:hidden"> dB</span>
+              {name}
+            </div>
+            <div
+              className="tnum max-h-full overflow-hidden text-xs leading-none text-ellipsis whitespace-nowrap text-muted-foreground @max-[7rem]:hidden"
+              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+            >
+              {channel === null
+                ? "No input"
+                : stereo
+                  ? `Inputs ${channel}–${channel + 1}`
+                  : `Input ${channel}`}
+            </div>
+          </div>
+        }
+      >
+        <span
+          ref={figure}
+          data-db
+          className={cn(
+            "tnum grid justify-items-end",
+            peak > CLIP_THRESHOLD ? "text-destructive" : "text-muted-foreground",
+            !fits && "invisible"
+          )}
+          style={READOUT}
+        >
+          <span aria-hidden className="invisible col-start-1 row-start-1">
+            -60.0<span className="@max-[7rem]:hidden"> dB</span>
+          </span>
+          <span className="col-start-1 row-start-1">
+            {peakToDb(peak)}
+            <span className="@max-[7rem]:hidden"> dB</span>
+          </span>
+        </span>
+        {/* One line for both, which does not wrap: the count, or that there
+            is no port to count from where that fits, so nothing under it
+            moves when the port comes and goes. */}
+        {midi && (
+          <span
+            data-notes
+            className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @max-[7rem]:hidden"
+          >
+            <span className={cn("flex items-center gap-1", !midi.connected && "@min-[9.5rem]:hidden")}>
+              <MidiGlyph className="size-3 shrink-0" />
+              <span>
+                <NoteCount notes={midi.notes} />
               </span>
             </span>
-            {/* One line for both, which does not wrap: the count, or that there
-                is no port to count from where that fits, so nothing under it
-                moves when the port comes and goes. */}
-            {midi && (
-              <span
-                data-notes
-                className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @max-[7rem]:hidden"
-              >
-                <span
-                  className={cn("flex items-center gap-1", !midi.connected && "@min-[9.5rem]:hidden")}
-                >
-                  <MidiGlyph className="size-3 shrink-0" />
-                  <span>
-                    <NoteCount notes={midi.notes} />
-                  </span>
-                </span>
-                {!midi.connected && <span className="hidden @min-[9.5rem]:inline">not connected</span>}
-              </span>
-            )}
-            <span
-              data-status
-              className={cn(
-                "text-xs whitespace-nowrap @max-[7rem]:hidden",
-                clips > 0 ? "font-semibold text-destructive" : "text-muted-foreground",
-                !status && "invisible"
-              )}
-            >
-              {status ?? "silent"}
-            </span>
-          </div>
-        </div>
-
-        {/* The name runs up the tile from its bottom left corner, as on the
-            spine of a book: a tile is tall and, sixteen to a row, narrow, and
-            "Overheads" across one came out as "Overhea / ds". Written the
-            same way on a wide tile, so there is one way to read them. */}
-        <div className="flex min-h-0 items-end gap-1.5">
-          <div
-            data-name
-            className="max-h-full overflow-hidden leading-none font-semibold text-ellipsis whitespace-nowrap"
-            style={{
-              writingMode: "vertical-rl",
-              transform: "rotate(180deg)",
-              // design-ok(px-text): sized from the tile's width (18cqi), so the name fits at any window size
-              fontSize: "clamp(0.875rem, 18cqi, 2.25rem)",
-            }}
-          >
-            {name}
-          </div>
-          <div
-            className="tnum max-h-full overflow-hidden text-xs leading-none text-ellipsis whitespace-nowrap text-muted-foreground @max-[7rem]:hidden"
-            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-          >
-            {channel === null
-              ? "No input"
-              : stereo
-                ? `Inputs ${channel}–${channel + 1}`
-                : `Input ${channel}`}
-          </div>
-        </div>
-      </div>
+            {!midi.connected && <span className="hidden @min-[9.5rem]:inline">not connected</span>}
+          </span>
+        )}
+        {/* With nothing to say, an unseen space keeps its line: there is no
+            word in it that is not so, for a test or a screen reader. */}
+        <span
+          data-status
+          className={cn(
+            "text-xs whitespace-nowrap @max-[7rem]:hidden",
+            clips > 0 ? "font-semibold text-destructive" : "text-muted-foreground",
+            !status && "invisible"
+          )}
+        >
+          {status ?? " "}
+        </span>
+      </TileLayout>
     </TileBox>
   )
 }
@@ -434,69 +473,62 @@ function NotesTile({ name, icon, port, vel, notes, connected, tip, surface = "ca
     >
       <NotesMeter vel={vel} />
 
-      <div className="relative grid h-full grid-rows-[auto_minmax(0,1fr)] gap-2 p-[clamp(0.375rem,7cqi,1.25rem)]">
-        <div data-header className="flex items-start justify-between gap-1">
-          <TileIcon icon={icon} surface={surface} />
-          <div
-            className={cn(
-              "flex min-w-0 flex-col items-end gap-1 text-right [&>span]:rounded [&>span]:px-1",
-              FIGURES[surface]
-            )}
-          >
-            <span
-              ref={figure}
-              data-notes
-              className={cn(
-                "flex items-center gap-1 whitespace-nowrap text-muted-foreground",
-                !fits && "invisible"
-              )}
-              // design-ok(px-text): sized from the tile's width (8cqi), so the readout fits at any window size
-              style={{ fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }}
+      <TileLayout
+        icon={icon}
+        surface={surface}
+        name={
+          // The name as a levels tile writes it: up the tile from its bottom
+          // left corner, with what stands in for the input beside it.
+          <div className="flex min-h-0 items-end gap-1.5">
+            <div
+              data-name
+              className="max-h-full overflow-hidden leading-none font-semibold text-ellipsis whitespace-nowrap"
+              style={{
+                writingMode: "vertical-rl",
+                transform: "rotate(180deg)",
+                // design-ok(px-text): sized from the tile's width (18cqi), so the name fits at any window size
+                fontSize: "clamp(0.875rem, 18cqi, 2.25rem)",
+              }}
             >
-              <MidiGlyph className="size-[0.9em] shrink-0 @max-[7rem]:hidden" />
-              <span>
-                <NoteCount notes={notes} />
-              </span>
-            </span>
-            {/* Always there, only not seen while the port is: the header is
-                the same height when it comes and goes. On one line, and gone
-                altogether where the line would not fit: the edge says it
-                then. */}
-            <span
-              data-status
-              className={cn(
-                "text-xs whitespace-nowrap text-muted-foreground @max-[9.5rem]:hidden",
-                connected && "invisible"
-              )}
+              {name}
+            </div>
+            <div
+              className="max-h-full overflow-hidden text-xs leading-none text-ellipsis whitespace-nowrap text-muted-foreground @max-[7rem]:hidden"
+              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
             >
-              not connected
-            </span>
+              MIDI
+            </div>
           </div>
-        </div>
-
-        {/* The name as a levels tile writes it: up the tile from its bottom
-            left corner, with what stands in for the input beside it. */}
-        <div className="flex min-h-0 items-end gap-1.5">
-          <div
-            data-name
-            className="max-h-full overflow-hidden leading-none font-semibold text-ellipsis whitespace-nowrap"
-            style={{
-              writingMode: "vertical-rl",
-              transform: "rotate(180deg)",
-              // design-ok(px-text): sized from the tile's width (18cqi), so the name fits at any window size
-              fontSize: "clamp(0.875rem, 18cqi, 2.25rem)",
-            }}
-          >
-            {name}
-          </div>
-          <div
-            className="max-h-full overflow-hidden text-xs leading-none text-ellipsis whitespace-nowrap text-muted-foreground @max-[7rem]:hidden"
-            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-          >
-            MIDI
-          </div>
-        </div>
-      </div>
+        }
+      >
+        <span
+          ref={figure}
+          data-notes
+          className={cn(
+            "flex items-center gap-1 whitespace-nowrap text-muted-foreground",
+            !fits && "invisible"
+          )}
+          style={READOUT}
+        >
+          <MidiGlyph className="size-[0.9em] shrink-0 @max-[7rem]:hidden" />
+          <span>
+            <NoteCount notes={notes} />
+          </span>
+        </span>
+        {/* Always there, only not seen while the port is: the header is
+            the same height when it comes and goes. On one line, and gone
+            altogether where the line would not fit: the edge says it
+            then. */}
+        <span
+          data-status
+          className={cn(
+            "text-xs whitespace-nowrap text-muted-foreground @max-[9.5rem]:hidden",
+            connected && "invisible"
+          )}
+        >
+          not connected
+        </span>
+      </TileLayout>
     </TileBox>
   )
 }

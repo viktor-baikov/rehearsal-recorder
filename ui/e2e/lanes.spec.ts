@@ -4,6 +4,7 @@ import {
   expectedError,
   hold,
   letGo,
+  mixed,
   openApp,
   openBandApp,
   problemBar,
@@ -26,20 +27,6 @@ import type { Locator, Page } from "@playwright/test"
 // one group" and "Lanes apart").
 
 const NAMES = ["Drums", "Bass", "Guitar", "Vocals", "Keys", "Horns", "Room", "Talkback"]
-
-/** A theme colour mixed with nothing, `percent` strong, as the browser computes it. */
-const mixed = (page: Page, token: string, percent: number) =>
-  page.evaluate(
-    ([t, p]) => {
-      const probe = document.createElement("div")
-      probe.style.backgroundColor = `color-mix(in oklab, var(${t}) ${p}%, transparent)`
-      document.body.append(probe)
-      const value = getComputedStyle(probe).backgroundColor
-      probe.remove()
-      return value
-    },
-    [token, percent] as const
-  )
 
 /** A take of `n` audio tracks: the fake's own has two, so its answer to
  *  stop_take is widened to the band's first `n`. */

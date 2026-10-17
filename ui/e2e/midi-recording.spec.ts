@@ -1,4 +1,4 @@
-import { colour, expect, openApp, setFake, startRehearsal, style, test } from "./app.ts"
+import { colour, EDGE, expect, mixed, openApp, setFake, startRehearsal, style, test, tipLines } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
 // The recording screen with MIDI in the band. A Both track keeps its audio
@@ -48,49 +48,8 @@ async function notesOn(tileEl: Locator): Promise<number> {
   return found ? Number(found[1].replace(/,/g, "")) : -1
 }
 
-/** A theme colour mixed with nothing, `percent` strong, as the browser computes it. */
-const mixed = (page: Page, token: string, percent: number) =>
-  page.evaluate(
-    ([t, p]) => {
-      const probe = document.createElement("div")
-      probe.style.backgroundColor = `color-mix(in oklab, var(${t}) ${p}%, transparent)`
-      document.body.append(probe)
-      const value = getComputedStyle(probe).backgroundColor
-      probe.remove()
-      return value
-    },
-    [token, percent] as const
-  )
-
 /** The sides of a tile's levels, not of its notes. */
 const levelSides = (tileEl: Locator) => tileEl.locator("[data-levels] [data-side]")
-
-/** The four sides of a box: its edge's colour and width. */
-const EDGE = ["top", "right", "bottom", "left"].flatMap((s) => [`border-${s}-color`, `border-${s}-width`])
-
-/** Rests the pointer on a tile until its tooltip says `lines`, one to a line;
- *  with none, until long after a tooltip would have shown. */
-async function tipSays(page: Page, el: Locator, lines: string[]) {
-  const tip = page.getByRole("tooltip")
-  // Away in steps: a tooltip waits for the pointer to leave the way to it.
-  await page.mouse.move(0, 0, { steps: 8 })
-  await expect(tip).toHaveCount(0)
-  await el.hover()
-  if (!lines.length) {
-    await page.waitForTimeout(800)
-    await expect(tip).toHaveCount(0)
-    return
-  }
-  await expect
-    .poll(async () =>
-      (await tip.count())
-        ? tip.evaluate((t) =>
-            [...t.children].filter((c) => c.tagName === "DIV").map((c) => c.textContent ?? "")
-          )
-        : []
-    )
-    .toEqual(lines)
-}
 
 /** How the tile writes its track's name: up the tile, in one piece, from its
  *  bottom left corner, as the audio tiles do. Returns the ones that do not. */
@@ -321,10 +280,10 @@ test.describe("recording", () => {
     await expect(keys).toContainText("MIDI")
     await expect(keys).not.toContainText("Input")
     await expect(keys).not.toContainText("No input")
-    await tipSays(page, keys, ["Launchkey Mini MK3"])
+    await expect.poll(() => tipLines(page, keys)).toEqual(["Launchkey Mini MK3"])
     await expect(tile(page, "Vocals")).toContainText("Input 3")
     await expect(tile(page, "Bass")).toContainText("Input 2")
-    await tipSays(page, tile(page, "Vocals"), [])
+    await expect.poll(() => tipLines(page, tile(page, "Vocals"))).toEqual([])
     // Its port is there, so it has no edge, as an audio tile has none.
     await expect(keys.locator("[data-edge]")).toHaveCount(0)
   })
@@ -580,20 +539,20 @@ test.describe("recording", () => {
     const keys = tile(page, "Keys")
     await expect(drums).toHaveAttribute("data-clipped")
     expect((await drums.boundingBox())!.width).toBeLessThan(152)
-    await tipSays(page, drums, [])
-    await tipSays(page, keys, [KEYS_PORT])
+    await expect.poll(() => tipLines(page, drums)).toEqual([])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT])
 
     await setFake(page, "__MIDI_GONE__", ["TD-17", "Launchkey Mini MK3"])
     await expect(drums).toHaveAttribute("data-not-connected")
-    await tipSays(page, drums, [notThere("TD-17", "Drums")])
-    await tipSays(page, keys, [KEYS_PORT, notThere(KEYS_PORT, "Keys")])
+    await expect.poll(() => tipLines(page, drums)).toEqual([notThere("TD-17", "Drums")])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, notThere(KEYS_PORT, "Keys")])
     await expect(drums.locator("[data-notes]").getByText("not connected")).toBeHidden()
 
     // Plugged in again: the Both tile has none, the MIDI tile its port's name.
     await setFake(page, "__MIDI_GONE__", [])
     await expect(drums).not.toHaveAttribute("data-not-connected")
-    await tipSays(page, drums, [])
-    await tipSays(page, keys, [KEYS_PORT])
+    await expect.poll(() => tipLines(page, drums)).toEqual([])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT])
   })
 
   test("a count that does not fit a narrow tile is hidden, never shown cut, and the tooltip has it", async ({
@@ -632,10 +591,10 @@ test.describe("recording", () => {
           whole++
           // Seen, it is seen whole, inside the tile.
           expect(seen.inside, `${shown} at ${width} px`).toBe(true)
-          await tipSays(page, keys, [KEYS_PORT])
+          await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT])
         } else {
           hidden++
-          await tipSays(page, keys, [KEYS_PORT, `${shown} notes`])
+          await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, `${shown} notes`])
         }
       }
       expect(whole, `some counts fit at ${width} px`).toBeGreaterThan(0)
@@ -644,12 +603,12 @@ test.describe("recording", () => {
       // A port that is gone or held has its own sentence, hidden count or not.
       await setFake(page, "__NOTES__", 123456)
       await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
-      await tipSays(page, keys, [KEYS_PORT, notThere(KEYS_PORT, "Keys")])
+      await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, notThere(KEYS_PORT, "Keys")])
       await setFake(page, "__MIDI_GONE__", [])
       await setFake(page, "__MIDI_BUSY__", ["Launchkey Mini MK3"])
-      await tipSays(page, keys, [KEYS_PORT, "\u201cLaunchkey Mini MK3\u201d is in use by another app."])
+      await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, "\u201cLaunchkey Mini MK3\u201d is in use by another app."])
       await setFake(page, "__MIDI_BUSY__", [])
-      await tipSays(page, keys, [KEYS_PORT, "123,456 notes"])
+      await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, "123,456 notes"])
       await setFake(page, "__NOTES__", 99)
     }
   })
@@ -660,17 +619,17 @@ test.describe("recording", () => {
     const drums = tile(page, "Drums")
     await expect(keys).toContainText("not connected")
     await expect(keys).toHaveAttribute("data-not-connected")
-    await tipSays(page, keys, [KEYS_PORT, "\u201cLaunchkey Mini MK3\u201d is in use by another app."])
-    await tipSays(page, drums, ["\u201cTD-17\u201d is in use by another app."])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, "\u201cLaunchkey Mini MK3\u201d is in use by another app."])
+    await expect.poll(() => tipLines(page, drums)).toEqual(["\u201cTD-17\u201d is in use by another app."])
     // Let go of: the port's own name again, and none on a Both tile.
     await setFake(page, "__MIDI_BUSY__", [])
     await expect(keys).not.toHaveAttribute("data-not-connected")
-    await tipSays(page, keys, [KEYS_PORT])
-    await tipSays(page, drums, [])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT])
+    await expect.poll(() => tipLines(page, drums)).toEqual([])
     // One that is not plugged in says nothing of another app.
     await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
     await expect(keys).toHaveAttribute("data-not-connected")
-    await tipSays(page, keys, [KEYS_PORT, notThere(KEYS_PORT, "Keys")])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, notThere(KEYS_PORT, "Keys")])
   })
 
   test("a port that is gone draws a warn edge", async ({ page }) => {
@@ -733,8 +692,8 @@ test.describe("recording", () => {
     await expect(tile(page, "Keys")).toHaveAttribute("data-not-connected")
     await expect(tile(page, "Drums")).toHaveAttribute("data-not-connected")
     await expect(page.locator("main [title]")).toHaveCount(0)
-    await tipSays(page, tile(page, "Drums"), [notThere("TD-17", "Drums")])
-    await tipSays(page, tile(page, "Keys"), [KEYS_PORT, notThere(KEYS_PORT, "Keys")])
+    await expect.poll(() => tipLines(page, tile(page, "Drums"))).toEqual([notThere("TD-17", "Drums")])
+    await expect.poll(() => tipLines(page, tile(page, "Keys"))).toEqual([KEYS_PORT, notThere(KEYS_PORT, "Keys")])
   })
 
   test("the tiles are polled with the levels, and no longer when the screen has gone", async ({

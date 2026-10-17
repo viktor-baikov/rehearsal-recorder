@@ -1,7 +1,9 @@
 import {
   colour,
+  EDGE,
   expect,
   keyOn,
+  mixed,
   nameTake,
   openApp,
   setFake,
@@ -9,8 +11,9 @@ import {
   startRehearsal,
   style,
   test,
+  tipLines,
 } from "./app.ts"
-import type { Locator, Page } from "@playwright/test"
+import type { Page } from "@playwright/test"
 
 // The recording screen is read from across the room. Nobody stands at the
 // laptop while they play, so the screen is read from behind the kit: the
@@ -396,7 +399,7 @@ test("on a small laptop the take's name leaves the tiles room for their names", 
     [1366, 768, "whole"],
     // The narrowest tiles were already too short for "Overheads" here, and
     // the header keeps the room of its status line from the start, which
-    // costs "Backing" its last 2 px (until a name may take two lines).
+    // costs "Backing" its last 2 px (until a name may get smaller (Task 3)).
     [1024, 640, "may be cut"],
   ] as const) {
     await page.setViewportSize({ width, height })
@@ -445,37 +448,9 @@ async function firstTake(page: Page) {
   await settled(page)
 }
 
-/** A theme colour mixed with nothing, `percent` strong, as the browser computes it. */
-const mixed = (page: Page, token: string, percent: number) =>
-  page.evaluate(
-    ([t, p]) => {
-      const probe = document.createElement("div")
-      probe.style.backgroundColor = `color-mix(in oklab, var(${t}) ${p}%, transparent)`
-      document.body.append(probe)
-      const value = getComputedStyle(probe).backgroundColor
-      probe.remove()
-      return value
-    },
-    [token, percent] as const
-  )
-
-/** The four sides of a box: its edge's colour and width. */
-const EDGE = ["top", "right", "bottom", "left"].flatMap((s) => [`border-${s}-color`, `border-${s}-width`])
+/** A 2 px edge of `colour` on every side. */
 const edgeOf = (colour: string) =>
   Object.fromEntries(EDGE.map((p) => [p, p.endsWith("color") ? colour : "2px"]))
-
-/** The lines of the tooltip `el` shows once the pointer rests on it. */
-async function tipOf(page: Page, el: Locator): Promise<string[]> {
-  // Away in steps: a tooltip waits for the pointer to leave the way to it.
-  await page.mouse.move(0, 0, { steps: 8 })
-  await expect(page.getByRole("tooltip")).toHaveCount(0)
-  await el.hover()
-  const tip = page.getByRole("tooltip")
-  await expect(tip).toHaveCount(1)
-  return tip.evaluate((t) =>
-    [...t.children].filter((c) => c.tagName === "DIV").map((c) => c.textContent ?? "")
-  )
-}
 
 /** Where a box stands, to the pixel's fraction. */
 const at = (el: Element) => {
@@ -550,6 +525,30 @@ test("a clip draws an edge inside the tile and moves nothing", async ({ page }) 
   expect(near(after.header, before.header), "its header stays").toBe(true)
 })
 
+test("a held line at full scale stays inside its meter", async ({ page }) => {
+  await secondGo(page)
+  await settled(page)
+  const vocals = tile(page, "Vocals")
+  await levels(page, 0.5, 1)
+  await vocalsAt(page, 100)
+  // Each side's held line, against its side's box: at full scale the line is
+  // the top 2 px of it, not 2 px over it, where the tile cut it off.
+  const held = () =>
+    vocals.locator("[data-levels] [data-side]").evaluateAll((sides) =>
+      sides.map((side) => {
+        const line = side.querySelector("[data-held]")?.getBoundingClientRect()
+        const box = side.getBoundingClientRect()
+        return line ? { top: line.top - box.top, bottom: box.bottom - line.bottom, tall: line.height } : null
+      })
+    )
+  // Until the line has risen to the clip, from wherever it held before.
+  await expect.poll(async () => (await held())[0]?.top ?? Infinity).toBeLessThan(3)
+  const [line] = await held()
+  expect(line!.tall, "a 2 px line").toBe(2)
+  expect(line!.top, "inside the meter, at its top").toBeGreaterThanOrEqual(-0.01)
+  expect(line!.top, "at its top").toBeLessThanOrEqual(0.01)
+})
+
 test("a silent tile dims at once", async ({ page }) => {
   await secondGo(page)
   const vocals = tile(page, "Vocals")
@@ -583,6 +582,8 @@ test("the header keeps the room of its status line", async ({ page }) => {
   const tall = async () => (await header.boundingBox())!.height
   const playing = await tall()
   await expect(status).toBeHidden()
+  // The room is kept by nothing to read: a sounding tile does not say silent.
+  await expect(vocals).not.toContainText("silent")
 
   await levels(page, 0.5, 0.0005)
   await expect(status).toBeVisible()
@@ -597,6 +598,19 @@ test("the header keeps the room of its status line", async ({ page }) => {
   }
   await expect(status).toHaveText("clipped 3×")
   expect(Math.abs((await tall()) - playing), "clipped 3 times").toBeLessThanOrEqual(0.5)
+})
+
+test("a tile with nothing to say opens no tooltip", async ({ page }) => {
+  await secondGo(page)
+  await settled(page)
+  // Its figure fits and it takes no notes: there is nothing to add.
+  const vocals = tile(page, "Vocals")
+  expect(await tipLines(page, vocals)).toEqual([])
+  // Still resting on it: no tooltip, and no aria-describedby naming one
+  // that is not there.
+  await expect(page.getByRole("tooltip")).toHaveCount(0)
+  await expect(vocals).not.toHaveAttribute("aria-describedby")
+  await expect(vocals).toHaveAttribute("data-state", "closed")
 })
 
 test("a dB figure with no room hides and is in the tooltip", async ({ page }) => {
@@ -644,7 +658,7 @@ test("a dB figure with no room hides and is in the tooltip", async ({ page }) =>
   expect(hidden.length, "figures with no room").toBeGreaterThan(0)
   for (const s of hidden.slice(0, 3)) {
     const el = page.getByRole("group", { name: s.name, exact: true })
-    expect(await tipOf(page, el), s.name).toContain("-8.0 dB")
+    await expect.poll(() => tipLines(page, el), { message: s.name }).toContain("-8.0 dB")
   }
 })
 
