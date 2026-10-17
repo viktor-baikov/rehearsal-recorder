@@ -20,7 +20,7 @@ test("the recording stress data opens on take 33 with eight tiles", async ({ pag
   // Somebody plays the Nord: its tile counts notes.
   const nord = page.getByRole("group", { name: "Keys (Nord Stage 3 MIDI)" })
   await expect(nord).toBeVisible()
-  await expect(nord).toContainText(/\d[\d,]* notes?/)
+  await expect(nord).toContainText(/[1-9][\d,]* notes?/)
   // Guitar clips three times in the first seconds, Percussion is silent.
   await expect(page.getByRole("group", { name: "Guitar", exact: true })).toContainText("clipped 3×")
   await expect(page.getByRole("group", { name: "Percussion" })).toContainText("silent")
