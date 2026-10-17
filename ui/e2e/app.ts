@@ -428,3 +428,68 @@ export const tileNames = (page: Page) =>
       }
     })
   )
+
+/** How each tile writes its track's name: up the tile, whole, from its
+ *  bottom left corner, on the lines it says it has, and on two only where it
+ *  has a space to break at — "Overheads" broken into "Overhea / ds" across a
+ *  narrow tile is what this replaced. Returns the ones that do not. */
+export const badNames = async (page: Page) =>
+  (await tileNames(page))
+    .map((n) => ({
+      name: n.name,
+      upward: n.upward,
+      lines: n.lines >= 1 && n.said === n.lines && (n.lines === 1 || /\s/.test(n.text)),
+      whole: n.whole,
+      corner: n.corner,
+    }))
+    .filter((n) => !Object.values(n).every(Boolean))
+
+/**
+ * Sets the window to `size`, when given, and waits for the tiles' names to
+ * be fitted to their room: a fit lands after a resize, through the tile's
+ * ResizeObserver, so until two reads of every name, two frames apart, agree.
+ * A screen with no names drawn is not fitted: it fails, rather than pass on
+ * no tiles at all.
+ */
+export async function fitted(page: Page, size?: { width: number; height: number }) {
+  if (size) await page.setViewportSize(size)
+  await settled(page)
+  const read = () =>
+    page.evaluate(
+      () =>
+        new Promise<string>((done) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              done(
+                JSON.stringify(
+                  [...document.querySelectorAll("main [data-name]")].map((el) => {
+                    const r = el.getBoundingClientRect()
+                    return [
+                      el.getAttribute("data-name-px"),
+                      el.getAttribute("data-lines"),
+                      el.hasAttribute("data-cut"),
+                      r.x,
+                      r.y,
+                      r.width,
+                      r.height,
+                    ]
+                  })
+                )
+              )
+            )
+          )
+        )
+    )
+  let was = await read()
+  await expect
+    .poll(
+      async () => {
+        const now = await read()
+        const state = now === "[]" ? "no names drawn" : now === was ? "fitted" : "moving"
+        was = now
+        return state
+      },
+      { message: "names fitted" }
+    )
+    .toBe("fitted")
+}

@@ -1,4 +1,17 @@
-import { colour, EDGE, expect, mixed, openApp, setFake, startRehearsal, style, test, tipLines } from "./app.ts"
+import {
+  badNames,
+  colour,
+  EDGE,
+  expect,
+  fitted,
+  mixed,
+  openApp,
+  setFake,
+  startRehearsal,
+  style,
+  test,
+  tipLines,
+} from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
 // The recording screen with MIDI in the band. A Both track keeps its audio
@@ -50,31 +63,6 @@ async function notesOn(tileEl: Locator): Promise<number> {
 
 /** The sides of a tile's levels, not of its notes. */
 const levelSides = (tileEl: Locator) => tileEl.locator("[data-levels] [data-side]")
-
-/** How the tile writes its track's name: up the tile, in one piece, from its
- *  bottom left corner, as the audio tiles do. Returns the ones that do not. */
-const badNames = (page: Page) =>
-  page.evaluate(() =>
-    [...document.querySelectorAll("main [role=group]")]
-      .map((t) => {
-        const el = t.querySelector("[data-name]")
-        const name = t.getAttribute("aria-label")
-        if (!el) return { name, found: false }
-        const box = t.getBoundingClientRect()
-        const r = el.getBoundingClientRect()
-        const cs = getComputedStyle(el)
-        const size = parseFloat(cs.fontSize)
-        return {
-          name,
-          found: true,
-          upward: cs.writingMode === "vertical-rl" && cs.transform !== "none",
-          oneLine: r.width < size * 1.6,
-          whole: el.scrollHeight <= el.clientHeight + 1,
-          corner: r.left - box.left < 24 && box.bottom - r.bottom < 24,
-        }
-      })
-      .filter((n) => !Object.values(n).every(Boolean))
-  )
 
 /** Makes the fake say every track has had `window.__NOTES__` notes, so a
  *  count can stand at 99 or at 12,345 without waiting for a kit to get there. */
@@ -168,6 +156,7 @@ test.describe("recording", () => {
     // Its icon stands in the corner, as an audio tile's does, and its name
     // runs up the tile from the bottom left.
     await expect(tile(page, "Keys").locator("[data-icon]").first()).toHaveAttribute("data-icon", "keys")
+    await fitted(page)
     expect(await badNames(page)).toEqual([])
   })
 
@@ -758,7 +747,7 @@ test.describe("recording", () => {
       [1180, 820],
       [960, 700],
     ]) {
-      await page.setViewportSize({ width, height })
+      await fitted(page, { width, height })
       await expect
         .poll(
           () =>

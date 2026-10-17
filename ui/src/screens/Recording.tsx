@@ -314,6 +314,11 @@ export function Recording({
         el.style.setProperty("--clock", `${next}px`)
       }
 
+      // Steps that fell short of the room take the clock the rest of the
+      // way: the tiles give way only once it is at its floor.
+      if (over() > 0.5 && size() > clockFloor + 0.5)
+        el.style.setProperty("--clock", `${clockFloor}px`)
+
       // 3. The tiles stand at their least height when they reach past it.
       const by = over()
       const first = tiles.firstElementChild
