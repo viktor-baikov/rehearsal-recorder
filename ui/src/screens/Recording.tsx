@@ -351,7 +351,7 @@ export function Recording({
   const statusRow = (
     <div data-status-row className="flex flex-col items-start gap-2">
       {recordingLine}
-      <HealthLine health={health} align="start" />
+      <HealthLine health={health} />
     </div>
   )
 
@@ -478,7 +478,6 @@ export function Recording({
                 <TrackTile
                   key={t.name}
                   kind="notes"
-                  surface="well"
                   name={t.name}
                   icon={t.icon}
                   port={port}
@@ -488,7 +487,6 @@ export function Recording({
             return (
               <TrackTile
                 key={t.name}
-                surface="well"
                 name={t.name}
                 icon={t.icon}
                 channel={t.channel}

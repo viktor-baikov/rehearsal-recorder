@@ -72,8 +72,8 @@ function Piece({ label, wide, children }: { label: string; wide?: boolean; child
 function Tracks() {
   return (
     <div className="grid h-72 w-[26rem] max-w-full grid-cols-2 gap-1.5 rounded-xl bg-card p-[3px] *:h-full">
-      <TrackTile surface="well" name="Bass" icon="bass" channel={2} peaks={[0.048]} shown={[0.048]} held={[0.07]} clips={0} silent={false} />
-      <TrackTile surface="well" name="Guitar" icon="guitar-electric" channel={3} peaks={[0.052]} shown={[0.052]} held={[1]} clips={3} silent={false} />
+      <TrackTile name="Bass" icon="bass" channel={2} peaks={[0.048]} shown={[0.048]} held={[0.07]} clips={0} silent={false} />
+      <TrackTile name="Guitar" icon="guitar-electric" channel={3} peaks={[0.052]} shown={[0.052]} held={[1]} clips={3} silent={false} />
     </div>
   )
 }
@@ -163,7 +163,7 @@ export function shots({
             {/* Pretty wrapping, on the site only: the narrow tile would
                 otherwise leave one word on the second line. */}
             <div className="text-pretty">
-              <HealthLine health={{ recording: true, minutes_left: 1720 }} align="start" hold={false} />
+              <HealthLine health={{ recording: true, minutes_left: 1720 }} hold={false} />
             </div>
           </Piece>
           <Piece label="The Bass and Guitar tiles while recording; the Guitar tile is red and says clipped 3 times">

@@ -11,7 +11,6 @@ import {
   Activity,
   AudioLines,
   Check,
-  HardDrive,
   History,
   PanelLeftOpen,
   Plus,
@@ -32,6 +31,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FigureLine, Figures, WholeTip, useCut } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
+import { DiskLine } from "@/components/HealthLine"
 import { LastTime } from "@/components/LastTime"
 import { NewDot } from "@/components/NewDot"
 import { NewSetDialog, SetPicker } from "@/components/SetPicker"
@@ -1070,20 +1070,11 @@ export function Setup({
         Add track
       </Button>
 
-      {/* Always on screen, not just when space runs low — while any track
-          records sound, which is what fills a disk. Low is a warning, not a
-          failure: the shared warning look, the icon in warn and the words in
-          the text's colour, as on the recording screen. */}
+      {/* On screen while any track records sound, which is what fills a
+          disk, whether or not space runs low. Low space is a warning, in the
+          recording screen's look (DiskLine). */}
       {disk?.ok && disk.minutes !== undefined && channelCount > 0 && (
-        <span
-          className={cn(
-            "flex items-center gap-1 text-xs",
-            disk.low ? "text-foreground" : "text-muted-foreground"
-          )}
-        >
-          <HardDrive className={cn("size-3.5", disk.low && "text-warn")} />
-          {diskLine(disk.minutes, !!disk.low)}
-        </span>
+        <DiskLine text={diskLine(disk.minutes, !!disk.low)} tone={disk.low ? "warn" : "quiet"} />
       )}
     </div>
   )

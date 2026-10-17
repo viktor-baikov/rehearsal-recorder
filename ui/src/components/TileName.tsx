@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
+import { flushSync } from "react-dom"
 import { cn } from "@/lib/utils"
 
 /*
@@ -43,12 +44,15 @@ export function TileName({
   name,
   side,
   sideClassName,
+  className,
   onFit,
 }: {
   name: string
   /** What stands beside the name for its input: "Input 3", "MIDI". */
   side: ReactNode
   sideClassName?: string
+  /** The row's: the room the name is fitted to is the row's own box. */
+  className?: string
   /** Told whether the name is cut, and whether the input line has given way
    *  to it, whenever either changes: for the tile's tooltip. */
   onFit?: (fit: { cut: boolean; sideGone: boolean }) => void
@@ -166,11 +170,15 @@ export function TileName({
     )
   }, [name])
 
-  useLayoutEffect(measure, [measure])
-  useEffect(() => {
+  useLayoutEffect(() => {
+    measure()
     const box = row.current
     if (!box) return
-    const watch = new ResizeObserver(measure)
+    // The measure above comes before the screen's own fit (Recording's),
+    // which can make the tile taller or shorter. The observer measures the
+    // name again at that size before the frame is drawn, and flushSync puts
+    // what it finds in that frame, not the next (as TwoLines does).
+    const watch = new ResizeObserver(() => flushSync(measure))
     watch.observe(box)
     // A web font that comes after the fit (reha.stream's, which swaps in)
     // changes how long the name is, not the room: fitted again then.
@@ -188,7 +196,7 @@ export function TileName({
     // No wider than the tile gives it (min-w-0): grown to what it holds, the
     // room measured would be the name's own, and a fit too wide would keep
     // itself.
-    <div ref={row} className="relative flex min-h-0 min-w-0 items-end gap-1.5">
+    <div ref={row} className={cn("relative flex min-h-0 min-w-0 items-end gap-1.5", className)}>
       <span
         ref={probe}
         aria-hidden

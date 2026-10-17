@@ -138,7 +138,7 @@ for (const theme of ["dark", "light"] as const) {
     const words = page.getByText("Low disk space: room for about 5 min", { exact: true })
     await expect(words).toHaveCount(1)
     expect(await style(words, "color")).toEqual({ color: await colour(page, "--foreground") })
-    expect(await style(words.locator("svg"), "color")).toEqual({
+    expect(await style(words.locator("..").locator("svg"), "color")).toEqual({
       color: await colour(page, "--warn"),
     })
   })

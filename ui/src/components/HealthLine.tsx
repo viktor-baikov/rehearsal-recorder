@@ -25,24 +25,40 @@ const lowSpace = (minutes: number) =>
  *  Python's, as long as they are. */
 const LONGEST = [connected(48 * 60 + 59), lowSpace(LOW_SPACE_MINUTES - 1)]
 
-function Line({
-  icon,
+const TONE = {
+  quiet: "text-muted-foreground",
+  warn: "text-foreground",
+  error: "text-destructive",
+} as const
+
+/**
+ * The disk line's look, one for the start screen and the recording screen:
+ * the icon, then the words, in the muted colour. A warning is the icon in
+ * warn and the words in the text's colour, as Alert draws it; an error is
+ * the whole line in the destructive colour. The icon stands by the first
+ * line, should the words take two. `unseen` holds the room of `text`
+ * without drawing it.
+ */
+export function DiskLine({
+  icon = "disk",
   text,
-  warn,
+  tone = "quiet",
   unseen,
+  className,
 }: {
-  icon: "disk" | "battery"
+  icon?: "disk" | "battery"
   text: string
-  warn?: boolean
+  tone?: keyof typeof TONE
   unseen?: boolean
+  className?: string
 }) {
   const Icon = icon === "battery" ? BatteryLow : HardDrive
   return (
     <div
       aria-hidden={unseen || undefined}
-      className={cn("col-start-1 row-start-1 flex items-start gap-2", unseen && "invisible")}
+      className={cn("flex items-start gap-1 text-xs", TONE[tone], unseen && "invisible", className)}
     >
-      <Icon className={cn("mt-px size-3.5 shrink-0", warn && "text-warn")} />
+      <Icon className={cn("mt-px size-3.5 shrink-0", tone === "warn" && "text-warn")} />
       {unseen ? (
         // Drawn from an attribute, not written in the page: a copy that only
         // holds room is not a second line of text to find, read or select.
@@ -55,28 +71,24 @@ function Line({
 }
 
 /**
- * The recording screen's status line: room left on the drive and whether
- * the interface is still sending, or what is wrong, or a battery about to
- * end the take. The website shows it too, in a tile.
+ * The recording screen's status line, in the footer's left under
+ * Recording: room left on the drive and whether the interface is still
+ * sending, or what is wrong, or a battery about to end the take. The
+ * website shows it too, in a tile.
  *
  * Always there, not only when something is wrong: you should be able to
  * see at a glance that the recording is healthy. The free space is said in
- * the start screen's words (diskLine), and running low is a warning on both
- * screens: the icon in warn and the words in the text's colour, as Alert
- * draws it.
+ * the start screen's words (diskLine), in the start screen's look
+ * (DiskLine), and running low is a warning on both screens.
  *
- * It holds the room of the longest thing it can say during a take, so it
- * never moves what is beside it.
+ * It holds the room of the longest thing it can say during a take, flush
+ * left in it, so it never moves what is beside it.
  */
 export function HealthLine({
   health,
-  align = "end",
   hold = true,
 }: {
   health: RecordingHealth | null
-  /** Where the line stands in the room it holds: flush right at the top of
-   *  the screen, flush left in the footer. */
-  align?: "start" | "end"
   /** Keeps the room of the longest sentence, unseen. A still picture of the
    *  line, which nothing moves beside, passes false: its box is as wide as
    *  its words. */
@@ -95,22 +107,18 @@ export function HealthLine({
           ? `Battery ${battery}%: plug the laptop in`
           : connected(health.minutes_left ?? 0)
   return (
-    <div
-      data-health
-      className={cn(
-        // Tabular figures: every digit as wide as the next, so the longest
-        // sentence is the longest whatever the minutes are.
-        "tnum grid text-xs",
-        align === "end" ? "justify-items-end text-right" : "justify-items-start",
-        health?.error ? "text-destructive" : warn ? "text-foreground" : "text-muted-foreground"
-      )}
-    >
+    // Tabular figures: every digit as wide as the next, so the longest
+    // sentence is the longest whatever the minutes are.
+    <div data-health className="tnum grid justify-items-start text-xs">
       {hold &&
-        LONGEST.map((t) => <Line key={t} icon="disk" text={t} unseen />)}
-      <Line
+        LONGEST.map((t) => (
+          <DiskLine key={t} text={t} unseen className="col-start-1 row-start-1" />
+        ))}
+      <DiskLine
         icon={lowBattery && !health?.error && !health?.low_space ? "battery" : "disk"}
         text={text}
-        warn={warn}
+        tone={health?.error ? "error" : warn ? "warn" : "quiet"}
+        className="col-start-1 row-start-1"
       />
     </div>
   )

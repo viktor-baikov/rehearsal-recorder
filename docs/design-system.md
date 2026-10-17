@@ -552,8 +552,8 @@ as the `cn` import.
   thing at a time (a load error, then Cropping, then the output's warning),
   so the timeline never moves when it fills. On the recording screen the
   disk line holds the room of the longest thing it can say, and a tile's dB
-  figure holds the room of "-60.0". These are the model; the rest as each
-  screen is redone.
+  figure holds the room of "-100.0", the widest it can read. These are the
+  model; the rest as each screen is redone.
 - **B5. Loading.** Under 1 s nothing shows, so a quick answer does not
   flash; from 1 s a spinner takes the place of what is loading; past 10 s it
   says what it is doing. `PlayButton` already waits its second

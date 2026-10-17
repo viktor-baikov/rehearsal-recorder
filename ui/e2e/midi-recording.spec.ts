@@ -457,6 +457,33 @@ test.describe("recording", () => {
     await expect(column.locator("[data-fill]")).toBeVisible()
   })
 
+  test("a Both tile's name and its input line stop short of the notes column", async ({ page }) => {
+    // Eight tracks at 1180 px, a tile of 134 px, and the kit's name long
+    // enough to take two lines: fitted to the whole tile, "Input 1" ran 3 px
+    // into the column. The name is fitted to the levels' width.
+    const { band, levels } = bandOf(8)
+    band[0] = { ...band[0], name: "Electronic drums kit" }
+    await recording(page, {
+      band,
+      levels: { ...levels, "Electronic drums kit": levels.Drums, Drums: undefined },
+    })
+    await fitted(page, { width: 1180, height: 820 })
+    const kit = tile(page, "Electronic drums kit")
+    const seen = await kit.evaluate((el) => {
+      const column = el.querySelector("[data-midi-column]")!.getBoundingClientRect().left
+      const name = el.querySelector("[data-name]")!
+      const input = el.querySelector("[data-side-line]")!
+      const room = (e: Element) => {
+        const r = e.getBoundingClientRect()
+        return r.width > 0 ? Math.round((column - r.right) * 10) / 10 : null
+      }
+      return { lines: name.getAttribute("data-lines"), name: room(name), input: room(input) }
+    })
+    expect(seen.lines, "the name's lines").toBe("2")
+    expect(seen.name, "room between the name and the column").toBeGreaterThan(0)
+    if (seen.input !== null) expect(seen.input, "room between the input line and the column").toBeGreaterThan(0)
+  })
+
   // Tiles between 112 and 160 px wide are the 7 to 12 tracks of a band: the
   // header's column is under 90 px there, and what it says must fit on one
   // line or give way, so that nothing under it moves. From 152 px up the
@@ -576,30 +603,37 @@ test.describe("recording", () => {
             inside: chip.getBoundingClientRect().right <= el.getBoundingClientRect().right,
           }
         })
+        // The tooltip is read on the first count seen and the first hidden:
+        // each hover waits for it, and what it says follows from whether the
+        // count is seen, which every count is checked for.
         if (seen.visible) {
           whole++
           // Seen, it is seen whole, inside the tile.
           expect(seen.inside, `${shown} at ${width} px`).toBe(true)
-          await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT])
+          if (whole === 1) await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT])
         } else {
           hidden++
-          await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, `${shown} notes`])
+          if (hidden === 1)
+            await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, `${shown} notes`])
         }
       }
       expect(whole, `some counts fit at ${width} px`).toBeGreaterThan(0)
       expect(hidden, `some counts do not at ${width} px`).toBeGreaterThan(0)
-
-      // A port that is gone or held has its own sentence, hidden count or not.
-      await setFake(page, "__NOTES__", 123456)
-      await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
-      await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, notThere(KEYS_PORT, "Keys")])
-      await setFake(page, "__MIDI_GONE__", [])
-      await setFake(page, "__MIDI_BUSY__", ["Launchkey Mini MK3"])
-      await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, "\u201cLaunchkey Mini MK3\u201d is in use by another app."])
-      await setFake(page, "__MIDI_BUSY__", [])
-      await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, "123,456 notes"])
       await setFake(page, "__NOTES__", 99)
     }
+
+    // A port that is gone or held has its own sentence over a hidden count,
+    // and the count is back when the port is. Said whatever the tile's width,
+    // so read in the narrower window only.
+    const keys = tile(page, "Keys")
+    await setFake(page, "__NOTES__", 123456)
+    await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, notThere(KEYS_PORT, "Keys")])
+    await setFake(page, "__MIDI_GONE__", [])
+    await setFake(page, "__MIDI_BUSY__", ["Launchkey Mini MK3"])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, "\u201cLaunchkey Mini MK3\u201d is in use by another app."])
+    await setFake(page, "__MIDI_BUSY__", [])
+    await expect.poll(() => tipLines(page, keys)).toEqual([KEYS_PORT, "123,456 notes"])
   })
 
   test("a port another app holds reads not connected, and its tooltip says why", async ({ page }) => {

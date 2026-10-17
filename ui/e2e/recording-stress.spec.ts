@@ -1,4 +1,5 @@
 import {
+  drawnLate,
   expect,
   fitted,
   openApp,
@@ -10,6 +11,7 @@ import {
   test,
   tileNames,
   tipLines,
+  watchDrawn,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -165,12 +167,46 @@ test("the input line gives way to a second line and the tooltip says it", async 
   expect(await tipLines(page, bass)).not.toContain(await bass.locator("[data-side-line]").textContent())
 })
 
-/** Guitar and Percussion as the test plays them, over the stress data's own:
- *  both at a fair level until the test sets window.__PLAYED__ otherwise. */
+/** Every tile's name as fitted, in the page: its size, its lines, whether it
+ *  is cut, and its words. Null until the recording screen's tiles are
+ *  drawn. */
+const NAMES = `(() => {
+  const names = [...document.querySelectorAll("main [data-tiles] [data-name]")];
+  return names.length
+    ? JSON.stringify(names.map((el) => [el.getAttribute("data-name-px"), el.getAttribute("data-lines"), el.hasAttribute("data-cut"), el.textContent]))
+    : null;
+})()`
+
+for (const [where, size, before] of [
+  // The clock's cap for 10:00:00 makes the tiles taller than the window's
+  // height alone would.
+  ["960x820", { width: 960, height: 820 }, ""],
+  // The tiles give way down to 6rem.
+  ["960x680 at 150 percent", { width: 960, height: 680 }, scaled(1.5)],
+] as const) {
+  test(`the tiles' names are fitted before the screen is first drawn, in ${where}`, async ({
+    page,
+  }) => {
+    // Each name is first fitted to its tile before the screen's own fit
+    // (Recording's) has moved the tiles; fitted again only after a frame was
+    // drawn, the band would see the names change size as the take starts.
+    await page.setViewportSize(size)
+    await page.addInitScript(watchDrawn(NAMES))
+    await openApp(page, { stress: "recording", before })
+    await fitted(page)
+    const { last, late } = await drawnLate(page)
+    expect(JSON.parse(last ?? "[]"), "the names").toHaveLength(8)
+    expect(late, "names fitted after a frame was drawn").toEqual([])
+  })
+}
+
+/** Guitar, Percussion and Hanna as the test plays them, over the stress
+ *  data's own: all three at a fair level until the test sets
+ *  window.__PLAYED__ otherwise. */
 const PLAYED = `{
   const api = window.pywebview.api;
   const read = api.get_levels;
-  window.__PLAYED__ = {Guitar: [0.3], Percussion: [0.3]};
+  window.__PLAYED__ = {Guitar: [0.3], Percussion: [0.3], ${JSON.stringify(HANNA)}: [0.3]};
   api.get_levels = async () => ({...(await read()), ...window.__PLAYED__});
 }`
 
@@ -178,6 +214,8 @@ test("a name does not change when a clip or a silence comes", async ({ page }) =
   await openApp(page, { stress: "recording", after: PLAYED })
   const guitar = page.getByRole("group", { name: "Guitar", exact: true })
   const percussion = page.getByRole("group", { name: "Percussion" })
+  // Hanna's name is cut: a clip on that tile changes nothing in it either.
+  const hanna = page.getByRole("group", { name: HANNA })
   /** Every name's size, lines, cut and box, by its track. */
   const drawn = () =>
     page.evaluate(() =>
@@ -226,10 +264,13 @@ test("a name does not change when a clip or a silence comes", async ({ page }) =
   ).toEqual([])
   await expect(guitar).not.toHaveAttribute("data-clipped")
   await expect(percussion).not.toHaveAttribute("data-silent")
+  await expect(hanna).not.toHaveAttribute("data-clipped")
+  await expect(hanna.locator("[data-name]")).toHaveAttribute("data-cut")
 
-  await setFake(page, "__PLAYED__", { Guitar: [0.995], Percussion: [0.0005] })
+  await setFake(page, "__PLAYED__", { Guitar: [0.995], Percussion: [0.0005], [HANNA]: [0.995] })
   await expect(guitar).toHaveAttribute("data-clipped")
   await expect(percussion).toHaveAttribute("data-silent")
+  await expect(hanna).toHaveAttribute("data-clipped")
   for (const [width, height] of [...windows].reverse()) {
     await fitted(page, { width, height })
     const was = before[`${width}x${height}`]

@@ -1,6 +1,7 @@
 import {
   badNames,
   colour,
+  drawnLate,
   EDGE,
   expect,
   fitted,
@@ -19,6 +20,7 @@ import {
   themed,
   tileNames,
   tipLines,
+  watchDrawn,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -194,6 +196,15 @@ test("the screen is the take and the tiles, with the status beside Stop", async 
   expect(row.right, "left of Stop").toBeLessThanOrEqual((await stop.evaluate(edges)).left)
   expect(disk.top, "the disk line under Recording").toBeGreaterThanOrEqual(line.bottom)
   expect(Math.abs(disk.left - line.left), "both from the row's left").toBeLessThanOrEqual(0.5)
+  // The disk line in the start screen's look, its words where Recording's
+  // start: the icon and its gap are as wide as the dot and its.
+  const starts = await status.evaluate((el) =>
+    [
+      el.querySelector("[data-recording-line] .font-semibold")!,
+      el.querySelector("[data-health] > :last-child > span")!,
+    ].map((e) => e.getBoundingClientRect().left)
+  )
+  expect(Math.abs(starts[0] - starts[1]), "the two lines' words from one x").toBeLessThanOrEqual(0.5)
 
   // The start screen's air: 32 round the screen, 48 between the groups, the
   // bar 24 under the clock.
@@ -352,42 +363,6 @@ test("a name on the edge of a second line settles, and then nothing moves", asyn
   ).toEqual([])
 })
 
-/** In the page: each wording the take's name has, with the frames begun
- *  since its first (0 for the first), and whether it came in a
- *  ResizeObserver, where a frame is laid out but not yet drawn. One in the
- *  observers of frame 1 is drawn with that frame; one after them, or later,
- *  comes after a frame drawn with the wording before. */
-const WORDINGS = `{
-  window.__WORDINGS__ = [];
-  let frames = 0;
-  let first = null;
-  const note = (observing) => {
-    const text = document.querySelector("main h1 [data-go-title]")?.textContent;
-    if (text == null || window.__WORDINGS__.at(-1)?.text === text) return;
-    if (first === null) first = frames;
-    window.__WORDINGS__.push({ text, frame: frames - first, observing });
-  };
-  const tick = () => {
-    frames++;
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
-  const Observer = window.ResizeObserver;
-  window.ResizeObserver = class extends Observer {
-    constructor(callback) {
-      super((...seen) => {
-        callback(...seen);
-        note(true);
-      });
-    }
-  };
-  new MutationObserver(() => note(false)).observe(document, {
-    subtree: true,
-    childList: true,
-    characterData: true,
-  });
-}`
-
 test("a take name has its words before the screen is first drawn", async ({ page }) => {
   // In 960x680 the clock gives way for the tiles, so the take's name is drawn
   // smaller than the window's height alone makes it: the stress data's long
@@ -396,21 +371,17 @@ test("a take name has its words before the screen is first drawn", async ({ page
   // at the screen's only after the first frame was drawn, it would show cut
   // for that frame, and then whole.
   await page.setViewportSize({ width: 960, height: 680 })
-  await page.addInitScript(WORDINGS)
+  await page.addInitScript(
+    watchDrawn(`document.querySelector("main h1 [data-go-title]")?.textContent ?? null`)
+  )
   await openApp(page, { stress: "recording" })
   await settled(page)
-  type Wording = { text: string; frame: number; observing: boolean }
-  const wordings = await page.evaluate(
-    () => (window as unknown as { __WORDINGS__: Wording[] }).__WORDINGS__
-  )
-  // The go after a no-break space, so it never starts a line of its own.
-  expect(wordings.at(-1)?.text, "the name, whole").toBe(
+  const { last, late } = await drawnLate(page)
+  // The 2 after a no-break space, so it never starts a line of its own.
+  expect(last, "the name, whole").toBe(
     "Kalychanka (slow version for the wedding, with the long intro the bride asked for)\u00a02"
   )
-  expect(
-    wordings.filter((w) => w.frame > 1 || (w.frame === 1 && !w.observing)),
-    "words that came after a frame was drawn"
-  ).toEqual([])
+  expect(late, "words that came after a frame was drawn").toEqual([])
 })
 
 test("clips are counted, on the tile that clipped, and kept to the end of the take", async ({
@@ -488,6 +459,25 @@ test("the fill is in dB and falls back, and the figure holds the peak", async ({
   await expect(tile(page, "Vocals")).toContainText("-6.0 dB")
   await page.clock.fastForward(2_000)
   await expect(tile(page, "Vocals")).toContainText("-18.0 dB")
+})
+
+test("a reading under -99.9 dB stays in the room the figure holds", async ({ page }) => {
+  await secondGo(page)
+  const figure = tile(page, "Vocals").locator("[data-db]")
+  const box = () =>
+    figure.evaluate((el) => {
+      const r = el.getBoundingClientRect()
+      return [Math.round(r.x * 10) / 10, Math.round(r.width * 10) / 10]
+    })
+  await expect(figure).toContainText("-6.0")
+  const was = await box()
+  // A dead input on a real interface reads -100 to -140 dB; the quietest a
+  // 24-bit one can read is -186.6.
+  await levels(page, 0.5, 0.00001)
+  await vocalsAt(page, 0)
+  await page.clock.fastForward(3_000)
+  await expect(figure).toContainText("-100.0")
+  expect(await box(), "where the figure stands, and how wide it is").toEqual(was)
 })
 
 test("running out of disk is said on the disk line, and past an hour the clock says the hours", async ({

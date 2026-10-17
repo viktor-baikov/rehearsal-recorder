@@ -122,7 +122,7 @@ test("the tiles show the app's own pieces", async ({ page }) => {
 test("the two recording tiles are on wells, as the app draws them", async ({ page }) => {
   await page.goto("/")
   const piece = page.locator("#features").getByRole("img", { name: /Bass and Guitar tiles/ })
-  await expect(piece.locator("[data-surface]")).toHaveCount(2)
+  await expect(piece.locator("[role=group]")).toHaveCount(2)
   // Each on a well, the side panel's grey, as on the recording screen: on
   // the page's white, a tile on a card's white would not show.
   const found = await piece.evaluate((el) => {
@@ -132,7 +132,7 @@ test("the two recording tiles are on wells, as the app draws them", async ({ pag
     const panel = getComputedStyle(probe).backgroundColor
     probe.remove()
     const fill = (e: Element) => getComputedStyle(e).backgroundColor
-    return { tiles: [...el.querySelectorAll("[data-surface]")].map(fill), panel, ground: fill(el) }
+    return { tiles: [...el.querySelectorAll("[role=group]")].map(fill), panel, ground: fill(el) }
   })
   expect(found.tiles).toEqual([found.panel, found.panel])
   expect(found.ground).not.toBe(found.panel)

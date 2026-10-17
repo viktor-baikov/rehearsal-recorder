@@ -493,3 +493,55 @@ export async function fitted(page: Page, size?: { width: number; height: number 
     )
     .toBe("fitted")
 }
+
+/**
+ * A page script, run ahead of the app: notes each state `read` finds (an
+ * expression run in the page, null while there is nothing to note), with the
+ * frames begun since the first state (0 for the first), and whether it came
+ * in a ResizeObserver, where a frame is laid out but not yet drawn. A state
+ * in the observers of frame 1 is drawn with that frame; one after them, or
+ * later, comes after a frame was drawn with the state before. Read back with
+ * `drawnLate`.
+ */
+export const watchDrawn = (read: string) => `{
+  window.__DRAWN__ = [];
+  let frames = 0;
+  let first = null;
+  const note = (observing) => {
+    const state = ${read};
+    if (state == null || window.__DRAWN__.at(-1)?.state === state) return;
+    if (first === null) first = frames;
+    window.__DRAWN__.push({ state, frame: frames - first, observing });
+  };
+  const tick = () => {
+    frames++;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  const Observer = window.ResizeObserver;
+  window.ResizeObserver = class extends Observer {
+    constructor(callback) {
+      super((...seen) => {
+        callback(...seen);
+        note(true);
+      });
+    }
+  };
+  new MutationObserver(() => note(false)).observe(document, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+  });
+}`
+
+/** What `watchDrawn` noted: the last state, and the states that came after
+ *  a frame was drawn with the one before. */
+export async function drawnLate(page: Page) {
+  type Drawn = { state: string; frame: number; observing: boolean }
+  const all = await page.evaluate(() => (window as unknown as { __DRAWN__: Drawn[] }).__DRAWN__)
+  return {
+    last: all.at(-1)?.state,
+    late: all.filter((d) => d.frame > 1 || (d.frame === 1 && !d.observing)),
+  }
+}

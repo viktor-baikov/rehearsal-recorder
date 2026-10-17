@@ -41,23 +41,19 @@ const notesReach = (vel: number) => (vel >= QUIET_VEL ? Math.min(1, vel) * NOTES
  * each note's velocity; its header adds how many notes it has had. A track
  * on MIDI alone is the notes kind (`kind="notes"`): the notes fill the tile.
  *
- * The tile is set apart by its fill alone, with no frame (F4): a card of its
- * own, or a well on the tiles' one group (`surface="well"`, «Волна на
- * подложке»). A clip or a port that is gone draws an edge inside it, so
- * nothing moves when it comes; what it has no room to say is in the shared
- * tooltip on hover. It is not a Tab stop: Tab on this screen is for Stop.
+ * The tile is set apart by its fill alone, with no frame (F4): a well on the
+ * tiles' one group («Волна на подложке»). A clip or a port that is gone draws
+ * an edge inside it, so nothing moves when it comes; what it has no room to
+ * say is in the shared tooltip on hover. It is not a Tab stop: Tab on this
+ * screen is for Stop.
  */
 export function TrackTile(props: LevelsTileProps | NotesTileProps) {
   return props.kind === "notes" ? <NotesTile {...props} /> : <LevelsTile {...props} />
 }
 
-export type TileSurface = "card" | "well"
-
 type TileCommon = {
   name: string
   icon?: string
-  /** A card of its own (the default), or a well on the tiles' one group. */
-  surface?: TileSurface
 }
 
 type LevelsTileProps = TileCommon & {
@@ -94,22 +90,16 @@ type NotesTileProps = TileCommon & {
   tip?: string
 }
 
-/** The backing of the icon and the figures, so a fill under them never runs
- *  through the writing: the surface's own colour. */
-const BACKING = { card: "bg-card/85", well: "bg-well/85" } as const
-const FIGURES = { card: "[&>span]:bg-card/85", well: "[&>span]:bg-well/85" } as const
-
 /**
- * The box a tile is drawn in. Silence dims what is drawn at once, with no
- * fade (F11); on a well, the well keeps its own colour and dims what is on
- * it, so the row keeps its shape. A clip or a port that is gone is a 2 px
+ * The box a tile is drawn in, a well. Silence dims what is drawn at once,
+ * with no fade (F11); the well keeps its own colour and dims what is on it,
+ * so the row keeps its shape. A clip or a port that is gone is a 2 px
  * edge inside the box, over everything in it. `tip` is the tooltip's lines;
  * with none, none opens, so nothing points at one that is not there. It
  * stays wrapped in the tooltip either way: unwrapped, the box would be a new
  * one, and what watches its size would be watching the old.
  */
 function TileBox({
-  surface,
   edge,
   dim = false,
   tip,
@@ -117,14 +107,11 @@ function TileBox({
   children,
   ...rest
 }: Omit<ComponentProps<"div">, "children"> & {
-  surface: TileSurface
   edge: "clip" | "port" | null
   dim?: boolean
   tip: string[]
   children: ReactNode
 }) {
-  const well = surface === "well"
-  const corners = well ? "rounded-md" : "rounded-xl"
   // Held here the whole time, as WholeTip's is: left to Radix only while
   // there is something to say, it would switch between held and not, which
   // Radix warns of. And as there, the flag is let go when the lines go, or a
@@ -140,19 +127,15 @@ function TileBox({
     <Tooltip open={says && open} onOpenChange={(next) => setOpen(says && next)}>
       <TooltipTrigger asChild>
         <div
-          data-surface={surface}
           {...rest}
           className={cn(
             // The least height is the screen's to set (--tile-min); 6rem
             // where it sets none.
-            "@container relative min-h-[var(--tile-min,6rem)] min-w-0 overflow-hidden",
-            corners,
-            well ? "bg-well" : "bg-card",
-            dim && !well && "opacity-45",
+            "@container relative min-h-[var(--tile-min,6rem)] min-w-0 overflow-hidden rounded-md bg-well",
             className
           )}
         >
-          <div data-face className={cn("absolute inset-0", dim && well && "opacity-45")}>
+          <div data-face className={cn("absolute inset-0", dim && "opacity-45")}>
             {children}
           </div>
           {edge && (
@@ -160,8 +143,7 @@ function TileBox({
               aria-hidden
               data-edge={edge}
               className={cn(
-                "pointer-events-none absolute inset-0 border-2",
-                corners,
+                "pointer-events-none absolute inset-0 rounded-md border-2",
                 edge === "clip" ? "border-destructive/70" : "border-warn"
               )}
             />
@@ -234,10 +216,11 @@ function NotesMeter({ vel }: { vel: number }) {
   )
 }
 
-/** The icon in the corner, on the surface's colour. */
-function TileIcon({ icon, surface }: { icon?: string; surface: TileSurface }) {
+/** The icon in the corner, on the well's colour, so a fill under it never
+ *  runs through it. */
+function TileIcon({ icon }: { icon?: string }) {
   return (
-    <span className={cn("shrink-0 rounded p-0.5", BACKING[surface])}>
+    <span className="shrink-0 rounded bg-well/85 p-0.5">
       <InstrumentIcon icon={icon} className="size-[clamp(1rem,14cqi,1.75rem)]" />
     </span>
   )
@@ -250,33 +233,26 @@ const READOUT = { fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }
 /**
  * What both kinds lay out over their fill: the header across the top, with
  * the icon in its corner and, opposite it, `children`, the figures, each a
- * span on the surface's colour, the readout (sized `READOUT`) first; and
- * under it `name`, the name and what stands beside it.
+ * span on the well's colour, the readout (sized `READOUT`) first; and under
+ * it `name`, the name and what stands beside it.
  */
 function TileLayout({
   icon,
-  surface,
   name,
   children,
 }: {
   icon?: string
-  surface: TileSurface
   name: ReactNode
   children: ReactNode
 }) {
   return (
     <div className="relative grid h-full grid-rows-[auto_minmax(0,1fr)] gap-2 p-[clamp(0.375rem,7cqi,1.25rem)]">
-      {/* On the surface's colour, the icon and the figures alike: in dB a
+      {/* On the well's colour, the icon and the figures alike: in dB a
           level that is set well stands near the top, and the fill and its
           line ran through the figure. */}
       <div data-header className="flex items-start justify-between gap-1">
-        <TileIcon icon={icon} surface={surface} />
-        <div
-          className={cn(
-            "flex min-w-0 flex-col items-end gap-1 text-right [&>span]:rounded [&>span]:px-1",
-            FIGURES[surface]
-          )}
-        >
+        <TileIcon icon={icon} />
+        <div className="flex min-w-0 flex-col items-end gap-1 text-right [&>span]:rounded [&>span]:bg-well/85 [&>span]:px-1">
           {children}
         </div>
       </div>
@@ -296,7 +272,6 @@ function LevelsTile({
   clips,
   silent,
   midi,
-  surface = "card",
 }: LevelsTileProps) {
   const sides = peaks.length ? peaks : [0]
   // The figure is the peak the line holds, not the last poll's: that
@@ -304,9 +279,10 @@ function LevelsTile({
   // troughs between the hits.
   const peak = Math.max(...sides, ...held)
   const db = `${peakToDb(peak)} dB`
-  // The figure holds the room of "-60.0 dB" whatever it reads, so a louder
-  // reading never moves it; where even that has no room it hides, and the
-  // tooltip says it.
+  // The figure holds the room of "-100.0 dB" whatever it reads, so no
+  // reading moves it: the quietest a 24-bit input can read is -186.6, three
+  // figures before the point as -100.0 has. Where even that has no room it
+  // hides, and the tooltip says it.
   const { tile, figure, fits } = useFits(db)
   // The status line keeps its room from the start, so a clip or a silence
   // coming moves nothing in the header.
@@ -326,7 +302,6 @@ function LevelsTile({
   return (
     <TileBox
       ref={tile}
-      surface={surface}
       role="group"
       aria-label={name}
       tip={tip}
@@ -371,14 +346,25 @@ function LevelsTile({
 
       <TileLayout
         icon={icon}
-        surface={surface}
         name={
           // The name runs up the tile from its bottom left corner, as on the
           // spine of a book: a tile is tall and, sixteen to a row, narrow,
           // and "Overheads" across one came out as "Overhea / ds". Written
           // the same way on a wide tile, so there is one way to read them.
-          // A long one takes two lines and gets smaller (TileName).
-          <TileName name={name} side={input} sideClassName="tnum" onFit={setNameFit} />
+          // A long one takes two lines and gets smaller (TileName). On a Both
+          // tile the name and its input line are fitted to the levels' width:
+          // their row ends 0.375rem short of the notes column (22 % of the
+          // tile, at least 0.875rem), past the tile's own inset (TileLayout's
+          // padding).
+          <TileName
+            name={name}
+            side={input}
+            sideClassName="tnum"
+            className={
+              midi ? "mr-[calc(max(22cqi,0.875rem)_-_clamp(0.375rem,7cqi,1.25rem)_+_0.375rem)]" : undefined
+            }
+            onFit={setNameFit}
+          />
         }
       >
         <span
@@ -392,7 +378,7 @@ function LevelsTile({
           style={READOUT}
         >
           <span aria-hidden className="invisible col-start-1 row-start-1">
-            -60.0<span className="@max-[7rem]:hidden"> dB</span>
+            -100.0<span className="@max-[7rem]:hidden"> dB</span>
           </span>
           <span className="col-start-1 row-start-1">
             {peakToDb(peak)}
@@ -445,7 +431,7 @@ function LevelsTile({
  * warn edge, as a waiting input is on the setup screen. Its notes start the
  * moment the port appears.
  */
-function NotesTile({ name, icon, port, vel, notes, connected, tip, surface = "card" }: NotesTileProps) {
+function NotesTile({ name, icon, port, vel, notes, connected, tip }: NotesTileProps) {
   const { tile, figure, fits } = useFits(notes)
   // The tooltip: the name whole when it is cut; the port's name, and under
   // it what there is no room to say on the tile: its own sentence when it has
@@ -459,7 +445,6 @@ function NotesTile({ name, icon, port, vel, notes, connected, tip, surface = "ca
   return (
     <TileBox
       ref={tile}
-      surface={surface}
       role="group"
       aria-label={name}
       tip={lines}
@@ -472,7 +457,6 @@ function NotesTile({ name, icon, port, vel, notes, connected, tip, surface = "ca
 
       <TileLayout
         icon={icon}
-        surface={surface}
         name={
           // The name as a levels tile writes it: up the tile from its bottom
           // left corner, with what stands in for the input beside it.
