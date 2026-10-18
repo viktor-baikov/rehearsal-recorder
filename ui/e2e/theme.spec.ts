@@ -146,6 +146,10 @@ test.describe("a take's bar", () => {
 })
 
 test.describe("motion", () => {
+  // The other tests run with less motion asked for (playwright.config.ts);
+  // these are about the motion itself.
+  test.use({ reducedMotion: "no-preference" })
+
   /** A dialog on a screen that is not recording: History's Rename rehearsal. */
   async function openDialog(page: Page) {
     await openHistory(page)

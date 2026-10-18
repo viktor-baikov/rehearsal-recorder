@@ -182,6 +182,13 @@ function keyIsClaimed(el: Element | null): boolean {
  * presses it. One the mouse clicked does not: its focus is left over, not
  * chosen, so it is let go — before the browser presses it, which it does on
  * release — and Space does what it does everywhere else.
+ *
+ * Whether the key is claimed is decided in the capture phase, as useEscape
+ * decides for Escape. Space picking from a dropdown closes it on this very
+ * keydown, and where nothing animates the list away (the system's Reduce
+ * motion, a take being recorded) the list is gone, and focus with it, by the
+ * time the keydown reaches the window: picking an input would start the
+ * rehearsal too.
  */
 export function useSpacebar(handler: () => void, enabled = true) {
   const handlerRef = useRef(handler)
@@ -191,17 +198,26 @@ export function useSpacebar(handler: () => void, enabled = true) {
     if (!enabled) return
     watchFocus()
 
+    let claimed = false
+    const onCapture = (e: KeyboardEvent) => {
+      if (e.code === "Space") claimed = keyIsClaimed(document.activeElement)
+    }
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code !== "Space" || e.repeat) return
       const el = document.activeElement
-      if (keyIsClaimed(el)) return
+      if (claimed || keyIsClaimed(el)) return
       if (!letGoOfLeftover(el) && el?.matches(PRESSED_BY_SPACE)) return
       e.preventDefault()
       handlerRef.current()
     }
 
+    window.addEventListener("keydown", onCapture, true)
     window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
+    return () => {
+      window.removeEventListener("keydown", onCapture, true)
+      window.removeEventListener("keydown", onKeyDown)
+    }
   }, [enabled])
 }
 

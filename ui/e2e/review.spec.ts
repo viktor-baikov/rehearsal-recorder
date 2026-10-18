@@ -360,6 +360,7 @@ test("the cloud box is a checkbox, and Space after ticking it saves the take", a
 })
 
 test("the player's groups rise in, 40 ms apart", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
