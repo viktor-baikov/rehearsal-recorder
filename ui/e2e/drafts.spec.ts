@@ -233,8 +233,10 @@ test("a long name takes two lines, then is cut, whole in its tip and reached by 
   ).toBe(false)
 })
 
-test("while a take recovers, its progress takes its line's place and nothing moves", async ({ page }) => {
-  await openDrafts(page, [SEVEN])
+/** A take recovering with the journal at 42 %: its row's progress takes its
+ *  line's place, and the header, the group and the row keep their boxes. */
+async function recoveringKeepsTheBoxes(page: Page, draft: ReturnType<typeof take>, scale: number) {
+  await openDrafts(page, [draft], scale === 1 ? "" : scaled(scale))
   const row = rows(page)
   const line = row.locator("[data-slot=item-description]")
   await expect(line).toHaveCount(1)
@@ -244,6 +246,8 @@ test("while a take recovers, its progress takes its line's place and nothing mov
     row: await box(row),
     line: await box(line),
   }
+  // A 16 px line, as big as the text is.
+  expect(before.line.height).toBeCloseTo(16 * scale, 0)
   await expect(workButton(page)).toHaveCount(0)
 
   // Python is slow to recover; the journal says how far it has come.
@@ -253,7 +257,7 @@ test("while a take recovers, its progress takes its line's place and nothing mov
       id: 1,
       kind: "recover",
       title: "recover",
-      folder: SEVEN.dir,
+      folder: draft.dir,
       take_number: null,
       state: "running",
       fraction: 0.42,
@@ -266,15 +270,25 @@ test("while a take recovers, its progress takes its line's place and nothing mov
   ])
   await page.getByRole("button", { name: /^Recover/ }).click()
   await expect(row).toContainText("Recovering… 42%")
-  // In its line's place: the line is gone, and the progress is a 16 px line.
+  // In its line's place: the line is gone, and the progress is as tall.
   await expect(line).toHaveCount(0)
-  expect((await box(row.getByRole("status"))).height).toBeCloseTo(16, 0)
+  expect((await box(row.getByRole("status"))).height).toBeCloseTo(before.line.height, 0)
   // The button for the work comes into the header, which holds its height.
   await expect(workButton(page)).toBeVisible()
   expect(await box(page.locator("header"))).toEqual(before.header)
   expect(await box(group(page))).toEqual(before.group)
   expect(await box(row)).toEqual(before.row)
   await letGo(page, "recover_draft")
+}
+
+test("while a take recovers, its progress takes its line's place and nothing moves", async ({ page }) => {
+  await recoveringKeepsTheBoxes(page, SEVEN, 1)
+})
+
+test("while a take recovers at 960x680 and 150 %, its row keeps its height", async ({ page }) => {
+  // The brewery's take has the longest line and a name on two lines.
+  await page.setViewportSize({ width: 960, height: 680 })
+  await recoveringKeepsTheBoxes(page, TWELVE, 1.5)
 })
 
 test("the group and then the footer rise in, 40 ms apart", async ({ page }) => {
@@ -308,12 +322,23 @@ test("two takes of one rehearsal are told apart by length, and each Undo brings 
   expect((await calls(page, "discard_draft")).map((c) => c.args)).toEqual([[SEVEN.dir], [EIGHT.dir]])
 
   // Both say the same words; the length is in the buttons, not the notice.
+  // They stand oldest first, so the last is the 0:41 take's: its Undo brings
+  // that one back, and not the 4:12 one.
   const gone = notices(page).filter({ hasText: "“Tuesday jam” went to the Trash." })
   await expect(gone).toHaveCount(2)
-  await gone.first().getByRole("button", { name: "Undo" }).click()
+  await gone.last().getByRole("button", { name: "Undo" }).click()
   await expect(rows(page)).toHaveCount(2)
+  await expect(page.locator(`[data-draft="${EIGHT.dir}"]`)).toHaveCount(1)
+  await expect(page.locator(`[data-draft="${SEVEN.dir}"]`)).toHaveCount(0)
+  await expect(short).toHaveCount(1)
+  await expect(long).toHaveCount(0)
+
+  // The other one, and then all three are there.
   await gone.first().getByRole("button", { name: "Undo" }).click()
   await expect(rows(page)).toHaveCount(3)
+  await expect(page.locator(`[data-draft="${SEVEN.dir}"]`)).toHaveCount(1)
+  await expect(long).toHaveCount(1)
+  await expect(short).toHaveCount(1)
   // Each back where it was when it went, so the order is the fake's; what
   // counts is that all three are there.
   const dirs = await rows(page).evaluateAll((els) => els.map((e) => e.getAttribute("data-draft")))

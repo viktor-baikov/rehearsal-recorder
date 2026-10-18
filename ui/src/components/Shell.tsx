@@ -126,11 +126,11 @@ export function Shell({
             className={cn(
               "min-w-0",
               facts ? "flex-[0_1_auto]" : "flex-1",
+              (air || titleLeast) && "flex flex-col justify-center",
               // On a redone screen the header is as tall as a 36 px button,
               // so the work button coming into it moves nothing (B4).
               // Before titleLeast, so Review's taller box wins.
-              air && "flex min-h-9 flex-col justify-center",
-              titleLeast && "flex flex-col justify-center",
+              air && "min-h-9",
               titleLeast
             )}
           >

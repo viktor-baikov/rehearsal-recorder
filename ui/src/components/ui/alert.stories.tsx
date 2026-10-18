@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { CircleAlert, Info, TriangleAlert } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "./alert"
+import { Alert, AlertDescription, AlertTitle, Warning as WarningNote } from "./alert"
 import { WholeTip, useCut } from "./whole"
 
 const meta = {
@@ -37,6 +37,22 @@ export const Warning: Story = {
       <AlertTitle>No input picked</AlertTitle>
       <AlertDescription>Pick the input this track plugs into, or set it to MIDI.</AlertDescription>
     </Alert>
+  ),
+}
+
+/** `Warning`: the warning over a list that stays for as long as it holds, as
+ *  the start screen’s tracks and the unsaved takes say theirs. The triangle
+ *  and one paragraph, announced as a status; the words take what room they
+ *  need. */
+export const Note: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3">
+      <WarningNote>Nothing is coming in on “Guitar”. Pick one below.</WarningNote>
+      <WarningNote>
+        Recover a take to add it to its rehearsal. The app closed while these takes were
+        recording, so they were never saved. The audio is intact.
+      </WarningNote>
+    </div>
   ),
 }
 

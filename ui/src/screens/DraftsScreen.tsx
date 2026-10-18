@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react"
-import { Save, Trash2, TriangleAlert } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Save, Trash2 } from "lucide-react"
+import { Warning } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import {
@@ -137,15 +137,10 @@ export function DraftsScreen({
             take under it, split by 1 px lines. */}
         <Card data-drafts className="animate-rise gap-0 p-0" style={rise(0)}>
           <div className="p-6">
-            <Alert variant="warning" role="status">
-              <TriangleAlert />
-              <AlertDescription>
-                <p>
-                  Recover a take to add it to its rehearsal. The app closed while these
-                  takes were recording, so they were never saved. The audio is intact.
-                </p>
-              </AlertDescription>
-            </Alert>
+            <Warning>
+              Recover a take to add it to its rehearsal. The app closed while these takes were
+              recording, so they were never saved. The audio is intact.
+            </Warning>
           </div>
           <ItemGroup>
             {remaining.map((draft) => {
@@ -158,13 +153,14 @@ export function DraftsScreen({
               return (
                 <Fragment key={draft.dir}>
                   <ItemSeparator />
-                  {/* A row goes nowhere, so it is a plain box with no edge: its
-                      words stand 24 px in, as the warning's box does. */}
+                  {/* A row goes nowhere, so it is a plain box. No border: Item's
+                      transparent one would put the title 25 px in, not the 24 of
+                      the warning's box. */}
                   <Item
                     size="sm"
                     role="listitem"
                     data-draft={draft.dir}
-                    className="flex-nowrap gap-4 rounded-none border-0 px-6 py-4"
+                    className="flex-nowrap gap-4 border-0 px-6 py-4"
                   >
                     <ItemContent className="min-w-0 gap-0.5">
                       {/* Two lines, then cut and whole in the tip; a Tab stop

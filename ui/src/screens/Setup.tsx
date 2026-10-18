@@ -1,12 +1,4 @@
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react"
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
   AudioLines,
@@ -18,9 +10,8 @@ import {
   RefreshCw,
   Mic,
   Settings as SettingsIcon,
-  TriangleAlert,
 } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Warning } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
@@ -92,19 +83,6 @@ const portName = (t: Track) => (t.midi_port?.name?.trim() ? t.midi_port.name : n
 
 /** A track's name in a sentence, or what stands for it while it has none. */
 const named = (name: string) => name.trim() || "An unnamed track"
-
-/** Something over the tracks that is true for as long as it holds, and so
- *  stays where it is (C8): not a notice. */
-function Warning({ children }: { children: ReactNode }) {
-  return (
-    <Alert variant="warning" role="status">
-      <TriangleAlert />
-      <AlertDescription>
-        <p>{children}</p>
-      </AlertDescription>
-    </Alert>
-  )
-}
 
 export function Setup({
   onStarted,

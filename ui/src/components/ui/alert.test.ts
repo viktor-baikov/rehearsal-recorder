@@ -1,7 +1,7 @@
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
-import { Alert, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertTitle, Warning } from "@/components/ui/alert"
 
 const html = (variant?: "default" | "warning" | "destructive", size?: "box" | "line") =>
   renderToStaticMarkup(
@@ -19,6 +19,14 @@ describe("Alert", () => {
   it("keeps the warning colour out of the other two", () => {
     expect(html("default")).not.toContain("warn")
     expect(html("destructive")).not.toContain("warn")
+  })
+
+  it("has a Warning for a line that stays: the warning alert, a triangle and one paragraph, a status", () => {
+    const note = renderToStaticMarkup(createElement(Warning, null, "Words"))
+    expect(note).toContain('role="status"')
+    expect(note).toContain("bg-warn/10")
+    expect(note).toContain("lucide-triangle-alert")
+    expect(note).toContain("<p>Words</p>")
   })
 
   it("is a role of its own, and a title at 600", () => {
