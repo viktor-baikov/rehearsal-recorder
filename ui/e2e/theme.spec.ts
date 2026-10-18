@@ -78,7 +78,7 @@ test.describe("a take's bar", () => {
   }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const lastTime = page.getByRole("complementary", { name: "Last time" })
-    const goes = lastTime.locator("[data-song='Pałyn'] [data-goes] > span")
+    const goes = lastTime.locator("[data-song='Pałyn'] [data-columns] [data-bar]")
     await expect(goes.first()).toBeVisible()
     expect(await corner(goes.first())).toBe("4px")
 

@@ -106,7 +106,7 @@ export function Shell({
               row wraps to a second line rather than being cut. */}
           <div className={cn("min-w-0", facts ? "flex-[0_1_auto]" : "flex-1")}>
             {subtitle && (
-              <div className="text-xs tracking-wide text-muted-foreground uppercase">
+              <div className="text-xs text-muted-foreground">
                 {subtitle}
               </div>
             )}

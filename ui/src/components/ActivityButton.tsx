@@ -116,7 +116,7 @@ export function ActivityButton() {
       >
         {active.length > 0 && (
           <section aria-label="Working" className="flex flex-col gap-3">
-            <h2 className="text-xs tracking-wide text-muted-foreground uppercase">Working</h2>
+            <h2 className="text-xs text-muted-foreground">Working</h2>
             {active.map((e) => (
               <Running key={e.id} entry={e} recording={recording} />
             ))}
@@ -124,7 +124,7 @@ export function ActivityButton() {
         )}
         {finished.length > 0 && (
           <section aria-label="Done" className="flex flex-col gap-3">
-            <h2 className="text-xs tracking-wide text-muted-foreground uppercase">Done</h2>
+            <h2 className="text-xs text-muted-foreground">Done</h2>
             {finished.map((e) => (
               <Finished key={e.id} entry={e} />
             ))}
