@@ -225,10 +225,10 @@ opening.
   as History writes them ("Thu 10 Sep, 19:00"), the number of tracks and the
   length, so two takes of one rehearsal are told apart by their length.
   **Discard** and **Recover** name their take and its length, so a screen
-  reader can tell them apart too. A recovery that takes more than a second
-  shows a spinner in its button. The take's progress shows in place of the
-  line under the name, and the buttons keep their words until the recovery
-  ends, so nothing moves.
+  reader can tell those takes apart too. A recovery that takes more than a
+  second shows a spinner in its button. The take's progress shows in place
+  of the line under the name, and the buttons keep their words until the
+  recovery ends, so nothing moves.
 
 ## 0.11.1
 

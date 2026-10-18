@@ -1022,7 +1022,7 @@ each take's number in its rehearsal right.
 
 **Discard** moves a take to the Trash at once (**Undo** brings it back).
 **Decide later** keeps the takes for next time. If a take is being recovered
-when you press it, that take is finished first, and the rest are kept. Each
+when you press it, that take is recovered first, and the rest are kept. Each
 take's row is titled with its rehearsal's name. Under the name are the day
 and time the rehearsal began, the number of tracks and the length, so you
 can tell two takes of one rehearsal apart by their length. A long name is

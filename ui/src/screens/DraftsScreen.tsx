@@ -48,13 +48,13 @@ type Busy = { dir: string; job: "recover" | "discard" | "all"; many: boolean }
  *  time, but a list that has closed can still get a recovery's answer or an
  *  Undo: a take it recovered then leaves the list on screen, and one its
  *  Undo brought back joins it. */
-let onScreen: { recovered: (dir: string) => void; cameBack: (dir: string) => void } | null = null
+let onScreen: { recovered: (dir: string) => void; cameBack: (dir: string) => Promise<void> } | null = null
 
 /** A take an Undo brought back: into the list on screen, or with the list
  *  again when none is. */
-function bringBack(dir: string, reopen: () => void) {
-  if (onScreen) onScreen.cameBack(dir)
-  else reopen()
+function bringBack(dir: string, reopen: () => void): Promise<void> | void {
+  if (onScreen) return onScreen.cameBack(dir)
+  reopen()
 }
 
 export function DraftsScreen({
@@ -114,14 +114,14 @@ export function DraftsScreen({
 
   // A take recovered or discarded, if it is still listed: a list's own
   // recovery and one from the list before can both say so. With the last one
-  // the list closes, unless it has closed already: after Decide later the app
-  // stays where it is.
+  // the list closes, unless Decide later has closed it or is closing it: the
+  // app then stays where it is.
   const drop = useCallback(
     (dir: string) => {
       if (!listed.current.some((d) => d.dir === dir)) return
       const rest = listed.current.filter((d) => d.dir !== dir)
       put(rest)
-      if (rest.length === 0 && shown.current) onDone()
+      if (rest.length === 0 && shown.current && !leaving.current) onDone()
     },
     [put, onDone]
   )
@@ -134,7 +134,7 @@ export function DraftsScreen({
       const now = await api().list_drafts()
       if (shown.current) {
         put(now.filter((d) => d.dir === dir || listed.current.some((l) => l.dir === d.dir)))
-      } else bringBack(dir, onReopen)
+      } else await bringBack(dir, onReopen)
     },
     [put, onReopen]
   )
@@ -256,8 +256,7 @@ export function DraftsScreen({
               </Button>
               {/* The screen's main button, rightmost: the one take, or all
                   of them one after another. With none left it waits for the
-                  screen to go: the journal can empty the list while nothing
-                  here is busy. */}
+                  screen to go. */}
               <Button
                 size="footer"
                 onClick={() => void (many ? recoverAll() : recover(remaining[0]))}
