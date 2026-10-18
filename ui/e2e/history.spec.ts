@@ -858,7 +858,7 @@ for (const [what, long] of LONG_NAMES) {
     expect(meta.y, "the line under the name").toBeGreaterThanOrEqual(title.y + title.height - 0.5)
 
     await name.hover()
-    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(LONG_SONG)
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
   })
 }
 
@@ -1450,7 +1450,7 @@ test("a rehearsal played by a set shows its name in the list and under its title
   const cut = under.locator("[data-cut]")
   await expect(cut).toHaveText(long)
   await cut.hover()
-  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(LONG_SONG)
+  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
   await page.mouse.move(0, 0, { steps: 8 })
 
   // The set gives way before the folder does: its button keeps its icon
