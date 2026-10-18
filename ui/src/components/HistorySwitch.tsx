@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { HistoryView } from "@/lib/api"
 
 const VIEWS: { view: HistoryView; label: string }[] = [
@@ -11,6 +11,9 @@ const VIEWS: { view: HistoryView; label: string }[] = [
  * The top of History's list: evening by evening, song by song, or mark by
  * mark. They answer different questions — "what did we do on Tuesday",
  * "where is the good Viasna" and "where was that riff" — over the same takes.
+ *
+ * It lies across the list, so ← and → move along it and ↑ and ↓ are left to
+ * the list under it, wherever the focus is.
  */
 export function HistorySwitch({
   view,
@@ -20,24 +23,23 @@ export function HistorySwitch({
   onChange: (view: HistoryView) => void
 }) {
   return (
-    <div role="group" aria-label="History view" className="flex gap-1 rounded-lg bg-muted p-1">
+    <ToggleGroup
+      type="single"
+      variant="switch"
+      orientation="horizontal"
+      aria-label="History view"
+      value={view}
+      // The view that is on, pressed again, would leave none on.
+      onValueChange={(next) => {
+        if (next && next !== view) onChange(next as HistoryView)
+      }}
+      className="w-full"
+    >
       {VIEWS.map((v) => (
-        <button
-          key={v.view}
-          type="button"
-          aria-pressed={view === v.view}
-          onClick={() => view !== v.view && onChange(v.view)}
-          className={cn(
-            "flex-1 rounded-md px-2 py-1 text-sm transition-colors",
-            "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-            view === v.view
-              ? "bg-background font-medium text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
+        <ToggleGroupItem key={v.view} value={v.view}>
           {v.label}
-        </button>
+        </ToggleGroupItem>
       ))}
-    </div>
+    </ToggleGroup>
   )
 }

@@ -19,7 +19,7 @@ const GONE = "/rec/gone#1@60"
 /** History, switched to its Marks view: the list of labels. */
 async function openMarks(page: Page) {
   await openHistory(page)
-  await page.getByRole("button", { name: "Marks", exact: true }).click()
+  await page.getByRole("radio", { name: "Marks", exact: true }).click()
   const list = page.getByRole("navigation", { name: "Labels" })
   await expect(list).toBeVisible()
   return list
@@ -61,7 +61,7 @@ test.describe("Marks in History", () => {
   test("the switch has three views, and History opens on the one used last", async ({ page }) => {
     await openApp(page, { before: MORE })
     await openMarks(page)
-    await expect(page.getByRole("group", { name: "History view" }).getByRole("button")).toHaveText([
+    await expect(page.getByRole("radiogroup", { name: "History view" }).getByRole("radio")).toHaveText([
       "Rehearsals",
       "Songs",
       "Marks",
@@ -71,8 +71,8 @@ test.describe("Marks in History", () => {
     await page.keyboard.press("Escape")
     await page.getByRole("button", { name: "History", exact: true }).click()
     await expect(page.getByRole("navigation", { name: "Labels" })).toBeVisible()
-    await expect(page.getByRole("button", { name: "Marks", exact: true })).toHaveAttribute(
-      "aria-pressed",
+    await expect(page.getByRole("radio", { name: "Marks", exact: true })).toHaveAttribute(
+      "aria-checked",
       "true"
     )
   })
@@ -87,12 +87,13 @@ test.describe("Marks in History", () => {
     ).toEqual(["1", "2", "3", "4"])
     const wrong = labelItem(page, 3)
     await expect(wrong).toContainText("Went wrong")
-    await expect(wrong.locator("[data-count]")).toHaveText("3")
+    await expect(wrong).toHaveAttribute("data-count", "3")
+    await expect(wrong.locator("[data-figures] [data-shown]")).toHaveText("3")
     await expect(wrong).toContainText("3 rehearsals · last 10 Sep")
     await expect(labelItem(page, 1)).toContainText("2 rehearsals · last 10 Sep")
     const again = labelItem(page, 4)
     await expect(again).toContainText("no marks yet")
-    await expect(again.locator("[data-count]")).toHaveCount(0)
+    await expect(again).not.toHaveAttribute("data-count")
     await expect(again).toHaveAttribute("data-empty", "true")
     // The first label is the one chosen at first.
     await expect(labelItem(page, 1)).toHaveAttribute("aria-current", "true")
@@ -332,7 +333,7 @@ test.describe("Marks in History", () => {
         return answer
       }
     })
-    await page.getByRole("button", { name: "Marks", exact: true }).click()
+    await page.getByRole("radio", { name: "Marks", exact: true }).click()
     await chooseLabel(page, 3, "Went wrong")
     await row(page, VIASNA).locator("[data-line='comment']").click()
     await page.getByRole("button", { name: "Edit marker at 0:40" }).click()
@@ -341,12 +342,12 @@ test.describe("Marks in History", () => {
     await dialog.getByRole("button", { name: "Save", exact: true }).click()
     await expect(dialog).toHaveCount(0)
     await page.keyboard.press("Escape")
-    await expect(labelItem(page, 3).locator("[data-count]")).toHaveText("2")
+    await expect(labelItem(page, 3)).toHaveAttribute("data-count", "2")
 
     await page.evaluate(() => (window as unknown as { __OLD_COUNTS__: () => void }).__OLD_COUNTS__())
     await page.waitForTimeout(400)
-    await expect(labelItem(page, 3).locator("[data-count]")).toHaveText("2")
-    await expect(labelItem(page, 4).locator("[data-count]")).toHaveText("1")
+    await expect(labelItem(page, 3)).toHaveAttribute("data-count", "2")
+    await expect(labelItem(page, 4)).toHaveAttribute("data-count", "1")
   })
 
   test("a mark with no comment shows its label's name", async ({ page }) => {
@@ -381,7 +382,7 @@ test.describe("Marks in History", () => {
     await expect(rehearsals.locator("[data-rehearsal='/rec/older']")).toHaveAttribute("aria-current", "true")
 
     // Back on Marks, the label chosen is still chosen.
-    await page.getByRole("button", { name: "Marks", exact: true }).click()
+    await page.getByRole("radio", { name: "Marks", exact: true }).click()
     await expect(labelItem(page, 3)).toHaveAttribute("aria-current", "true")
     await row(page, VIASNA).getByRole("button", { name: "Viasna", exact: true }).click()
     await expect(page.getByRole("navigation", { name: "Songs" })).toBeVisible()
@@ -405,8 +406,8 @@ test.describe("Marks in History", () => {
     await page.keyboard.press("Escape")
     await expect(pane(page, "Went wrong")).toBeVisible()
     await expect.poll(() => marksOn(page)).toEqual([DAROHA, GONE])
-    await expect(labelItem(page, 3).locator("[data-count]")).toHaveText("2")
-    await expect(labelItem(page, 4).locator("[data-count]")).toHaveText("1")
+    await expect(labelItem(page, 3)).toHaveAttribute("data-count", "2")
+    await expect(labelItem(page, 4)).toHaveAttribute("data-count", "1")
     await expect(labelItem(page, 4)).not.toHaveAttribute("data-empty", "true")
     await expect(labelItem(page, 3)).toHaveAttribute("aria-current", "true")
   })
@@ -456,7 +457,15 @@ test.describe("Marks in History", () => {
     const grouping = (await marks.getByRole("group", { name: "Group marks" }).boundingBox())!
     const box = (await marks.boundingBox())!
     expect(grouping.x + grouping.width).toBeLessThanOrEqual(box.x + box.width)
-    const item = labelItem(page, 3).locator("[data-name]")
-    expect(await item.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+    // In the list the name takes a second line before anything of it is
+    // cut, and its row scrolls nothing sideways either.
+    const item = labelItem(page, 3)
+    expect(
+      await item.locator("[data-name]").evaluate((el) => ({
+        lines: Math.round(el.clientHeight / parseFloat(getComputedStyle(el).lineHeight)),
+        cut: el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1,
+      }))
+    ).toEqual({ lines: 2, cut: false })
+    expect(await item.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   })
 })

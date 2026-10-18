@@ -8,6 +8,7 @@ import {
   setFake,
   startButton,
   startRehearsal,
+  style,
   test,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
@@ -19,7 +20,7 @@ import type { Page } from "@playwright/test"
 /** History, switched to its Songs view: the list of songs. */
 async function openSongs(page: Page) {
   await openHistory(page)
-  await page.getByRole("button", { name: "Songs", exact: true }).click()
+  await page.getByRole("radio", { name: "Songs", exact: true }).click()
   const list = page.getByRole("navigation", { name: "Songs" })
   await expect(list).toBeVisible()
   return list
@@ -147,9 +148,9 @@ test.describe("Songs in History", () => {
 
     await page.keyboard.press("ArrowDown")
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
-    await page.getByRole("button", { name: "Rehearsals", exact: true }).click()
+    await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
     await expect(page.getByRole("navigation", { name: "Rehearsals" })).toBeVisible()
-    await page.getByRole("button", { name: "Songs", exact: true }).click()
+    await page.getByRole("radio", { name: "Songs", exact: true }).click()
     await expect(list.locator("[aria-current='true']")).toHaveAttribute("data-song", "Pałyn")
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
   })
@@ -189,6 +190,34 @@ test.describe("Songs in History", () => {
     await rows(page).and(page.locator("[data-song='Not named']")).click()
     await expect(head(page)).toContainText("Takes nobody named. Rename one to give it a song.")
     await expect(head(page).getByRole("button", { name: /^Play/ })).toHaveCount(0)
+  })
+
+  test("month headings and Not named have no capitals and no dashed edge", async ({ page }) => {
+    // F7: a heading reads as it is written, at one of the five sizes (F5).
+    await openApp(page)
+    const list = await openHistory(page)
+    const month = list.getByRole("heading", { name: "September 2026" })
+    expect(await style(month, "text-transform", "letter-spacing", "font-size")).toEqual({
+      "text-transform": "none",
+      "letter-spacing": "normal",
+      "font-size": "12px",
+    })
+
+    // F4: Not named is set apart by its place and its grey words, with no
+    // frame round it.
+    await page.getByRole("radio", { name: "Songs", exact: true }).click()
+    const notNamed = rows(page).and(page.locator("[data-song='Not named']"))
+    const sides = await style(
+      notNamed,
+      "border-top-style",
+      "border-right-style",
+      "border-bottom-style",
+      "border-left-style"
+    )
+    expect(Object.values(sides)).not.toContain("dashed")
+    expect(
+      (await style(notNamed.getByText("Not named", { exact: true }), "text-transform"))["text-transform"]
+    ).toBe("none")
   })
 
   test("a song's ladder has a rung per rehearsal, newest first, the newest on disk open", async ({
@@ -310,7 +339,7 @@ test.describe("Songs in History", () => {
     await expect(older.getByRole("button", { name: "Pause Daroha 1" })).toBeVisible()
     const closes = (await calls(page, "player_close")).length
 
-    await page.getByRole("button", { name: "Rehearsals", exact: true }).click()
+    await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
     await expect(page.getByRole("region", { name: "Tuesday jam" })).toBeVisible()
     // Nothing was chosen anew, so Daroha 1 plays on.
     expect(await calls(page, "player_close")).toHaveLength(closes)
@@ -625,7 +654,7 @@ test.describe("Songs in History", () => {
       .click()
     await expect(page.getByRole("navigation", { name: "Songs" })).toBeVisible()
     await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
-    await page.getByRole("button", { name: "Rehearsals", exact: true }).click()
+    await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
     await expect(page.getByRole("region", { name: "First rehearsal" })).toBeVisible()
   })
 
@@ -640,7 +669,7 @@ test.describe("Songs in History", () => {
     await page.keyboard.press("Escape")
     // History comes back on the view used last, Songs.
     await page.getByRole("button", { name: "History", exact: true }).click()
-    await page.getByRole("button", { name: "Rehearsals", exact: true }).click()
+    await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
     await page
       .getByRole("navigation", { name: "Rehearsals" })
       .getByRole("button", { name: /^Tuesday jam/ })
@@ -685,14 +714,14 @@ test.describe("Songs in History", () => {
     await openApp(page, { before: `window.__EXTRA_SONGS__ = ["Opus"];` })
     await openSongs(page)
     await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(1)
-    await page.getByRole("button", { name: "Rehearsals", exact: true }).click()
+    await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
     await page
       .getByRole("navigation", { name: "Rehearsals" })
       .getByRole("button", { name: /^First rehearsal/ })
       .click()
     await page.getByRole("button", { name: "Delete rehearsal First rehearsal" }).click()
     await expect(page.getByRole("dialog")).toHaveCount(0)
-    await page.getByRole("button", { name: "Songs", exact: true }).click()
+    await page.getByRole("radio", { name: "Songs", exact: true }).click()
     await expect(rows(page).and(page.locator("[data-song='Pałyn']"))).toHaveCount(1)
     await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(0)
     await expect(rows(page).and(page.locator("[data-song='Daroha']"))).toContainText(

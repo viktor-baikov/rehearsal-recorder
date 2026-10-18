@@ -1,6 +1,8 @@
 import {
   callCount,
   calls,
+  colour,
+  EDGE,
   expect,
   hold,
   keyOn,
@@ -77,6 +79,9 @@ test("finishing a rehearsal with takes in it asks, and is answered from the keyb
   await expect(question).toHaveCount(0)
   expect(await callCount(page, "finish_rehearsal")).toBe(finishes)
 })
+
+/** The stress band's Tuesday jam, too long for two lines of its row. */
+const LONG_TUESDAY = "Tuesday jam at the old brewery, with the horn section and the choir from upstairs"
 
 test.describe("History", () => {
   test("opens on the newest rehearsal beside the list, and Escape goes back a layer at a time", async ({
@@ -189,6 +194,105 @@ test.describe("History", () => {
       { name: "Guitar", file: "/rec/older/d1.wav" },
     ])
     expect(await callCount(page, "player_toggle")).toBe(toggles)
+  })
+
+  test("the switch is three radios, and arrow keys on it leave the list alone", async ({ page }) => {
+    await openApp(page)
+    const list = await openHistory(page)
+    const views = page.getByRole("radiogroup", { name: "History view" })
+    await expect(views.getByRole("radio")).toHaveText(["Rehearsals", "Songs", "Marks"])
+    const rehearsals = views.getByRole("radio", { name: "Rehearsals", exact: true })
+    const songs = views.getByRole("radio", { name: "Songs", exact: true })
+    await expect(rehearsals).toHaveAttribute("aria-checked", "true")
+
+    // Along the switch the arrows move the focus and choose nothing.
+    await rehearsals.focus()
+    await page.keyboard.press("ArrowRight")
+    await expect(songs).toBeFocused()
+    await expect(songs).toHaveAttribute("aria-checked", "false")
+    await expect(rehearsals).toHaveAttribute("aria-checked", "true")
+    await expect(list).toBeVisible()
+
+    // Down is the list's, wherever the focus is: the next rehearsal, in the
+    // view that was on.
+    await page.keyboard.press("ArrowDown")
+    await expect(page.getByRole("heading", { name: "Wednesday jam" })).toBeVisible()
+    await expect(list.locator("[aria-current='true']")).toContainText("Wednesday jam")
+    await expect(rehearsals).toHaveAttribute("aria-checked", "true")
+    await expect(songs).toBeFocused()
+    expect(await calls(page, "save_history_view")).toEqual([])
+  })
+
+  test("a chosen row is grey with no frame", async ({ page }) => {
+    await openApp(page)
+    await openHistory(page)
+    const selected = await colour(page, "--selected")
+    const chosen = page.locator("nav [aria-current='true']")
+    const check = async (view: string) => {
+      await expect(chosen, view).toHaveCount(1)
+      await page.mouse.move(0, 0)
+      await expect
+        .poll(async () => (await style(chosen, "background-color"))["background-color"], view)
+        .toBe(selected)
+      const edge = await style(chosen, ...EDGE)
+      for (const side of ["top", "right", "bottom", "left"]) {
+        const clear =
+          edge[`border-${side}-width`] === "0px" || edge[`border-${side}-color`] === "rgba(0, 0, 0, 0)"
+        expect(clear, `${view}, ${side} edge`).toBe(true)
+      }
+    }
+    await check("Rehearsals")
+    for (const view of ["Songs", "Marks"]) {
+      await page.getByRole("radio", { name: view, exact: true }).click()
+      await check(view)
+    }
+  })
+
+  test("a long name takes two lines in its row, then is cut, whole in its tip, and the minutes give way", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openBandApp(page, { stress: true })
+    const list = await openHistory(page)
+    await settled(page)
+    const row = list.locator("[data-rehearsal='/rec/tue']")
+
+    // The minutes give their room to the name first.
+    const figures = row.locator("[data-figures]")
+    await expect(figures).toHaveAttribute("data-dropped")
+    await expect(figures.locator("[data-shown]")).toHaveText("")
+    const minutes = (await figures.locator(".sr-only").textContent()) ?? ""
+    expect(minutes).toMatch(/ min$/)
+
+    // Then the name takes two lines, and is cut.
+    const name = row.locator("[data-name]")
+    await expect(name).toHaveText(LONG_TUESDAY)
+    expect(
+      await name.evaluate((el) => ({
+        lines: Math.round(el.clientHeight / parseFloat(getComputedStyle(el).lineHeight)),
+        cut: el.scrollHeight > el.clientHeight + 1,
+      }))
+    ).toEqual({ lines: 2, cut: true })
+
+    // Whole in the row's tip, with the minutes under it: on hover, and on
+    // focus from the keys, which reach the row and not its figures.
+    const tip = page.locator("[data-whole][data-state$='open']")
+    await row.hover()
+    await expect(tip).toContainText(LONG_TUESDAY)
+    await expect(tip).toContainText(minutes)
+    await page.mouse.move(0, 0, { steps: 8 })
+    await expect(tip).toHaveCount(0)
+    await page.getByRole("radio", { name: "Rehearsals", exact: true }).focus()
+    await page.keyboard.press("Tab")
+    await expect(row).toBeFocused()
+    await expect(tip).toContainText(LONG_TUESDAY)
+    await expect(tip).toContainText(minutes)
+
+    // A short name keeps its minutes beside it.
+    const short = list.locator("[data-rehearsal='/rec/sat']")
+    await expect(short.locator("[data-figures]")).not.toHaveAttribute("data-dropped")
+    await expect(short.locator("[data-figures] [data-shown]")).toHaveText(/ min$/)
+    expect(await list.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   })
 })
 

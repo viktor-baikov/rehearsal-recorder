@@ -113,11 +113,11 @@ test.describe("a take's bar", () => {
 
     // A song's page draws each evening's goes as bars, and Marks each
     // mark's take.
-    await page.getByRole("button", { name: "Songs", exact: true }).click()
+    await page.getByRole("radio", { name: "Songs", exact: true }).click()
     const rung = page.locator("[data-rung] [data-bars] > span").first()
     await expect(rung).toBeVisible()
     expect(await corner(rung)).toBe("4px")
-    await page.getByRole("button", { name: "Marks", exact: true }).click()
+    await page.getByRole("radio", { name: "Marks", exact: true }).click()
     const marked = page.locator("[data-mark] [data-take-bar]").first()
     await expect(marked).toBeVisible()
     expect(await corner(marked)).toBe("4px")

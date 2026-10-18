@@ -1,11 +1,12 @@
-import { cn } from "@/lib/utils"
+import { HistoryRow } from "@/components/HistoryRow"
 import type { SongIndex } from "@/lib/api"
 import { inSongOrder, notNamedLine, songLine, type SongRef } from "@/lib/songs"
 
 /**
- * History's Songs view, down the left: every song with a go, alphabetically,
- * and the takes nobody named last. A song is where it was last time whatever
- * the band played since, which a list by date could not promise.
+ * History's Songs view, down the left: every song with a take, in
+ * alphabetical order, and the takes nobody named last. A song is where it
+ * was last time whatever the band played since, which a list by date could
+ * not promise.
  */
 export function SongList({
   index,
@@ -24,35 +25,30 @@ export function SongList({
         const title = song ? song.title : "Not named"
         const line = song ? songLine(song) : index.not_named ? notNamedLine(index.not_named) : ""
         return (
-          <button
+          <HistoryRow
             key={ref}
-            type="button"
             data-song={title}
             data-song-ref={ref}
-            aria-current={ref === current ? "true" : undefined}
+            name={title}
+            nameClassName={song ? "text-base font-semibold" : "text-sm text-muted-foreground"}
+            figures={
+              song && song.starred > 0
+                ? [
+                    {
+                      text: `${song.starred} starred`,
+                      keep: 0,
+                      node: <span className="text-signal">★ {song.starred}</span>,
+                    },
+                  ]
+                : []
+            }
+            current={ref === current}
             onClick={() => onChoose(ref)}
-            className={cn(
-              "flex flex-col gap-1 rounded-lg border border-transparent px-3 pt-2.5 pb-3 text-left transition-colors",
-              "hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-              ref === current && "border-border bg-accent hover:bg-accent",
-              !song && "mt-2 border-dashed"
-            )}
+            // Set apart from the songs by the air over it and its grey words.
+            className={song ? undefined : "mt-2"}
           >
-            <span className="flex items-baseline gap-2">
-              <span
-                className={cn(
-                  "min-w-0 flex-1 truncate",
-                  song ? "text-base font-semibold" : "text-sm text-muted-foreground"
-                )}
-              >
-                {title}
-              </span>
-              {song && song.starred > 0 && (
-                <span className="tnum shrink-0 text-xs text-signal">★ {song.starred}</span>
-              )}
-            </span>
             <span className="truncate text-xs text-muted-foreground">{line}</span>
-          </button>
+          </HistoryRow>
         )
       })}
     </div>

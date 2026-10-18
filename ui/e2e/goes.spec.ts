@@ -505,7 +505,7 @@ async function fromSongPage(page: Page) {
     before: `window.__FULL_EVENING__ = true; window.__EXTRA_SONGS__ = ["Pałyn", "Pałyn"];`,
   })
   await openHistory(page)
-  await page.getByRole("button", { name: "Songs", exact: true }).click()
+  await page.getByRole("radio", { name: "Songs", exact: true }).click()
   await page.locator("[data-song='Pałyn']").click()
   await page
     .locator(`[data-rung-group="/rec/old"]`)
@@ -630,7 +630,7 @@ test("from a song's page, its tab is as wide shut as open", async ({ page }) => 
     after: failed,
   })
   await openHistory(page)
-  await page.getByRole("button", { name: "Songs", exact: true }).click()
+  await page.getByRole("radio", { name: "Songs", exact: true }).click()
   await page.locator("[data-song='Pałyn']").click()
   await page
     .locator(`[data-rung-group="/rec/old"]`)

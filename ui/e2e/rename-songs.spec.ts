@@ -21,7 +21,7 @@ const PALYN = `window.__EXTRA_SONGS__ = ["Palyn", "Palyn"]; window.__ACTIVITY__ 
 /** History's Songs view, with `title`'s page open. */
 async function openSong(page: Page, title: string) {
   await openHistory(page)
-  await page.getByRole("button", { name: "Songs", exact: true }).click()
+  await page.getByRole("radio", { name: "Songs", exact: true }).click()
   await page.getByRole("navigation", { name: "Songs" }).locator(`[data-song='${title}']`).click()
   await expect(head(page).getByRole("heading", { name: title, exact: true })).toBeVisible()
 }
