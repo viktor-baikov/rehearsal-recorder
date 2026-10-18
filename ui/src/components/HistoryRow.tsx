@@ -4,10 +4,14 @@ import { Item } from "@/components/ui/item"
 import { FigureLine, Figures, WholeTip, useCut, type FigurePart } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
 
-/** The row's look. Item and its Button are one element, and where two
- *  classes set the same thing the stylesheet's order decides, not the order
- *  they are written in: so both are given it. */
-const ROW = "h-auto w-full flex-col items-stretch gap-1.5 px-3 py-2.5 text-left whitespace-normal"
+/** The row's look, given to the Button. Item and its Button are one
+ *  element: Item's Slot passes its classes on to the Button, and the
+ *  Button's `cn` merges them after its own defaults and before the classes
+ *  given here. So these win over both: Item's `sm` padding, gap and
+ *  centring, and the Button's. `flex-nowrap` undoes Item's wrapping, which
+ *  a column has no use for. */
+const ROW =
+  "h-auto w-full flex-col flex-nowrap items-stretch gap-1.5 px-3 py-2.5 text-left whitespace-normal"
 /** The chosen row: grey, with no frame (F2, F4). */
 const CHOSEN = "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected"
 
@@ -48,16 +52,15 @@ export function HistoryRow({
 } & { [data: `data-${string}`]: string | number | boolean | undefined }) {
   const [nameRef, cut] = useCut<HTMLSpanElement>()
   const [dropped, setDropped] = useState(false)
-  const look = cn(ROW, current && CHOSEN, className)
   return (
     <WholeTip cut={cut} text={name} figures={dropped ? <FigureLine parts={figures} /> : null}>
-      <Item asChild size="sm" className={cn("flex-nowrap", look)}>
+      <Item asChild size="sm">
         <Button
           variant="ghost"
           {...data}
           aria-current={current ? "true" : undefined}
           onClick={onClick}
-          className={look}
+          className={cn(ROW, current && CHOSEN, className)}
         >
           <span className="flex min-w-0 items-baseline gap-2">
             {lead}

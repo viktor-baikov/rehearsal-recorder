@@ -2106,6 +2106,27 @@ test.describe("Last time and long names on the shared pieces", () => {
     await expect(list.locator("[aria-current='true']")).toContainText("First rehearsal")
   })
 
+  test("an Earlier row is drawn as it is written: 8 px at its sides, its parts on one baseline", async ({
+    page,
+  }) => {
+    // The row is an Item and its Button in one element. Item's Slot passes
+    // its classes on to the Button, whose merge puts them after its own
+    // defaults: so the row draws what Item is given, not the Button's 16 px
+    // sides and centring.
+    await openApp(page)
+    const row = page
+      .getByRole("complementary", { name: "Last time" })
+      .getByRole("region", { name: "Earlier" })
+      .locator("[data-earlier]")
+      .first()
+    expect(await style(row, "padding-left", "padding-right", "align-items", "column-gap")).toEqual({
+      "padding-left": "8px",
+      "padding-right": "8px",
+      "align-items": "baseline",
+      "column-gap": "12px",
+    })
+  })
+
   test("the Last time heading has no capitals", async ({ page }) => {
     await openApp(page)
     const past = page.getByRole("complementary", { name: "Last time" })
