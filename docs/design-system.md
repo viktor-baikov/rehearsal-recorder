@@ -632,13 +632,14 @@ as the `cn` import.
   figure holds the room of "-100.0", the widest it can read. On Review the
   cloud line holds its room from the start, before the setting has
   answered, and the header is as tall with the song's columns as without
-  them: it changes only with the title's lines. In Drafts the `air` header
-  (`Shell`) is as tall as the 36 px work button, so the button arriving in
-  it moves nothing, and a take being recovered shows its progress in the
-  place of its line, both 16 px, so the row keeps its height. The footer's
-  word and the rows' Recover stay as they were when a button was pressed
-  until the run ends. A footer button's error is an error notice (C4), so it
-  moves nothing. These are the model; the rest as each screen is redone.
+  them: it changes only with the title's lines. Every redone screen's
+  header (`Shell`'s `air`) is as tall as the 36 px work button, so the
+  button arriving in it moves nothing. In Drafts a take being recovered
+  shows its progress in the place of its line, both 16 px, so the row keeps
+  its height, and the footer's word and the rows' Recover stay as they were
+  when a button was pressed until the run ends. A footer button's error is
+  an error notice (C4), so it moves nothing. These are the model; the rest
+  as each screen is redone.
 - **B5. Loading.** Under 1 s nothing shows, so a quick answer does not
   flash; from 1 s a spinner takes the place of what is loading; past 10 s it
   says what it is doing. `PlayButton` already waits its second
@@ -686,7 +687,7 @@ as the `cn` import.
   dropping first and the count last. A take's row in Drafts has the
   rehearsal's name on up to two lines, then cut, whole in the tip and a Tab
   stop while it is cut (`Whole reach`); a name that fits on two lines is
-  whole and no stop.
+  whole and is not a stop.
 - **B7. Empty states.** An empty list that only says it is empty leaves the
   person to guess what to do next. So an empty list says, in its own place,
   what will appear there and how it gets there: an empty set under Next take
