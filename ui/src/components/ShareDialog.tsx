@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { CloudOff, CloudUpload, FolderOpen, Layers, Music4 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -205,6 +205,11 @@ function ShareOption({
 }) {
   // The icon stays for the first second of a copy (B5).
   const slow = useAfter(busy, SPINNER_AFTER_MS)
+  // The button is named by its title alone. "Already there" and the hint are
+  // what a screen reader says after the name, in that order.
+  const id = useId()
+  const thereId = `${id}-there`
+  const hintId = `${id}-hint`
   return (
     <Item
       asChild
@@ -218,6 +223,7 @@ function ShareOption({
         onClick={onClick}
         disabled={disabled}
         aria-label={title}
+        aria-describedby={done ? `${thereId} ${hintId}` : hintId}
         className="h-auto w-full justify-start text-left whitespace-normal"
       >
         <span className="mt-0.5 shrink-0 text-muted-foreground [&>svg]:size-4">
@@ -226,9 +232,15 @@ function ShareOption({
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2 text-sm font-semibold">
             {title}
-            {done && <span className="text-xs font-normal text-signal">already there</span>}
+            {done && (
+              <span id={thereId} className="text-xs font-normal text-signal">
+                already there
+              </span>
+            )}
           </span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">{hint}</span>
+          <span id={hintId} className="mt-0.5 block text-xs text-muted-foreground">
+            {hint}
+          </span>
         </span>
       </Button>
     </Item>

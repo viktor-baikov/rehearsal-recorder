@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { labelCounts, labelOf, useLabels } from "@/lib/labels"
 import { isFalseStart } from "@/lib/evening"
+import { TAKE_FILLS } from "@/lib/takeScale"
 import { rise, scrollBehavior } from "@/lib/motion"
 import { TakeTitle } from "@/components/TakeTitle"
 import { SongName } from "@/components/SongName"
@@ -278,22 +279,15 @@ function NamePills({
 }
 
 /**
- * What a bar is filled with, solid in every state: the take's number and
- * name sit on a backing that takes the bar's own fill (`[background:inherit]`),
- * and a see-through fill would show the marks' ticks under it. Under the
- * pointer a bar goes to the accent, in the dark theme too, where Button's ghost
- * hover is half strength.
- *   at rest        the muted fill
- *   starred        the card's, with the signal tint over it as a flat gradient
- *   false start    the card's, with its dashed frame
- *   not on disk    the same
+ * What a bar is filled with, `TAKE_FILLS` and what it does under the pointer:
+ * it goes to the accent, in the dark theme too, where Button's ghost hover is
+ * half strength; a starred bar keeps the card's fill and its tint deepens.
+ * A false start and a take not on disk are both `quiet`.
  */
 const FILLS = {
-  rest: "border-transparent bg-muted hover:bg-accent dark:hover:bg-accent",
-  starred:
-    "border-signal/50 bg-card bg-linear-to-r from-signal/10 to-signal/10 hover:bg-card hover:from-signal/15 hover:to-signal/15 dark:hover:bg-card",
-  quiet:
-    "border-dashed border-muted-foreground/45 bg-card hover:bg-accent dark:hover:bg-accent",
+  rest: `${TAKE_FILLS.rest} hover:bg-accent dark:hover:bg-accent`,
+  starred: `${TAKE_FILLS.starred} hover:bg-card hover:from-signal/15 hover:to-signal/15 dark:hover:bg-card`,
+  quiet: `${TAKE_FILLS.quiet} hover:bg-accent dark:hover:bg-accent`,
 } as const
 
 /**

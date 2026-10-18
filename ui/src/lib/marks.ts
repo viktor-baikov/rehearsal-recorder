@@ -1,5 +1,5 @@
 import type { Label, MarkHit, MarksGrouping } from "@/lib/api"
-import { formatClock, formatDate, formatDayIn, rehearsalsLabel } from "@/lib/format"
+import { formatClock, formatDate, formatDayIn, marksLabel, rehearsalsLabel } from "@/lib/format"
 
 // History's Marks view: every mark with a label, from every rehearsal
 // (docs/superpowers/specs/2026-10-04-marks-across-the-library-design.md).
@@ -17,8 +17,6 @@ export function playFrom(at: number): number {
 export function markKey(m: MarkHit): string {
   return `${m.folder}#${m.take_number}@${m.at}`
 }
-
-export const marksLabel = (n: number) => (n === 1 ? "1 mark" : `${n} marks`)
 
 /** The marks under one heading: a rehearsal, a song, or, in one list, all. */
 export type MarkGroup = {

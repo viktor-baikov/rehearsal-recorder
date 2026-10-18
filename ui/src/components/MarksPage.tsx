@@ -1,13 +1,12 @@
 import { Loader2, Pause, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Label, MarkHit, MarksGrouping } from "@/lib/api"
-import { formatClock } from "@/lib/format"
+import { formatClock, marksLabel } from "@/lib/format"
 import { labelLook } from "@/lib/labels"
 import {
   groupMarks,
   headLine,
   markKey,
-  marksLabel,
   playFrom,
   rowLine,
   type MarkGroup,

@@ -87,3 +87,35 @@ test("a take is copied to the cloud from its row, and taken back out again", asy
   await expect.poll(() => callCount(page, "unshare_take")).toBe(1)
   await expect(page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" })).toHaveCount(1)
 })
+
+test("a share option is named by its title and described by its hint", async ({ page }) => {
+  const MIX_HINT = "One stereo file with the balance you set here. This is what you send people."
+  const TRACKS_HINT =
+    "Every track as recorded, untouched, and the notes as .mid — for opening in a DAW later."
+  await openApp(page, { before: "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';" })
+  await startRehearsal(page)
+  await recordTake(page, 1)
+  await nameTake(page, "Pałyn")
+  await page.getByRole("button", { name: /Save take/ }).click()
+  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
+
+  // The name is the title alone; the hint is what a screen reader says after it.
+  const mix = page.getByRole("button", { name: "The mix", exact: true })
+  await expect(mix).toHaveAccessibleName("The mix")
+  await expect(mix).toHaveAccessibleDescription(MIX_HINT)
+  await expect(page.getByRole("button", { name: "The original tracks", exact: true })).toHaveAccessibleDescription(
+    TRACKS_HINT
+  )
+
+  // Once the mix is there, the description says so before the hint.
+  await mix.click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await page.getByRole("button", { name: "Cloud copies of Pałyn 1" }).click()
+  await expect(mix).toHaveAccessibleName("The mix")
+  await expect(mix).toHaveAccessibleDescription(`already there ${MIX_HINT}`)
+  await expect(page.getByRole("button", { name: "The original tracks", exact: true })).toHaveAccessibleDescription(
+    TRACKS_HINT
+  )
+})
