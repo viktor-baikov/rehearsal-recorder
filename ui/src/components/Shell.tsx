@@ -48,7 +48,7 @@ export function Shell({
    *  (components/TakeSummary). */
   facts?: ReactNode
   /** The facts have all given way to the title just now, so they show
-   *  nothing, and the line after them goes too. */
+   *  nothing, and the line after them is unseen too. */
   factsGone?: boolean
   footer?: ReactNode
   /** A panel right of the scrollable middle, from the header down to the
@@ -145,7 +145,14 @@ export function Shell({
             )}
           </div>
           {facts}
-          {facts && !factsGone && <span aria-hidden className="ml-2 h-8 w-px shrink-0 bg-border" />}
+          {/* Unseen rather than gone with the facts: its room stays, or the
+              facts would get it back, fit again and loop. */}
+          {facts && (
+            <span
+              aria-hidden
+              className={cn("ml-2 h-8 w-px shrink-0 bg-border", factsGone && "invisible")}
+            />
+          )}
           <ActivityButton />
           {playback && <ListeningVolume />}
           {headerAction}

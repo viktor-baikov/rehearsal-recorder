@@ -63,12 +63,19 @@ const CLOUD =
 const LONG =
   "Last song of the night that we wrote in the van on the way back from the festival, with a new bridge at the end"
 
-/** How many 1 px lines stand in the header's row: the one between the
- *  columns and the buttons, while the columns show. */
+/** How many 1 px lines show in the header's row: the one between the
+ *  columns and the buttons, while the columns show. It keeps its room when
+ *  they go, unseen. */
 const rules = (page: Page) =>
   page
     .locator("header")
-    .evaluate((h) => [...h.children].filter((el) => el.getBoundingClientRect().width === 1).length)
+    .evaluate(
+      (h) =>
+        [...h.children].filter(
+          (el) =>
+            el.getBoundingClientRect().width === 1 && getComputedStyle(el).visibility !== "hidden"
+        ).length
+    )
 
 /** The stress take's song, take 33 being its second. */
 const KALYCHANKA =
@@ -138,6 +145,32 @@ test("a second take shows columns for the takes tonight, said in words", async (
   await settled(page)
   await figures(page).getByRole("img").hover()
   await expect(page.getByRole("tooltip")).toHaveText(said)
+})
+
+test("a window narrowed and widened across where the columns give way settles each time", async ({
+  page,
+}) => {
+  await openApp(page, { before: TONIGHT })
+  await startRehearsal(page, 4)
+  await recordTake(page, 4)
+  await expect(columns(page)).toHaveCount(3)
+  // Somewhere between these widths three columns stop fitting beside
+  // "Viasna 3", whatever the font. Each width gets two frames to settle; an
+  // error in the page fails the test.
+  const widths = Array.from({ length: 45 }, (_, i) => 520 - i * 5)
+  const frames = () =>
+    page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+    )
+  for (const width of [...widths, ...[...widths].reverse()]) {
+    await page.setViewportSize({ width, height: 680 })
+    await frames()
+  }
+  await expect(columns(page)).toHaveCount(3)
+  expect(await rules(page)).toBe(1)
+  await page.setViewportSize({ width: 300, height: 680 })
+  await expect(figures(page)).toHaveAttribute("data-columns-gone")
+  expect(await rules(page)).toBe(0)
 })
 
 test("thirty takes tonight show the last ten as columns and the title stays whole", async ({
