@@ -1,4 +1,16 @@
-import { callCount, calls, expect, openApp, openHistory, setFake, test } from "./app.ts"
+import {
+  callCount,
+  calls,
+  colour,
+  expect,
+  openApp,
+  openHistory,
+  scaled,
+  setFake,
+  settled,
+  style,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // History's Marks view, against the fake's library with more marks in it:
@@ -31,6 +43,36 @@ const QUIET_TAKE_1_GONE = `
       : await media(tracks, ...rest);
     window.__MEDIA_ANSWERS__ += 1;
     return answer;
+  };
+`
+
+/** Went wrong's marks made 221, in 39 rehearsals a week apart, newest
+ *  first, as the inventory's stress overlay had them: the stress band's long
+ *  rehearsal and song names, a long comment, takes of every length, and one
+ *  rehearsal not on disk. */
+const MANY_MARKS = `
+  const api = window.pywebview.api; const list = api.list_marks;
+  const songs = ['Kalychanka (slow version for the wedding, with the long intro the bride asked for)',
+                 'Zorka', 'Pałyn', null];
+  const notes = ['the second verse drags, count it in faster next time', 'came in late', '',
+                 'tempo drops here'];
+  api.list_marks = async (id) => {
+    if (id !== 3) return list(id);
+    const marks = [];
+    for (let r = 0; r < 39; r++) {
+      const day = new Date(Date.UTC(2026, 8, 26 - 7 * r, 19)).toISOString().slice(0, 19);
+      const rehearsal = r === 0
+        ? 'Tuesday jam at the old brewery, with the horn section and the choir from upstairs'
+        : 'Rehearsal ' + (39 - r);
+      for (let i = 0; i < (r < 26 ? 6 : 5); i++) {
+        const song = songs[(r + i) % 4];
+        const length = 20 + ((r * 37 + i * 61) % 400);
+        marks.push({folder: '/rec/many' + r, rehearsal, created_at: day, missing: r === 3,
+          take_number: i + 1, name: song ? song + ' ' + (i + 1) : 'Take ' + (i + 1), song,
+          duration_sec: length, at: Math.round((length * (i + 1)) / 7), note: notes[(r + i) % 4]});
+      }
+    }
+    return {ok: true, marks};
   };
 `
 
@@ -131,10 +173,90 @@ test.describe("Marks in History", () => {
     expect(await marksOn(page)).toEqual([VIASNA, DAROHA, GONE])
     const viasna = row(page, VIASNA)
     await expect(viasna.locator("[data-line='comment']")).toHaveText("guitar drifts here")
-    await expect(viasna.locator("[data-line='comment']")).toHaveAttribute("title", "guitar drifts here")
+    await expect(viasna.locator("[data-line='comment']")).not.toHaveAttribute("title")
     await expect(viasna.locator("[data-line='take']")).toHaveText("Viasna 1 · 0:40")
-    await expect(viasna.getByRole("button", { name: "Viasna", exact: true })).toBeVisible()
+    await expect(viasna.getByRole("button", { name: "Open the song Viasna", exact: true })).toBeVisible()
     await expect(viasna).toContainText("4:10")
+  })
+
+  test("the marks are one group, a part per rehearsal split by lines, titles without capitals", async ({
+    page,
+  }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    await chooseLabel(page, 3, "Went wrong")
+    await settled(page)
+    const marks = pane(page, "Went wrong")
+    // The pane head: the label's dot, its name at 20 px and the line under it
+    // at 14. Nothing in it to press: a label is renamed in Settings.
+    const head = marks.locator("[data-pane-head]")
+    expect(await style(head.locator("h2"), "font-size")).toEqual({ "font-size": "20px" })
+    expect(
+      await style(head.getByText("3 marks in 3 rehearsals · last 10 Sep", { exact: true }), "font-size")
+    ).toEqual({ "font-size": "14px" })
+    expect((await head.locator("[data-slot='label-dot']").boundingBox())!.width).toBeCloseTo(14, 0)
+    await expect(head.getByRole("button")).toHaveCount(0)
+
+    // One group on the card's fill, with its 12 px corners and no frame,
+    // 32 px under the head.
+    const group = marks.locator("[data-marks-group]")
+    await expect(group).toHaveCount(1)
+    expect(await style(group, "background-color", "border-top-left-radius", "border-top-width")).toEqual({
+      "background-color": await colour(page, "--card"),
+      "border-top-left-radius": "12px",
+      "border-top-width": "0px",
+    })
+    const top = (await head.boundingBox())!
+    const all = (await group.boundingBox())!
+    expect(all.y - (top.y + top.height)).toBeCloseTo(32, 0)
+
+    // Its head row, then a part per rehearsal, each under a 1 px line across
+    // the whole group: 16 px above and below a part, 24 at its sides and
+    // under the last.
+    expect(
+      await group.evaluate((g) =>
+        [...g.children].map((c) =>
+          c.hasAttribute("data-marks-head") ? "head" : c.hasAttribute("data-marks-part") ? "part" : c.tagName
+        )
+      )
+    ).toEqual(["head", "part", "part", "part"])
+    const parts = group.locator("[data-marks-part]")
+    for (const [i, part] of (await parts.all()).entries()) {
+      expect(
+        await style(part, "padding-top", "padding-right", "padding-bottom", "padding-left", "border-top-width")
+      ).toEqual({
+        "padding-top": "16px",
+        "padding-right": "24px",
+        "padding-bottom": i === 2 ? "24px" : "16px",
+        "padding-left": "24px",
+        "border-top-width": "1px",
+      })
+      expect((await part.boundingBox())!.width).toBeCloseTo(all.width, 0)
+    }
+
+    // A part's title reads as it is written, 14 px at 600, its count at 400
+    // in grey; the rehearsal in it opens that rehearsal.
+    const title = parts.first().locator("h3[data-group-title]")
+    await expect(title).toHaveText("Tuesday jam · Thu 10 Sep · 1 mark")
+    expect(await style(title, "font-size", "font-weight", "text-transform", "letter-spacing")).toEqual({
+      "font-size": "14px",
+      "font-weight": "600",
+      "text-transform": "none",
+      "letter-spacing": "normal",
+    })
+    const opens = title.getByRole("button", { name: "Open the rehearsal Tuesday jam · Thu 10 Sep", exact: true })
+    expect(await style(opens, "font-size", "font-weight", "text-transform")).toEqual({
+      "font-size": "14px",
+      "font-weight": "600",
+      "text-transform": "none",
+    })
+    expect(await style(title.getByText("· 1 mark", { exact: true }), "font-weight", "color")).toEqual({
+      "font-weight": "400",
+      color: (await style(head.locator("p"), "color")).color,
+    })
+
+    // No native tooltips: a cut name has the shared tip.
+    await expect(marks.locator("[title]")).toHaveCount(0)
   })
 
   test("by song and one list, and the choice is kept", async ({ page }) => {
@@ -142,10 +264,10 @@ test.describe("Marks in History", () => {
     await openMarks(page)
     await chooseLabel(page, 3, "Went wrong")
     const marks = pane(page, "Went wrong")
-    const grouping = marks.getByRole("group", { name: "Group marks" })
-    await expect(grouping.getByRole("button", { name: "By rehearsal" })).toHaveAttribute("aria-pressed", "true")
+    const grouping = marks.getByRole("radiogroup", { name: "Group marks" })
+    await expect(grouping.getByRole("radio", { name: "By rehearsal" })).toHaveAttribute("aria-checked", "true")
 
-    await grouping.getByRole("button", { name: "By song" }).click()
+    await grouping.getByRole("radio", { name: "By song" }).click()
     await expect(marks.locator("[data-group-title]")).toHaveText([
       "Viasna · 1 mark",
       "Daroha · 1 mark",
@@ -157,7 +279,7 @@ test.describe("Marks in History", () => {
     await chooseLabel(page, 1, "Note")
     await expect(pane(page, "Note").locator("[data-group-title]")).toHaveText(["Not named · 3 marks"])
 
-    await pane(page, "Note").getByRole("button", { name: "One list" }).click()
+    await pane(page, "Note").getByRole("radio", { name: "One list" }).click()
     await expect(pane(page, "Note").locator("[data-group-title]")).toHaveCount(0)
     await expect(pane(page, "Note").locator("[data-mark]")).toHaveCount(3)
     await expect(row(page, "/rec/quiet#1@120").locator("[data-line='take']")).toHaveText(
@@ -168,8 +290,55 @@ test.describe("Marks in History", () => {
     await page.keyboard.press("Escape")
     await page.getByRole("button", { name: "History", exact: true }).click()
     await expect(
-      page.getByRole("group", { name: "Group marks" }).getByRole("button", { name: "One list" })
-    ).toHaveAttribute("aria-pressed", "true")
+      page.getByRole("radiogroup", { name: "Group marks" }).getByRole("radio", { name: "One list" })
+    ).toHaveAttribute("aria-checked", "true")
+  })
+
+  test("Group by is the shared switch in the group's head, and arrow keys on it leave the list alone", async ({
+    page,
+  }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    await chooseLabel(page, 3, "Went wrong")
+    await settled(page)
+    const marks = pane(page, "Went wrong")
+    const group = marks.locator("[data-marks-group]")
+    const head = group.locator("[data-marks-head]")
+    // History's own switch, after its words at the right of the group's head
+    // row, 24 px in from the group's edges.
+    const grouping = head.getByRole("radiogroup", { name: "Group marks" })
+    await expect(grouping).toHaveAttribute("data-variant", "switch")
+    await expect(grouping.getByRole("radio")).toHaveText(["By rehearsal", "By song", "One list"])
+    await expect(head).toHaveText(/^Group by/)
+    expect(await style(head.getByText("Group by", { exact: true }), "font-size")).toEqual({ "font-size": "12px" })
+    const box = (await group.boundingBox())!
+    const at = (await grouping.boundingBox())!
+    expect(box.x + box.width - (at.x + at.width)).toBeCloseTo(24, 0)
+    expect(at.y - box.y).toBeCloseTo(24, 0)
+
+    const byRehearsal = grouping.getByRole("radio", { name: "By rehearsal" })
+    const bySong = grouping.getByRole("radio", { name: "By song" })
+    await expect(byRehearsal).toHaveAttribute("aria-checked", "true")
+
+    // Along the switch the arrows move the focus and choose nothing.
+    await byRehearsal.focus()
+    await page.keyboard.press("ArrowRight")
+    await expect(bySong).toBeFocused()
+    await expect(bySong).toHaveAttribute("aria-checked", "false")
+    await expect(byRehearsal).toHaveAttribute("aria-checked", "true")
+    await expect(marks.locator("[data-group-title]")).toHaveCount(3)
+
+    // Down and up are the list's: the next label, and back, grouped as
+    // they were.
+    await page.keyboard.press("ArrowDown")
+    await expect(labelItem(page, 4)).toHaveAttribute("aria-current", "true")
+    await page.keyboard.press("ArrowUp")
+    await expect(labelItem(page, 3)).toHaveAttribute("aria-current", "true")
+    await expect(
+      pane(page, "Went wrong").getByRole("radio", { name: "By rehearsal" })
+    ).toHaveAttribute("aria-checked", "true")
+    await expect(pane(page, "Went wrong").locator("[data-group-title]")).toHaveCount(3)
+    expect(await calls(page, "save_marks_grouping")).toEqual([])
   })
 
   test("play starts 5 s before the mark, and again pauses", async ({ page }) => {
@@ -178,7 +347,7 @@ test.describe("Marks in History", () => {
     await chooseLabel(page, 3, "Went wrong")
     const viasna = row(page, VIASNA)
     await viasna.getByRole("button", { name: "Play Viasna 1 from 0:35" }).click()
-    await expect(viasna.getByRole("button", { name: "Pause Viasna 1" })).toBeVisible()
+    await expect(viasna.getByRole("button", { name: "Pause Viasna 1 from 0:35" })).toBeVisible()
     expect(((await calls(page, "player_open")).at(-1)!.args[0] as { file: string }[])[0].file).toBe(
       "/rec/old/v1.wav"
     )
@@ -187,7 +356,7 @@ test.describe("Marks in History", () => {
     // It plays here, in the list: no player opens.
     await expect(page.getByRole("group", { name: "Take timeline" })).toHaveCount(0)
 
-    await viasna.getByRole("button", { name: "Pause Viasna 1" }).click()
+    await viasna.getByRole("button", { name: "Pause Viasna 1 from 0:35" }).click()
     await expect(viasna.getByRole("button", { name: "Play Viasna 1 from 0:35" })).toBeVisible()
     expect((await calls(page, "player_toggle")).length).toBeGreaterThan(0)
   })
@@ -198,13 +367,13 @@ test.describe("Marks in History", () => {
     const first = row(page, "/rec/quiet#1@120")
     const second = row(page, "/rec/quiet#1@200")
     await first.getByRole("button", { name: "Play Take 1 from 1:55" }).click()
-    await expect(first.getByRole("button", { name: "Pause Take 1" })).toBeVisible()
+    await expect(first.getByRole("button", { name: "Pause Take 1 from 1:55" })).toBeVisible()
     await expect.poll(() => lastSeek(page)).toBe(115)
     const opened = (await calls(page, "player_open")).length
 
     await second.getByRole("button", { name: "Play Take 1 from 3:15" }).click()
     await expect.poll(() => lastSeek(page)).toBe(195)
-    await expect(second.getByRole("button", { name: "Pause Take 1" })).toBeVisible()
+    await expect(second.getByRole("button", { name: "Pause Take 1 from 3:15" })).toBeVisible()
     await expect(first.getByRole("button", { name: "Play Take 1 from 1:55" })).toBeVisible()
     expect((await calls(page, "player_open")).length).toBe(opened)
   })
@@ -223,19 +392,58 @@ test.describe("Marks in History", () => {
         .poll(() => page.evaluate(() => (window as unknown as { __MEDIA_ANSWERS__: number }).__MEDIA_ANSWERS__))
         .toBe(1)
       await expect(first.locator(".animate-spin")).toHaveCount(0)
-      await expect(first.getByRole("button", { name: "Play Take 1 from 1:55" })).toBeVisible()
+      await expect(first.getByRole("button", { name: "Could not load Take 1 from 1:55. Try again" })).toBeVisible()
       expect(await callCount(page, "player_open")).toBe(0)
 
       // The files are back: the mark's play opens the take again, and it
       // plays from 5 s before that mark.
       await setFake(page, "__FILES_BACK__", true)
       const mark = row(page, again)
-      await mark.getByRole("button", { name: `Play Take 1 from ${from}` }).click()
-      await expect(mark.getByRole("button", { name: "Pause Take 1" })).toBeVisible()
+      await mark.locator("[data-look]").click()
+      await expect(mark.getByRole("button", { name: `Pause Take 1 from ${from}` })).toBeVisible()
       await expect.poll(() => lastSeek(page)).toBe(at)
       expect(await callCount(page, "player_open")).toBe(1)
     })
   }
+
+  test("a mark's play button says when its take cannot be loaded", async ({ page }) => {
+    await openApp(page, { before: MORE, after: QUIET_TAKE_1_GONE })
+    await openMarks(page)
+    const play = row(page, "/rec/quiet#1@120").locator("[data-look]")
+    await expect(play).toHaveAttribute("data-look", "idle")
+    await expect(play).toHaveAccessibleName("Play Take 1 from 1:55")
+    await play.click()
+    await expect(play).toHaveAttribute("data-look", "failed")
+    await expect(play).toHaveAccessibleName("Could not load Take 1 from 1:55. Try again")
+    await expect(play).toBeEnabled()
+    await expect(play).not.toHaveAttribute("title")
+    // Only the mark pressed says so: the other on the same take is as it was.
+    await expect(row(page, "/rec/quiet#1@200").locator("[data-look]")).toHaveAttribute("data-look", "idle")
+  })
+
+  test("Tab reaches a row's comment, and Enter opens the take at the mark", async ({ page }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    await chooseLabel(page, 3, "Went wrong")
+    // The row is the shared one, and not a button: in it, the comment, the
+    // shared ghost button, is the way to the take.
+    const viasna = row(page, VIASNA)
+    await expect(viasna).toHaveAttribute("data-slot", "item")
+    const comment = viasna.locator("[data-line='comment']")
+    await expect(comment).toHaveRole("button")
+    await expect(comment).toHaveAttribute("data-variant", "ghost")
+    expect(await style(comment, "font-size", "font-weight")).toEqual({ "font-size": "14px", "font-weight": "400" })
+
+    await viasna.locator("[data-look]").focus()
+    await page.keyboard.press("Tab")
+    await expect(comment).toBeFocused()
+    // With the shared focus ring.
+    expect((await style(comment, "box-shadow"))["box-shadow"]).not.toBe("none")
+    await page.keyboard.press("Enter")
+    await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
+    await expect.poll(() => lastSeek(page)).toBe(40)
+  })
 
   test("a click opens the take at the mark, and Escape comes back scrolled where it was", async ({
     page,
@@ -270,10 +478,10 @@ test.describe("Marks in History", () => {
 
     await page.keyboard.press("Escape")
     const daroha = row(page, DAROHA)
-    await expect(daroha.getByRole("button", { name: "Pause Daroha 2" })).toBeVisible()
+    await expect(daroha.getByRole("button", { name: "Pause Daroha 2 from 0:25" })).toBeVisible()
     await expect(page.getByRole("button", { name: /^Pause / })).toHaveCount(1)
     const opened = (await calls(page, "player_open")).length
-    await daroha.getByRole("button", { name: "Pause Daroha 2" }).click()
+    await daroha.getByRole("button", { name: "Pause Daroha 2 from 0:25" }).click()
     await expect(daroha.getByRole("button", { name: "Play Daroha 2 from 0:25" })).toBeVisible()
     expect((await calls(page, "player_open")).length).toBe(opened)
   })
@@ -286,13 +494,13 @@ test.describe("Marks in History", () => {
     const first = row(page, "/rec/quiet#1@120")
     const second = row(page, "/rec/quiet#1@200")
     await first.getByRole("button", { name: "Play Take 1 from 1:55" }).click()
-    await expect(first.getByRole("button", { name: "Pause Take 1" })).toBeVisible()
+    await expect(first.getByRole("button", { name: "Pause Take 1 from 1:55" })).toBeVisible()
 
     await second.locator("[data-line='comment']").click()
     await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
     await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
     await page.keyboard.press("Escape")
-    await expect(second.getByRole("button", { name: "Pause Take 1" })).toBeVisible()
+    await expect(second.getByRole("button", { name: "Pause Take 1 from 3:15" })).toBeVisible()
     await expect(first.getByRole("button", { name: "Play Take 1 from 1:55" })).toBeVisible()
   })
 
@@ -335,7 +543,7 @@ test.describe("Marks in History", () => {
     const keep = pane(page, "Keep this")
     await expect(keep).toContainText("Marks given the label Keep this in the player gather here")
     await expect(keep.locator("[data-mark]")).toHaveCount(0)
-    await expect(keep.getByRole("button", { name: "By song" })).toBeDisabled()
+    await expect(keep.getByRole("radio", { name: "By song" })).toBeDisabled()
     await expect(labelItem(page, 2)).toHaveAttribute("data-empty", "true")
     await expect(labelItem(page, 2)).toHaveAttribute("aria-current", "true")
   })
@@ -410,8 +618,13 @@ test.describe("Marks in History", () => {
     await chooseLabel(page, 3, "Went wrong")
     const gone = row(page, GONE)
     await expect(gone).toHaveAttribute("data-missing", "true")
-    await expect(gone).toContainText("not on disk")
-    await expect(gone.getByRole("button", { name: /^Play Pałyn 8/ })).toBeDisabled()
+    // Said in red, as everywhere a folder is gone, and its take's bar is the
+    // dashed one.
+    const said = gone.getByText("Not found on disk", { exact: true })
+    await expect(said).toBeVisible()
+    expect((await style(said, "color")).color).toBe(await colour(page, "--destructive"))
+    expect((await style(gone.locator("[data-take-bar]"), "border-top-style"))["border-top-style"]).toBe("dashed")
+    await expect(gone.getByRole("button", { name: "Pałyn 8 from 0:55 is not on disk" })).toBeDisabled()
     const reads = (await calls(page, "get_rehearsal")).length
     await gone.locator("[data-line='comment']").click()
     await expect(page.getByRole("group", { name: "Take timeline" })).toHaveCount(0)
@@ -422,7 +635,9 @@ test.describe("Marks in History", () => {
     await openApp(page, { before: MORE })
     await openMarks(page)
     await chooseLabel(page, 3, "Went wrong")
-    await pane(page, "Went wrong").getByRole("button", { name: "First rehearsal · Tue 25 Aug" }).click()
+    await pane(page, "Went wrong")
+      .getByRole("button", { name: "Open the rehearsal First rehearsal · Tue 25 Aug", exact: true })
+      .click()
     const rehearsals = page.getByRole("navigation", { name: "Rehearsals" })
     await expect(rehearsals).toBeVisible()
     await expect(rehearsals.locator("[data-rehearsal='/rec/older']")).toHaveAttribute("aria-current", "true")
@@ -430,7 +645,7 @@ test.describe("Marks in History", () => {
     // Back on Marks, the label chosen is still chosen.
     await page.getByRole("radio", { name: "Marks", exact: true }).click()
     await expect(labelItem(page, 3)).toHaveAttribute("aria-current", "true")
-    await row(page, VIASNA).getByRole("button", { name: "Viasna", exact: true }).click()
+    await row(page, VIASNA).getByRole("button", { name: "Open the song Viasna", exact: true }).click()
     await expect(page.getByRole("navigation", { name: "Songs" })).toBeVisible()
     await expect(page.locator("[data-song-head]").getByRole("heading", { name: "Viasna" })).toBeVisible()
   })
@@ -481,7 +696,7 @@ test.describe("Marks in History", () => {
     const marks = pane(page, "Do again")
     await expect(marks.getByText("No marks yet")).toBeVisible()
     for (const name of ["By rehearsal", "By song", "One list"])
-      await expect(marks.getByRole("button", { name })).toBeDisabled()
+      await expect(marks.getByRole("radio", { name })).toBeDisabled()
     await expect(
       marks.getByText("Marks given the label Do again in the player gather here, from every rehearsal.")
     ).toBeVisible()
@@ -502,7 +717,7 @@ test.describe("Marks in History", () => {
     const marks = pane(page, long)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     expect(await marks.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
-    const grouping = (await marks.getByRole("group", { name: "Group marks" }).boundingBox())!
+    const grouping = (await marks.getByRole("radiogroup", { name: "Group marks" }).boundingBox())!
     const box = (await marks.boundingBox())!
     expect(grouping.x + grouping.width).toBeLessThanOrEqual(box.x + box.width)
     // In the list a row's name takes two lines at most, then is cut at the
@@ -528,5 +743,86 @@ test.describe("Marks in History", () => {
     const list = page.getByRole("navigation", { name: "Labels" })
     expect(await list.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  })
+
+  test("221 marks at 960 px and 150 % are one group and scroll nothing sideways", async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openApp(page, { before: `${MORE} ${scaled(1.5)}`, after: MANY_MARKS })
+    await openMarks(page)
+    await chooseLabel(page, 3, "Went wrong")
+    const marks = pane(page, "Went wrong")
+    await expect(marks.locator("[data-mark]")).toHaveCount(221)
+    await settled(page)
+    const group = marks.locator("[data-marks-group]")
+
+    /** What is wider than its room: the page, the pane, the group's head
+     *  row, a part's title or a row; or anything that reaches past the
+     *  group's edge. */
+    const wider = () =>
+      group.evaluate((g) => {
+        const out: string[] = []
+        if (document.documentElement.scrollWidth > window.innerWidth) out.push("page")
+        const pane = g.closest("section")!
+        if (pane.scrollWidth > pane.clientWidth) out.push("pane")
+        for (const el of g.querySelectorAll("[data-marks-head], [data-group-title], [data-mark]"))
+          if (el.scrollWidth > el.clientWidth) out.push(el.getAttribute("data-mark") ?? el.tagName)
+        const { left, right } = g.getBoundingClientRect()
+        for (const el of g.querySelectorAll("*")) {
+          const box = el.getBoundingClientRect()
+          if (box.left < left - 0.5 || box.right > right + 0.5) out.push(`${el.tagName} past the group`)
+        }
+        return [...new Set(out)]
+      })
+
+    // By rehearsal: one group, a part for each of the 39 rehearsals.
+    await expect(group).toHaveCount(1)
+    await expect(group.locator("[data-marks-part]")).toHaveCount(39)
+    await expect(group.locator("[data-group-title]")).toHaveCount(39)
+    expect(await wider()).toEqual([])
+    // Group by, its words on one line, stays inside the group's 24 px.
+    const box = (await group.boundingBox())!
+    const at = (await group.getByRole("radiogroup", { name: "Group marks" }).boundingBox())!
+    const words = group.locator("[data-marks-head]").getByText("Group by", { exact: true })
+    const said = (await words.boundingBox())!
+    expect(Math.min(at.x, said.x) - box.x).toBeGreaterThanOrEqual(24 * 1.5 - 0.5)
+    expect(box.x + box.width - (at.x + at.width)).toBeCloseTo(24 * 1.5, 0)
+    expect(said.height).toBeCloseTo(parseFloat((await style(words, "line-height"))["line-height"]), 0)
+    // Where the rows are narrow, the bars go under the take's line, so a
+    // comment keeps 10rem at least.
+    const room = await group
+      .locator("[data-line='comment']")
+      .evaluateAll((els) => Math.min(...els.map((e) => e.getBoundingClientRect().width)))
+    expect(room).toBeGreaterThanOrEqual(10 * 16 * 1.5)
+    // The takes are drawn to one scale in rem: the longest 7.5rem, none
+    // under 6 px.
+    const bars = await group
+      .locator("[data-take-bar]")
+      .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width))
+    expect(Math.max(...bars)).toBeCloseTo(7.5 * 16 * 1.5, 0)
+    expect(Math.min(...bars)).toBeGreaterThanOrEqual(6)
+
+    // A comment cut at the end of its room is whole in its tip, which the
+    // keys reach too.
+    const long = "the second verse drags, count it in faster next time"
+    const first = group.locator("[data-mark]").filter({ hasText: long }).first()
+    const comment = first.locator("[data-line='comment']")
+    await expect(comment.locator("[data-cut]")).toHaveCount(1)
+    await first.locator("[data-look]").focus()
+    await page.keyboard.press("Tab")
+    await expect(comment).toBeFocused()
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
+
+    // By song: a part for each song and Not named; one list: one part with
+    // no title. Still one group, and nothing wider than its room.
+    await group.getByRole("radio", { name: "By song" }).click()
+    await expect(group.locator("[data-marks-part]")).toHaveCount(4)
+    await expect(group.locator("[data-mark]")).toHaveCount(221)
+    expect(await wider()).toEqual([])
+    await group.getByRole("radio", { name: "One list" }).click()
+    await expect(group.locator("[data-marks-part]")).toHaveCount(1)
+    await expect(group.locator("[data-group-title]")).toHaveCount(0)
+    await expect(group.locator("[data-mark]")).toHaveCount(221)
+    await expect(marks.locator("[data-marks-group]")).toHaveCount(1)
+    expect(await wider()).toEqual([])
   })
 })
