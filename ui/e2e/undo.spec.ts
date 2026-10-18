@@ -878,7 +878,7 @@ const OLD_PALYN = "window.__OLD_NAMES__ = [['Palyn', 'Pałyn']];"
 /** A song's page: Songs on the switch above History's list, then the song. */
 async function openSong(page: Page, title: string) {
   await openHistory(page)
-  await page.getByRole("group", { name: "History view" }).getByText("Songs", { exact: true }).click()
+  await page.getByRole("radiogroup", { name: "History view" }).getByRole("radio", { name: "Songs" }).click()
   await page.getByRole("navigation", { name: "Songs" }).locator(`[data-song='${title}']`).click()
   await expect(
     page.locator("[data-song-head]").getByRole("heading", { name: title, exact: true })
