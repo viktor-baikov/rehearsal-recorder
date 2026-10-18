@@ -11,6 +11,7 @@ import {
   nameTake,
   notices,
   openApp,
+  openBandApp,
   recordTake,
   scaled,
   setFake,
@@ -19,6 +20,7 @@ import {
   style,
   test,
   themed,
+  tipLines,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -763,6 +765,179 @@ test.describe("Under the hood", () => {
   }
 
   const check = (page: Page) => page.locator("[aria-label='Interface check']")
+  /** The button that starts the check. */
+  const checkButton = (page: Page) => check(page).getByRole("button", { name: "Check the interface" })
+  /** Where the check's button is in its group, wherever the tab has scrolled. */
+  const placeOf = async (page: Page) => {
+    const button = await box(checkButton(page))
+    const group = await box(page.getByRole("region", { name: "Sound", exact: true }))
+    return { ...button, x: button.x - group.x, y: button.y - group.y }
+  }
+  /** One of the tab's groups, by its name. */
+  const region = (page: Page, name: string) => tabBody(page).getByRole("region", { name, exact: true })
+  /** The tab's groups, in the order they rise in: this copy first, with no heading. */
+  const GROUPS = ["About this copy", "Updates", "Sound", "Files", "System"]
+  const HINTS = [
+    "Whether a newer version is out, and getting it.",
+    "What the app records through, and what it can see on this machine.",
+    "Where the app keeps its own things. The recordings are in Folders.",
+  ]
+
+  /** The lines drawn in the tab that are not a shared piece's own frame: an
+   *  hr, or a box with an edge of its own. */
+  const lines = (page: Page) =>
+    tabBody(page).evaluate((body) =>
+      [...body.querySelectorAll("*")]
+        .filter((e) => {
+          if (e.closest("button, [data-slot=alert], [data-slot=badge]")) return false
+          if (e.tagName === "HR") return true
+          const s = getComputedStyle(e)
+          return ["top", "right", "bottom", "left"].some(
+            (side) =>
+              parseFloat(s.getPropertyValue(`border-${side}-width`)) > 0 &&
+              s.getPropertyValue(`border-${side}-color`) !== "rgba(0, 0, 0, 0)"
+          )
+        })
+        .map((e) => `${e.tagName.toLowerCase()} ${e.className}`)
+    )
+
+  /** All the tab says. */
+  const words = (page: Page) => tabBody(page).evaluate((body) => (body as HTMLElement).innerText)
+
+  for (const theme of ["dark", "light"] as const) {
+    test(`Under the hood is groups on the card's fill: this copy, Updates, Sound, Files and System, in the ${theme} theme`, async ({
+      page,
+    }) => {
+      await underTheHood(page, themed(theme))
+      expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
+        theme === "dark"
+      )
+      const card = await colour(page, "--card")
+      const groups = tabBody(page).locator("[data-settings-group]")
+      await expect(groups).toHaveCount(GROUPS.length)
+      await expect(tabBody(page).getByRole("region")).toHaveCount(GROUPS.length)
+      for (const [i, name] of GROUPS.entries()) {
+        const group = groups.nth(i)
+        await expect(group, name).toHaveAccessibleName(name)
+        // Each rises at its place, after the tab's head.
+        expect(await style(group, "--i"), name).toEqual({ "--i": String(i + 1) })
+        // Set apart by the card's fill alone (F4).
+        const look = await style(group, "background-color", "box-shadow", ...EDGE)
+        expect(look["background-color"], name).toBe(card)
+        expect(look["box-shadow"], name).toBe("none")
+        for (const side of ["top", "right", "bottom", "left"]) {
+          expect(look[`border-${side}-width`], `${name}, ${side}`).toBe("0px")
+        }
+      }
+      // This copy says what it is without a heading; the others are named
+      // by theirs, with the hint under it.
+      await expect(groups.first().getByRole("heading")).toHaveCount(0)
+      await expect(tabBody(page).getByRole("heading")).toHaveText(GROUPS.slice(1))
+      await expect(tabBody(page).locator("h3 + p")).toHaveText(HINTS)
+      // No line splits a group, and none is drawn between them, but the
+      // shared one over the check.
+      expect(await lines(page)).toEqual([])
+      const rule = region(page, "Sound").locator("[data-slot=separator]")
+      await expect(rule).toHaveCount(1)
+      expect((await box(rule)).y).toBeLessThan((await box(check(page))).y)
+
+      // What it says, with no dashes.
+      const files = region(page, "Files")
+      await expect(files.getByText("Every rehearsal and take, with their names and marks")).toHaveCount(1)
+      await expect(files.getByText("Written if the app ever dies. Send it with a bug report")).toHaveCount(1)
+      expect(await words(page)).not.toMatch(DASH)
+      // And where there is nothing to show: no interface chosen, no crash
+      // log yet, and nothing to compress the cloud copies with.
+      await setFake(page, "__NO_DEVICE__", true)
+      await setFake(page, "__NO_CRASH_LOG__", true)
+      await setFake(page, "__NO_ENCODER__", true)
+      await group(page, "Folders").click()
+      await group(page, "Under the hood").click()
+      for (const said of [
+        "Nothing chosen yet: pick an interface in Audio",
+        "Not written yet: the app has had nothing to put in it",
+        "WAV only: compressing needs the soundfile package",
+      ]) {
+        await expect(tabBody(page).getByText(said, { exact: true }), said).toHaveCount(1)
+      }
+      expect(await words(page)).not.toMatch(DASH)
+    })
+  }
+
+  test("the badges and the checkbox are the shared ones: Run from source outline, the audio system in use grey with its tip", async ({
+    page,
+  }) => {
+    await underTheHood(page)
+    const source = region(page, "About this copy").locator("[data-slot=badge]")
+    await expect(source).toHaveText("Run from source")
+    await expect(source).toHaveAttribute("data-variant", "outline")
+    // Each audio system a badge with its devices, the one the interface
+    // records through grey.
+    const badges = page.getByRole("list", { name: "Audio systems" }).locator("[data-slot=badge]")
+    await expect(badges).toHaveText([/^MME\s*6$/, /^ASIO\s*2$/, /^Windows WASAPI\s*4$/])
+    expect(await badges.evaluateAll((all) => all.map((b) => b.getAttribute("data-variant")))).toEqual([
+      "outline",
+      "secondary",
+      "outline",
+    ])
+    const inUse = badges.nth(1)
+    expect(await style(inUse, "background-color")).toEqual({
+      "background-color": await colour(page, "--secondary"),
+    })
+    // It says why in the shared tip, not the system's, and the others say
+    // nothing.
+    await expect(tabBody(page).locator("[title]")).toHaveCount(0)
+    await inUse.hover()
+    await expect(tooltip(page)).toHaveText("The interface records through this one")
+    await away(page)
+    await expect(tooltip(page)).toHaveCount(0)
+    expect(await tipLines(page, badges.first())).toEqual([])
+
+    // The shared box, ticked in the text's colour where the system's was blue.
+    const updates = page.getByRole("checkbox", { name: "Check for new versions" })
+    await expect(updates).toHaveAttribute("data-slot", "checkbox")
+    await expect(updates).toBeChecked()
+    expect(await style(updates, "background-color")).toEqual({
+      "background-color": await colour(page, "--foreground"),
+    })
+  })
+
+  test("while the page is asked for, a spinner after a second, the words after ten", async ({ page }) => {
+    await page.clock.install()
+    await openApp(page)
+    await page.getByRole("button", { name: "Settings" }).click()
+    await expect(page.locator("#input-device")).toBeVisible()
+    // The fake holds its answer, and the page's time stands still from here,
+    // so each second is the one the test counts.
+    await hold(page, "under_the_hood")
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000)
+    await group(page, "Under the hood").click()
+    // Unseen for its first second, so found by its role in the markup.
+    const spinner = tabBody(page).locator("[role='status'][aria-label='Loading']")
+    const asking = tabBody(page).getByText("Asking the machine…", { exact: true })
+    await expect(spinner).toBeAttached()
+    await expect(spinner).toBeHidden()
+    await expect(asking).toHaveCount(0)
+    const head = await box(tabHead(page))
+    await page.clock.runFor(999)
+    await expect(spinner).toBeHidden()
+    await page.clock.runFor(1)
+    await expect(spinner).toBeVisible()
+    await expect(asking).toHaveCount(0)
+    const at = await box(spinner)
+    await page.clock.runFor(9000)
+    await expect(asking).toBeVisible()
+    // The words come beside the spinner, and nothing above them moves.
+    expect(await box(spinner)).toEqual(at)
+    expect(await box(tabHead(page))).toEqual(head)
+
+    await page.clock.resume()
+    await letGo(page, "under_the_hood")
+    await expect(region(page, "About this copy")).toBeVisible()
+    await expect(spinner).toHaveCount(0)
+    await expect(asking).toHaveCount(0)
+    expect(await box(tabHead(page))).toEqual(head)
+  })
 
   test("says which copy this is, what it runs on, and what it records with", async ({ page }) => {
     await underTheHood(page)
@@ -861,31 +1036,98 @@ test.describe("Under the hood", () => {
     expect(box.y - (above.y + above.height)).toBeCloseTo(6, 1)
   })
 
-  test("checks the interface, and says what came of it", async ({ page }) => {
+  test("Check the interface is outline, its result an alert on the group's fill", async ({ page }) => {
     await underTheHood(page)
-    await page.getByRole("button", { name: "Check the interface" }).click()
+    const start = checkButton(page)
+    await expect(start).toHaveAttribute("data-variant", "outline")
+    const at = await placeOf(page)
+    const card = await colour(page, "--card")
+    const edge = await colour(page, "--border")
+    const result = check(page).locator("[data-slot=alert]")
+    /** The result, once in: its title, on the group's fill with the plain
+     *  edge, its icon alone in the colour of what came of it. The button
+     *  that started it has not moved. */
+    const said = async (state: string, title: string, icon: string, tone: string) => {
+      await expect(check(page)).toHaveAttribute("data-state", state)
+      await expect(result, state).toHaveCount(1)
+      await expect(result.locator("[data-slot=alert-title]"), state).toHaveText(title)
+      const look = await style(result, "background-color", ...EDGE)
+      expect(look["background-color"], state).toBe(card)
+      for (const side of ["top", "right", "bottom", "left"]) {
+        expect(look[`border-${side}-color`], `${state}, ${side}`).toBe(edge)
+      }
+      const mark = result.locator("> svg")
+      await expect(mark, state).toHaveCount(1)
+      await expect(mark, state).toHaveClass(new RegExp(`lucide-${icon}`))
+      expect(await style(mark, "color"), state).toEqual({ color: await colour(page, tone) })
+      expect(await placeOf(page), state).toEqual(at)
+    }
+
+    await start.click()
     // While it listens it says so, and it can be stopped.
     await expect(check(page)).toContainText("Listening to X32 USB")
-    await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(1)
-    await expect(check(page)).toContainText("X32 USB works")
-    // With each input it opened, and the ones sound came in on lit.
-    const inputs = check(page).getByRole("list", { name: "Inputs with signal" })
+    await expect(check(page).getByRole("button", { name: "Stop" })).toHaveCount(1)
+    await expect(start).toBeDisabled()
+    expect(await placeOf(page)).toEqual(at)
+    await said("works", "X32 USB works: it opens with these settings and sound arrives", "circle-check", "--signal")
+    // With each input it opened, and the ones sound came in on lit, in
+    // 12 px figures, each saying which it is in the shared tip.
+    const inputs = result.getByRole("list", { name: "Inputs with signal" })
     await expect(inputs.getByRole("listitem")).toHaveCount(6)
     await expect(inputs.locator("[data-signal]")).toHaveCount(3)
+    expect(await style(inputs.getByRole("listitem").first(), "font-size")).toEqual({ "font-size": "12px" })
+    await expect(check(page).locator("[title]")).toHaveCount(0)
+    await inputs.getByRole("listitem").first().hover()
+    await expect(tooltip(page)).toHaveText("Signal on input 1")
+    await away(page)
+    await inputs.getByRole("listitem").nth(2).hover()
+    await expect(tooltip(page)).toHaveText("Input 3 silent")
+    await away(page)
 
     // A card that sends only silence is not called working.
     await setFake(page, "__CHECK_RESULT__", "silent")
-    await page.getByRole("button", { name: "Check again" }).click()
-    await expect(check(page)).toContainText("X32 USB opens and sends, but every input is silent")
-    await expect(check(page)).toHaveAttribute("data-state", "silent")
+    await start.click()
+    await said("silent", "X32 USB opens and sends, but every input is silent", "triangle-alert", "--warn")
 
     // A card that does not work says what is wrong, what to do, and every
-    // way it was tried.
+    // way it was tried, each as what was tried and what came of it.
     await setFake(page, "__CHECK_RESULT__", "no_sound")
-    await page.getByRole("button", { name: "Check again" }).click()
-    await expect(check(page)).toContainText("The card opens, but sends no sound")
-    await expect(check(page)).toContainText("delivers little or nothing")
-    await expect(check(page)).toContainText("The first two channels only")
+    await start.click()
+    await said("failed", "The card opens, but sends no sound", "triangle-alert", "--destructive")
+    await expect(result).toContainText("delivers little or nothing")
+    await expect(result.getByRole("listitem")).toHaveText([
+      "The settings in force: opens, but sent 1,024 of ~48,000 frames",
+      "The first two channels only: opens, but sent 1,024 of ~48,000 frames",
+    ])
+    expect(await region(page, "Sound").evaluate((e) => (e as HTMLElement).innerText)).not.toMatch(DASH)
+  })
+
+  test("a check that cannot start says so in a notice", async ({ page }) => {
+    await underTheHood(page)
+    const start = checkButton(page)
+    const at = await placeOf(page)
+    // Python will not start it: a take is recording.
+    await page.evaluate(() => {
+      const w = window as unknown as { pywebview: { api: Record<string, unknown> }; __START__: unknown }
+      w.__START__ = w.pywebview.api.start_interface_check
+      w.pywebview.api.start_interface_check = async () => ({ ok: false, error: "Stop the take first" })
+    })
+    await start.click()
+    const said = notices(page, "error").filter({ hasText: "Stop the take first" })
+    await expect(said).toHaveCount(1)
+    // Nothing is said on the page, and nothing on it moves.
+    await expect(tabBody(page).getByText("Stop the take first")).toHaveCount(0)
+    await expect(check(page)).toHaveAttribute("data-state", "idle")
+    expect(await placeOf(page)).toEqual(at)
+
+    // A check that starts puts the notice away.
+    await page.evaluate(() => {
+      const w = window as unknown as { pywebview: { api: Record<string, unknown> }; __START__: unknown }
+      w.pywebview.api.start_interface_check = w.__START__
+    })
+    await start.click()
+    await expect(check(page)).toContainText("Listening to X32 USB")
+    await expect(said).toHaveCount(0)
   })
 
   test("stops a check that is taking long, and says it was stopped", async ({ page }) => {
@@ -895,6 +1137,68 @@ test.describe("Under the hood", () => {
     await page.getByRole("button", { name: "Stop", exact: true }).click()
     await expect(check(page)).toContainText("Stopped")
     expect(await callCount(page, "stop_interface_check")).toBe(1)
+  })
+
+  /** How many lines `text`, inside `el`, is set on. */
+  const linesOf = (el: Locator, text: string) =>
+    el.evaluate((root, wanted) => {
+      const nodes: Text[] = []
+      const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) nodes.push(n as Text)
+      const all = nodes.map((n) => n.data).join("")
+      const from = all.indexOf(wanted)
+      if (from < 0) return 0
+      // The text node and the offset in it of a place in `all`.
+      const place = (i: number): [Text, number] => {
+        for (const n of nodes) {
+          if (i <= n.length) return [n, i]
+          i -= n.length
+        }
+        return [nodes[nodes.length - 1], nodes[nodes.length - 1].length]
+      }
+      const range = document.createRange()
+      range.setStart(...place(from))
+      range.setEnd(...place(from + wanted.length))
+      const tops = [...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top))
+      return new Set(tops).size
+    }, text)
+
+  test("a long interface name wraps, no figure breaks across two lines, and a cut path is whole in its tip", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await page.addInitScript(scaled(1.5))
+    await openBandApp(page, { stress: true })
+    await page.getByRole("button", { name: "Settings" }).click()
+    await sections(page).getByRole("button", { name: "Under the hood" }).click()
+    const name = "Universal Audio Apollo Twin X DUO Heritage Edition"
+    const recording = valueOf(page, "Recording with")
+    await expect(recording).toContainText(name)
+    // The name whole, on more than one line, and nothing pushed sideways.
+    const shape = await recording.evaluate((e) => ({
+      height: e.getBoundingClientRect().height,
+      line: parseFloat(getComputedStyle(e).lineHeight),
+      fits: e.scrollWidth <= e.clientWidth,
+    }))
+    expect(shape.height).toBeGreaterThan(shape.line * 1.5)
+    expect(shape.fits).toBe(true)
+    expect(await tabBody(page).evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
+    // Each figure after it on one line, wherever the line breaks.
+    for (const figure of ["ASIO", "16 inputs", "48 kHz", "24 bit"]) {
+      expect(await linesOf(recording, figure), figure).toBe(1)
+    }
+    const files = region(page, "Files")
+    for (const size of ["2.1 kB", "98 kB", "5.1 kB"]) {
+      expect(await linesOf(files, size), size).toBe(1)
+    }
+
+    // The paths have less room than they need: each is cut, and whole in
+    // the shared tip, never the system's.
+    await expect(tabBody(page).locator("[title]")).toHaveCount(0)
+    const path = files.getByText("C:\\Users\\alex\\RehearsalRecordings\\library.sqlite", { exact: true })
+    await expect(path).toHaveAttribute("data-cut")
+    await path.hover()
+    await expect(tooltip(page)).toHaveText("C:\\Users\\alex\\RehearsalRecordings\\library.sqlite")
   })
 })
 
@@ -1126,10 +1430,38 @@ test.describe("a newer version", () => {
     })
     await expect(updates).toContainText("0.3.0 is in Downloads")
     await expect(updates).toContainText(
-      "RehearsalRecorder-0.3.0-windows.zip — unpack it, close this copy and open the new one"
+      "RehearsalRecorder-0.3.0-windows.zip: unpack it, close this copy and open the new one."
     )
     await updates.getByRole("button", { name: "Show in folder" }).click()
     await expect.poll(() => callCount(page, "show_update")).toBe(1)
+  })
+
+  test("with a new version out, Download is the one cobalt button, its bar the shared Progress", async ({
+    page,
+  }) => {
+    await openApp(page, { before: "window.__LATEST__ = {version: '0.3.0'};" })
+    await page.getByRole("button", { name: /^Settings/ }).click()
+    await page.getByRole("button", { name: /^Under the hood/ }).first().click()
+    const updates = page.getByRole("region", { name: "Updates" })
+    await expect(updates).toContainText("Version 0.3.0 is out")
+    const cobalt = await colour(page, "--primary")
+    /** What in the tab is filled in the accent. */
+    const blue = () =>
+      tabBody(page).evaluate(
+        (body, fill) =>
+          [...body.querySelectorAll("*")]
+            .filter((e) => getComputedStyle(e).backgroundColor === fill)
+            .map((e) => e.textContent),
+        cobalt
+      )
+    expect(await blue()).toEqual(["Download"])
+    await expect(updates.getByRole("button", { name: "What's new" })).toHaveAttribute("data-variant", "outline")
+
+    await updates.getByRole("button", { name: "Download", exact: true }).click()
+    const bar = updates.getByRole("progressbar", { name: "Download" })
+    await expect(bar).toHaveAttribute("data-slot", "progress")
+    await expect(bar).toHaveAttribute("aria-valuenow", "45")
+    await expect(updates.getByRole("button", { name: "Download", exact: true })).toHaveCount(0)
   })
 
   test("says why a download failed, and tries again", async ({ page }) => {

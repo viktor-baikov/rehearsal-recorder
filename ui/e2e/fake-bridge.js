@@ -1877,28 +1877,38 @@ window.__MAKE_API__ = () => ({
 
   // Settings › Under the hood: the machine, the report, and the check of
   // the interface, which a page scripts through __CHECK_RESULT__ ('works',
-  // 'no_sound') and __CHECK_MS__, how long it listens. The MIDI system is
-  // MIDI_SYSTEM, or with __MIDI_ERROR__ none, and why.
-  under_the_hood: track('under_the_hood', async () => ({
-    version:'0.2.0', running_as: window.__BUILT__ ? 'built' : 'source', executable:'python.exe',
-    system:'Windows 11 Pro 10.0.26200, x64',
-    audio:{engine:'PortAudio V19.7.0-devel',
-           systems:[{name:'MME', devices:6}, {name:'ASIO', devices:2},
-                    {name:'Windows WASAPI', devices:4}],
-           recording:{name:'X32 USB', host_api:'ASIO', inputs:16,
-                      samplerate:48000, bit_depth:24},
-           playback:'System output'},
-    midi: window.__MIDI_ERROR__ ? {system:null, ports:[], error:window.__MIDI_ERROR__}
-                                : {system:MIDI_SYSTEM, ports:[], error:null},
-    files:[{key:'settings', path:'C:\\Users\\alex\\.rehearsal-recorder\\config.json',
-            exists:true, size:2100, modified:'2026-09-29T10:00:00'},
-           {key:'history', path:'C:\\Users\\alex\\RehearsalRecordings\\library.sqlite',
-            exists:true, size:98304, modified:'2026-09-29T10:00:00'},
-           {key:'crash_log', path:'C:\\Users\\alex\\.rehearsal-recorder\\crash.log',
-            exists:true, size:5120, modified:'2026-09-29T10:00:00'}],
-    deleting:'system', fallback_trash:'_deleted', libsndfile:'1.2.2',
-    server_url:'http://127.0.0.1:1234',
-    releases_url:'https://github.com/voronizer/rehearsal-recorder/releases'})),
+  // 'silent', 'no_sound') and __CHECK_MS__, how long it listens. The MIDI
+  // system is MIDI_SYSTEM, or with __MIDI_ERROR__ none, and why. Each of
+  // these is read when the page asks, so a test can change it and open the
+  // tab again: __NO_DEVICE__, no interface chosen; __NO_CRASH_LOG__, none
+  // written yet; __NO_ENCODER__, no soundfile.
+  under_the_hood: track('under_the_hood', async () => {
+    await held('under_the_hood');
+    return {
+      version:'0.2.0', running_as: window.__BUILT__ ? 'built' : 'source', executable:'python.exe',
+      system:'Windows 11 Pro 10.0.26200, x64',
+      audio:{engine:'PortAudio V19.7.0-devel',
+             systems:[{name:'MME', devices:6}, {name:'ASIO', devices:2},
+                      {name:'Windows WASAPI', devices:4}],
+             recording: window.__NO_DEVICE__ ? null
+               : {name:'X32 USB', host_api:'ASIO', inputs:16, samplerate:48000, bit_depth:24},
+             playback:'System output'},
+      midi: window.__MIDI_ERROR__ ? {system:null, ports:[], error:window.__MIDI_ERROR__}
+                                  : {system:MIDI_SYSTEM, ports:[], error:null},
+      files:[{key:'settings', path:'C:\\Users\\alex\\.rehearsal-recorder\\config.json',
+              exists:true, size:2100, modified:'2026-09-29T10:00:00'},
+             {key:'history', path:'C:\\Users\\alex\\RehearsalRecordings\\library.sqlite',
+              exists:true, size:98304, modified:'2026-09-29T10:00:00'},
+             window.__NO_CRASH_LOG__
+               ? {key:'crash_log', path:'C:\\Users\\alex\\.rehearsal-recorder\\crash.log',
+                  exists:false, size:null, modified:null}
+               : {key:'crash_log', path:'C:\\Users\\alex\\.rehearsal-recorder\\crash.log',
+                  exists:true, size:5120, modified:'2026-09-29T10:00:00'}],
+      deleting:'system', fallback_trash:'_deleted',
+      libsndfile: window.__NO_ENCODER__ ? null : '1.2.2',
+      server_url:'http://127.0.0.1:1234',
+      releases_url:'https://github.com/voronizer/rehearsal-recorder/releases'};
+  }),
   bug_report: track('bug_report', async () => ({ok:true,
     text:'РЭХА 0.2.0, run from source\nWindows 11 Pro 10.0.26200, x64\n'})),
   show_file: track('show_file', async () => ({ok:true})),

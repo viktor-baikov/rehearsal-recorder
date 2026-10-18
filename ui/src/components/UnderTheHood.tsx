@@ -1,14 +1,18 @@
-import { useEffect, useRef, useState } from "react"
-import {
-  Activity,
-  Check,
-  CircleCheck,
-  Copy,
-  Loader2,
-  TriangleAlert,
-} from "lucide-react"
+import { Fragment, useEffect, useRef, useState } from "react"
+import { Activity, Check, CircleCheck, Copy, TriangleAlert, X } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
+import { Separator } from "@/components/ui/separator"
+import { Spinner } from "@/components/ui/spinner"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Whole } from "@/components/ui/whole"
+import { SettingsGroup } from "@/components/SettingsGroup"
+import { useAfter } from "@/hooks/useAfter"
+import { useErrorNotice } from "@/hooks/useErrorNotice"
 import {
   api,
   type CheckRow,
@@ -17,8 +21,10 @@ import {
   type UnderTheHood as Hood,
   type UpdateStatus,
 } from "@/lib/api"
-import { formatBytes } from "@/lib/format"
+import { countOf, formatBytes } from "@/lib/format"
 import { QUIET_THRESHOLD } from "@/lib/levels"
+import { dismiss } from "@/lib/notices"
+import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import { useSystem, words } from "@/lib/platform"
 import { cn } from "@/lib/utils"
 import { startDownload, switchUpdates, useUpdate } from "@/lib/update"
@@ -27,6 +33,10 @@ import { startDownload, switchUpdates, useUpdate } from "@/lib/update"
 const CHECK_POLL_MS = 400
 // How long "Copied" stays on the button.
 const COPIED_MS = 2000
+// From the tenth second of asking, the page says what it is waiting for (B5).
+const SAY_AFTER_MS = 10_000
+// The slot of the check's error notice.
+const HOOD = "hood"
 
 const FILE_LABELS: Record<OwnFile["key"], { label: string; name: string; note: string }> = {
   settings: {
@@ -37,12 +47,12 @@ const FILE_LABELS: Record<OwnFile["key"], { label: string; name: string; note: s
   history: {
     label: "History",
     name: "the history",
-    note: "Every rehearsal and take, with their names and markers",
+    note: "Every rehearsal and take, with their names and marks",
   },
   crash_log: {
     label: "Crash log",
     name: "the crash log",
-    note: "Written if the app ever dies — send it with a bug report",
+    note: "Written if the app ever dies. Send it with a bug report",
   },
 }
 
@@ -109,9 +119,24 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 /**
- * Settings › Under the hood, Updates: whether a newer version is out, getting
- * it, and the switch for asking at all — in a section of its own, so the card
- * above it only says what this copy is.
+ * Figures with a dot between them, each kept whole: a line breaks only
+ * between two of them, never inside "16 inputs". `afterName` when they
+ * follow a name, which wraps as words do: a dot comes first, kept on the
+ * name's last line.
+ */
+function Facts({ parts, afterName = false }: { parts: string[]; afterName?: boolean }) {
+  return parts.map((part, i) => (
+    <Fragment key={i}>
+      {(afterName || i > 0) && " · "}
+      <span className="whitespace-nowrap">{part}</span>
+    </Fragment>
+  ))
+}
+
+/**
+ * Settings › Under the hood, Updates: whether a newer version is out,
+ * getting it, and the switch for asking at all. A group of its own, so the
+ * one above only says what this copy is.
  *
  * "This is the latest version" is said only once GitHub has answered: before
  * the first check, or in a room with no internet, nobody knows. The zip is
@@ -132,33 +157,20 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
     const pct = Math.round((mine.fraction ?? 0) * 100)
     status = (
       <>
-        <div className="min-w-0 flex-1">
-          <div className="font-medium">
-            Downloading {latest.version}…
-          </div>
-          <div
-            role="progressbar"
-            aria-label="Download"
-            aria-valuenow={pct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            className="mt-1.5 h-1.5 max-w-80 overflow-hidden rounded-full bg-muted"
-          >
-            <div className="h-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
-          </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="font-semibold">Downloading {latest.version}…</div>
+          <Progress value={pct} aria-label="Download" className="max-w-80" />
         </div>
-        <span className="tnum text-sm text-muted-foreground">{pct}%</span>
+        <span className="tnum text-muted-foreground">{pct}%</span>
       </>
     )
   } else if (latest && mine?.state === "done") {
     status = (
       <>
         <div className="min-w-0 flex-1">
-          <div className="font-medium">
-            {latest.version} is in Downloads
-          </div>
+          <div className="font-semibold">{latest.version} is in Downloads</div>
           <div className="text-xs text-muted-foreground">
-            {mine.file} — unpack it, close this copy and open the new one.
+            {mine.file}: unpack it, close this copy and open the new one.
           </div>
         </div>
         <Button variant="outline" size="row" onClick={() => void api().show_update()}>
@@ -170,9 +182,7 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
     status = (
       <>
         <div className="min-w-0 flex-1">
-          <div className="font-medium">
-            Could not download {latest.version}
-          </div>
+          <div className="font-semibold">Could not download {latest.version}</div>
           <div className="text-xs text-destructive">{mine.error}</div>
         </div>
         <Button variant="outline" size="row" onClick={() => void startDownload()}>
@@ -182,15 +192,12 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
       </>
     )
   } else if (latest) {
+    // The one button in the accent on the page while a new version is out.
     status = (
       <>
         <div className="min-w-0 flex-1">
-          <div className="font-medium">
-            Version {latest.version} is out
-          </div>
-          <div className="text-xs text-muted-foreground">
-            You have {ours}
-          </div>
+          <div className="font-semibold">Version {latest.version} is out</div>
+          <div className="text-xs text-muted-foreground">You have {ours}</div>
         </div>
         <Button size="row" onClick={() => void startDownload()}>
           Download
@@ -200,7 +207,7 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
     )
   } else {
     status = (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground">
         {!update.on
           ? "Not checking for new versions."
           : hood.running_as !== "built"
@@ -213,48 +220,40 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
   }
 
   return (
-    <section aria-label="Updates" className="flex flex-col gap-3">
-      <div>
-        <Label>Updates</Label>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Whether a newer version is out, and getting it
+    <SettingsGroup rise={2} title="Updates" hint="Whether a newer version is out, and getting it.">
+      <div className="flex flex-wrap items-center gap-3 text-sm">{status}</div>
+      {/* The one thing the app sends anywhere, said where it is switched
+          off. See updates.py. */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-3">
+          <Checkbox
+            id="check-updates"
+            checked={update.on}
+            onCheckedChange={(on) => void switchUpdates(on === true)}
+          />
+          <Label htmlFor="check-updates">Check for new versions</Label>
+        </div>
+        <p className="pl-7 text-xs text-muted-foreground">
+          When the app starts, and once a day while it stays open, it asks GitHub which version
+          is the latest. It sends nothing else, and downloads a new version only when you press
+          Download.
         </p>
       </div>
-      <div className="flex flex-col gap-3.5 rounded-xl border bg-card px-5 py-4">
-        <div className="flex flex-wrap items-center gap-3">{status}</div>
-        {/* The one thing the app sends anywhere, said where it is switched
-            off. See updates.py. */}
-        <div className="flex items-start gap-3 border-t pt-3.5">
-          <input
-            id="check-updates"
-            type="checkbox"
-            className="mt-1 size-4"
-            checked={update.on}
-            onChange={(e) => void switchUpdates(e.target.checked)}
-          />
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="check-updates">Check for new versions</Label>
-            <p className="text-xs text-muted-foreground">
-              When the app starts, and once a day while it stays open, it asks
-              GitHub which version is the latest. It sends nothing else, and
-              downloads a new version only when you press Download.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
+    </SettingsGroup>
   )
 }
 
 /**
  * Settings › Under the hood: what this copy of the app is and runs on, where
  * it keeps things, a report to paste into a message, and the check of the
- * interface — --audio-probe, for someone at a rehearsal with no command line.
+ * interface (--audio-probe, for someone at a rehearsal with no command
+ * line), a group each. It asks the machine when it opens.
  */
 export function UnderTheHood() {
   const [hood, setHood] = useState<Hood | null>(null)
   const update = useUpdate()
   const { trash } = words(useSystem())
+  const slow = useAfter(hood === null, SAY_AFTER_MS)
 
   useEffect(() => {
     let alive = true
@@ -266,28 +265,36 @@ export function UnderTheHood() {
     }
   }, [])
 
+  // The spinner from the first second, the words beside it from the tenth.
+  // The row is as tall with them as without, so neither moves the other.
   if (!hood) {
-    return <p className="text-sm text-muted-foreground">Asking the machine…</p>
+    return (
+      <div className="flex h-5 items-center gap-2 text-sm text-muted-foreground">
+        <Spinner />
+        {slow && <span>Asking the machine…</span>}
+      </div>
+    )
   }
 
   const rec = hood.audio.recording
 
   return (
-    <div className="flex flex-col gap-7">
+    <>
       {/* This copy, and nothing else: what it is, and the two things to do
-          about it from here. Updates have their own section below. */}
-      <section
+          about it from here. The tab's head names the page, so it has no
+          heading. */}
+      <SettingsGroup
+        rise={1}
+        role="region"
         aria-label="About this copy"
-        className="flex flex-wrap items-center gap-4 rounded-xl border bg-card px-5 py-4"
+        className="flex-row flex-wrap items-center"
       >
         <img src="./logo.svg" alt="" className="size-12 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="text-base font-semibold">РЭХА</div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span className="tnum break-all">{hood.version}</span>
-            {hood.running_as !== "built" && (
-              <span className="rounded border px-1.5 text-[11px] leading-5">Run from source</span>
-            )}
+            {hood.running_as !== "built" && <Badge variant="outline">Run from source</Badge>}
           </div>
         </div>
         <div className="flex flex-col items-end gap-1.5">
@@ -302,31 +309,39 @@ export function UnderTheHood() {
             All releases on GitHub
           </Button>
         </div>
-      </section>
+      </SettingsGroup>
 
       <Updates hood={hood} update={update} />
 
-      <section className="flex flex-col gap-3">
-        <div>
-          <Label>Sound</Label>
-          <p className="mt-1 text-xs text-muted-foreground">
-            What the app records through, and what it can see on this machine
-          </p>
-        </div>
-        <dl className="grid grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
+      <SettingsGroup
+        rise={3}
+        title="Sound"
+        hint="What the app records through, and what it can see on this machine."
+      >
+        <dl className="grid grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
           <Row label="Recording with">
             {rec ? (
               <>
                 {rec.name}
                 <span className="text-muted-foreground">
-                  {rec.missing
-                    ? " · not plugged in"
-                    : ` · ${rec.host_api} · ${rec.inputs} inputs · ${kHz(rec.samplerate)} · ${rec.bit_depth} bit`}
+                  <Facts
+                    afterName
+                    parts={
+                      rec.missing
+                        ? ["not plugged in"]
+                        : [
+                            rec.host_api,
+                            countOf(rec.inputs, "input"),
+                            kHz(rec.samplerate),
+                            `${rec.bit_depth} bit`,
+                          ]
+                    }
+                  />
                 </span>
               </>
             ) : (
               <span className="text-muted-foreground">
-                Nothing chosen yet — pick an interface in Audio
+                Nothing chosen yet: pick an interface in Audio
               </span>
             )}
           </Row>
@@ -334,20 +349,24 @@ export function UnderTheHood() {
           <Row label="Audio systems">
             <ul aria-label="Audio systems" className="flex flex-wrap gap-1.5">
               {hood.audio.systems.map((s) => {
-                const inUse = rec && !rec.missing && s.name === rec.host_api
-                return (
-                  <li
-                    key={s.name}
-                    data-in-use={inUse || undefined}
-                    title={inUse ? "The interface records through this one" : undefined}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs",
-                      inUse && "border-signal/60"
-                    )}
-                  >
-                    {s.name}
-                    <span className="tnum text-muted-foreground">{s.devices}</span>
+                const inUse = !!rec && !rec.missing && s.name === rec.host_api
+                const item = (
+                  <li data-in-use={inUse || undefined} className="flex">
+                    <Badge variant={inUse ? "secondary" : "outline"}>
+                      {s.name}
+                      <span className="tnum font-normal text-muted-foreground">{s.devices}</span>
+                    </Badge>
                   </li>
+                )
+                // The tip hangs from the row: on the badge itself, the
+                // trigger's data-slot would take the place of the badge's.
+                return inUse ? (
+                  <Tooltip key={s.name}>
+                    <TooltipTrigger asChild>{item}</TooltipTrigger>
+                    <TooltipContent>The interface records through this one</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Fragment key={s.name}>{item}</Fragment>
                 )
               })}
               {hood.audio.systems.length === 0 && (
@@ -365,19 +384,17 @@ export function UnderTheHood() {
           </Row>
         </dl>
 
+        <Separator />
+
         <CheckTheInterface disabled={!rec || !!rec.missing} name={rec?.name} />
-      </section>
+      </SettingsGroup>
 
-      <hr />
-
-      <section className="flex flex-col gap-3">
-        <div>
-          <Label>Files</Label>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Where the app keeps its own things. The recordings are in Folders.
-          </p>
-        </div>
-        <div className="flex flex-col gap-3">
+      <SettingsGroup
+        rise={4}
+        title="Files"
+        hint="Where the app keeps its own things. The recordings are in Folders."
+      >
+        <div className="flex flex-col gap-4">
           {hood.files.map((f) => {
             const said = FILE_LABELS[f.key]
             return (
@@ -387,15 +404,20 @@ export function UnderTheHood() {
               >
                 <span className="text-muted-foreground">{said.label}</span>
                 <div className="min-w-0">
-                  <div className="tnum truncate text-xs" title={f.path}>
-                    {f.path}
-                  </div>
+                  {/* Nothing else on the page says the path whole, so a cut
+                      one is a Tab stop, with the whole path in its tip. */}
+                  <Whole text={f.path} reach className="truncate font-mono text-xs" />
                   <div className="text-xs text-muted-foreground">
-                    {f.exists
-                      ? `${said.note} · ${formatBytes(f.size ?? 0)}`
-                      : f.key === "crash_log"
-                        ? "Not written yet — the app has had nothing to put in it"
-                        : "Not there yet"}
+                    {f.exists ? (
+                      <>
+                        {said.note}
+                        <Facts afterName parts={[formatBytes(f.size ?? 0)]} />
+                      </>
+                    ) : f.key === "crash_log" ? (
+                      "Not written yet: the app has had nothing to put in it"
+                    ) : (
+                      "Not there yet"
+                    )}
                   </div>
                 </div>
                 <Button
@@ -410,17 +432,16 @@ export function UnderTheHood() {
             )
           })}
         </div>
-      </section>
+      </SettingsGroup>
 
-      <hr />
-
-      <section className="flex flex-col gap-3">
-        <Label>System</Label>
-        <dl className="grid grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
+      <SettingsGroup rise={5} title="System">
+        <dl className="grid grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
           <Row label="System">{hood.system}</Row>
           <Row label="Running as">
             {hood.running_as === "built" ? "The built app" : "From source"}
-            <span className="text-muted-foreground"> · {hood.executable}</span>
+            <span className="text-muted-foreground">
+              <Facts afterName parts={[hood.executable]} />
+            </span>
           </Row>
           <Row label="Deleting">
             {hood.deleting === "system"
@@ -432,30 +453,23 @@ export function UnderTheHood() {
               <>
                 WAV, FLAC and MP3
                 <span className="text-muted-foreground">
-                  {" "}
-                  · through libsndfile {hood.libsndfile}
+                  <Facts afterName parts={[`through libsndfile ${hood.libsndfile}`]} />
                 </span>
               </>
             ) : (
-              "WAV only — compressing needs the soundfile package"
+              "WAV only: compressing needs the soundfile package"
             )}
           </Row>
+          <Row label="Local server">
+            <span className="font-mono text-xs">{hood.server_url}</span>
+            <p className="mt-1 text-xs text-muted-foreground">
+              The server hands the interface and the audio to this machine only (127.0.0.1) and
+              lives as long as the app is open.
+            </p>
+          </Row>
         </dl>
-      </section>
-
-      <hr />
-
-      <section className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-        <div>
-          <span className="text-sm text-foreground">Local server</span>
-          <span className="tnum ml-3">{hood.server_url}</span>
-        </div>
-        <p>
-          The server hands the interface and the audio to this machine only
-          (127.0.0.1) and lives as long as the app is open.
-        </p>
-      </section>
-    </div>
+      </SettingsGroup>
+    </>
   )
 }
 
@@ -467,20 +481,27 @@ function Attempt({ row }: { row: CheckRow }) {
       ? `opens, but sent ${row.frames.toLocaleString()} of ~${row.expected.toLocaleString()} frames`
       : row.error || "refused"
   return (
-    <li className="flex gap-3 text-sm">
-      <span
-        className={cn(
-          "w-6 shrink-0 font-semibold",
-          row.flowing ? "text-signal" : "text-destructive"
-        )}
-      >
-        {row.flowing ? "ok" : "no"}
-      </span>
-      <span className="min-w-0">
-        {sentence(row.label)}
-        <span className="break-words text-muted-foreground"> — {what}</span>
+    <li className="flex items-start gap-2 text-sm text-muted-foreground">
+      {row.flowing ? (
+        <Check className="mt-0.5 size-4 shrink-0 text-signal" />
+      ) : (
+        <X className="mt-0.5 size-4 shrink-0 text-destructive" />
+      )}
+      <span className="min-w-0 break-words">
+        <span className="text-foreground">{sentence(row.label)}:</span> {what}
       </span>
     </li>
+  )
+}
+
+/** Every way the card was opened so far. */
+function Attempts({ rows }: { rows: CheckRow[] }) {
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {rows.map((r) => (
+        <Attempt key={r.label} row={r} />
+      ))}
+    </ul>
   )
 }
 
@@ -488,11 +509,15 @@ function Attempt({ row }: { row: CheckRow }) {
  * The check: the settings in force first, then one change at a time, as
  * --audio-probe does, polled while it runs. Nothing to check with no
  * interface chosen, or one that is not plugged in.
+ *
+ * Its button stays where it is, with its word, the whole time: what the
+ * check says comes under it. While the check runs the button waits, and
+ * after a second a spinner takes its icon's place.
  */
 function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: string }) {
   const [check, setCheck] = useState<InterfaceCheck | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const timer = useRef(0)
+  const cannot = useErrorNotice(HOOD)
 
   // A check left running from before this page opened is picked up again.
   useEffect(() => {
@@ -514,11 +539,13 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
     timer.current = window.setTimeout(poll, CHECK_POLL_MS)
   }
 
+  // A check that cannot start is said in a notice, and the page stays as
+  // it was.
   const start = async () => {
-    setError(null)
+    dismiss(HOOD)
     const res = await api().start_interface_check()
     if (!res.ok) {
-      setError(res.error ?? "Could not start the check")
+      cannot(res.error ?? "Could not start the check")
       return
     }
     setCheck(await api().interface_check())
@@ -526,6 +553,7 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
   }
 
   const running = !!check?.running
+  const slow = useAfter(running, SPINNER_AFTER_MS)
   const done = !!check && !running && !!check.checked_at
   const opens = done && check?.verdict?.cause === "none"
   // The card is fine and the band is not in it: nothing plugged in, or its
@@ -535,6 +563,7 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
   const silent = opens && !heardAny
   const failed = done && !check?.stopped && !!check?.verdict && !opens
   const device = check?.device
+  const rows = check?.rows ?? []
   const when = check?.checked_at?.slice(11, 16)
   const state = running
     ? "running"
@@ -549,71 +578,63 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
             : "idle"
 
   return (
-    <div
-      aria-label="Interface check"
-      data-state={state}
-      className={cn(
-        "mt-1 flex flex-col gap-3.5 rounded-xl border px-4 py-4",
-        works && "border-signal/45 bg-signal/5",
-        silent && "border-warn/50 bg-warn/5",
-        failed && "border-destructive/50 bg-destructive/5"
-      )}
-    >
-      {!check && (
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">Check the interface</div>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Opens {name ?? "the interface"} the way a take does and listens for a
-              few seconds. Play or talk into the inputs while it runs. If something
-              refuses, it tries again another way and says what made the difference.
-            </p>
-          </div>
-          <Button onClick={() => void start()} disabled={disabled}>
-            <Activity />
-            Check the interface
-          </Button>
+    <div role="group" aria-label="Interface check" data-state={state} className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold">Check the interface</div>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Opens {name ?? "the interface"} the way a take does and listens for a few seconds.
+            Play or talk into the inputs while it runs. If something refuses, it tries again
+            another way and says what made the difference.
+          </p>
         </div>
-      )}
+        <Button variant="outline" onClick={() => void start()} disabled={disabled || running}>
+          {slow ? <Spinner after={0} /> : <Activity />}
+          Check the interface
+        </Button>
+      </div>
 
       {running && (
-        <div className="flex items-center gap-3">
-          <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
-          <div className="min-w-0 flex-1 text-sm font-semibold">
-            Listening to {device?.name}… play or talk into the inputs
+        <>
+          <div className="flex items-center gap-3">
+            <p className="min-w-0 flex-1 text-sm">
+              Listening to {device?.name}… play or talk into the inputs
+            </p>
+            <Button variant="outline" size="row" onClick={() => void api().stop_interface_check()}>
+              Stop
+            </Button>
           </div>
-          <Button variant="outline" size="row" onClick={() => void api().stop_interface_check()}>
-            Stop
-          </Button>
-        </div>
+          {rows.length > 0 && <Attempts rows={rows} />}
+        </>
       )}
 
+      {/* What came of it, on the group's own fill: the icon alone says how
+          it went. */}
       {opens && device && (
-        <>
-          <div className="flex items-start gap-2.5">
-            {works ? (
-              <CircleCheck className="mt-0.5 size-5 shrink-0 text-signal" />
-            ) : (
-              <TriangleAlert className="mt-0.5 size-5 shrink-0 text-warn" />
-            )}
-            <div>
-              <div className="text-sm font-semibold">
-                {works
-                  ? `${device.name} works: it opens with these settings and sound arrives`
-                  : `${device.name} opens and sends, but every input is silent`}
-              </div>
-              <div className="mt-0.5 text-xs text-muted-foreground">
-                {device.host_api} · {device.channels} inputs · {kHz(device.samplerate)} ·{" "}
-                {device.bit_depth} bit · checked at {when}
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="text-sm">
+        <Alert role="status" className={works ? "[&>svg]:text-signal" : "[&>svg]:text-warn"}>
+          {works ? <CircleCheck /> : <TriangleAlert />}
+          <AlertTitle className="line-clamp-none">
+            {works
+              ? `${device.name} works: it opens with these settings and sound arrives`
+              : `${device.name} opens and sends, but every input is silent`}
+          </AlertTitle>
+          <AlertDescription className="gap-2">
+            <p className="text-xs">
+              <Facts
+                parts={[
+                  device.host_api,
+                  countOf(device.channels, "input"),
+                  kHz(device.samplerate),
+                  `${device.bit_depth} bit`,
+                  `checked at ${when}`,
+                ]}
+              />
+            </p>
+            <p>
               {works
                 ? sentence(check?.signal ?? "")
                 : "The card is fine; the band is not reaching it. Play or talk into the inputs while it listens, or look at where the card's own routing sends them, and check again."}
-            </div>
+            </p>
             <ul
               aria-label="Inputs with signal"
               className="grid gap-1"
@@ -624,58 +645,58 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
               {Array.from({ length: device.channels }, (_, i) => {
                 const heard = (check?.peaks?.[i] ?? 0) > QUIET_THRESHOLD
                 return (
-                  <li
-                    key={i}
-                    data-signal={heard || undefined}
-                    title={heard ? `Signal on input ${i + 1}` : `Input ${i + 1} silent`}
-                    className={cn(
-                      "tnum flex h-7 items-center justify-center rounded-md text-[11px]",
-                      heard ? "bg-signal/25 text-signal" : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {i + 1}
-                  </li>
+                  <Tooltip key={i}>
+                    <TooltipTrigger asChild>
+                      <li
+                        data-signal={heard || undefined}
+                        className={cn(
+                          "tnum flex h-7 items-center justify-center rounded-md text-xs",
+                          heard ? "bg-signal/25 text-signal" : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {i + 1}
+                      </li>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {heard ? `Signal on input ${i + 1}` : `Input ${i + 1} silent`}
+                    </TooltipContent>
+                  </Tooltip>
                 )
               })}
             </ul>
-          </div>
-        </>
+          </AlertDescription>
+        </Alert>
       )}
 
       {failed && (
-        <div className="flex items-start gap-2.5">
-          <TriangleAlert className="mt-0.5 size-5 shrink-0 text-destructive" />
-          <div className="min-w-0">
-            <div className="text-sm font-semibold">
-              {check?.verdict?.headline.replace(/\.$/, "")}
-            </div>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              {check?.verdict?.advice}
-            </p>
-          </div>
-        </div>
+        <Alert role="status" className="[&>svg]:text-destructive">
+          <TriangleAlert />
+          <AlertTitle className="line-clamp-none">
+            {check?.verdict?.headline.replace(/\.$/, "")}
+          </AlertTitle>
+          <AlertDescription className="gap-2">
+            <p>{check?.verdict?.advice}</p>
+            {rows.length > 0 && <Attempts rows={rows} />}
+          </AlertDescription>
+        </Alert>
       )}
 
       {done && check?.stopped && (
-        <div className="text-sm font-semibold">Stopped before it finished</div>
-      )}
-
-      {(running || failed || check?.stopped) && (check?.rows?.length ?? 0) > 0 && (
-        <ul className={cn("flex flex-col gap-1.5", failed && "pl-7")}>
-          {check?.rows?.map((r) => <Attempt key={r.label} row={r} />)}
-        </ul>
+        <Alert role="status">
+          <AlertTitle className="line-clamp-none">Stopped before it finished</AlertTitle>
+          {rows.length > 0 && (
+            <AlertDescription>
+              <Attempts rows={rows} />
+            </AlertDescription>
+          )}
+        </Alert>
       )}
 
       {done && (
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="row" onClick={() => void start()} disabled={disabled}>
-            Check again
-          </Button>
+        <div>
           <CopyReport label="Copy the report" size="row" />
         </div>
       )}
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   )
 }
