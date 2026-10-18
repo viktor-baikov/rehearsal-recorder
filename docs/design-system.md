@@ -487,9 +487,12 @@ The other shared components, each with its stories:
   mark on a take's bar: a 3 px tick in the label's colour where the mark
   fell, as tall as its caller makes it. On the bars of an evening's takes,
   on the rehearsal screen and in History, it passes under the take's number
-  and name. Last time, the rehearsal screen and the player use them; the
-  other dots, note lines and ticks move onto them as their screens are
-  redone.
+  and name. Last time, the rehearsal screen and the player use them, and so
+  does History: a label's dot in its list and on its page (`LabelList`,
+  `MarksPage`), the notes from last time on a song's page (`SongPage`), and
+  the ticks on the bars of a song's ladder and the Marks page (`SongLadder`,
+  `MarksPage`). The other dots, note lines and ticks move onto them as their
+  screens are redone.
 - **Checkbox**, `checkbox.tsx`: shadcn's, in the theme. A 16 px square with
   the 4 px corner of a small thing (F9). Ticked, it is filled in the text's
   colour, never the accent (F2), with the shared focus ring. It is Radix's
@@ -765,15 +768,15 @@ empty before the release. Nothing in `components/ui/` can be listed: that is
 where the rules are kept, so a problem there is fixed.
 
 **`design-ok`.** Two kinds of thing are outside what the rules mean: a
-graphic 1-2 px thick, which keeps its own corner, and text sized from the
-window rather than from the scale (the recording clock, the names and
-readouts on the track tiles). Such a line is let off one rule by a comment
-on it, or on the line above, that says why, as `//` or `{/* */}`, whichever
-the line allows. Two from the code, in `components/SongLadder.tsx` and
-`screens/Recording.tsx`:
+small graphic that keeps its own corner, such as a marker's diamond on the
+waveform or a tooltip's arrow, and text sized from the window rather than
+from the scale (the recording clock, the names and readouts on the track
+tiles). Such a line is let off one rule by a comment on it, or on the line
+above, that says why, as `//` or `{/* */}`, whichever the line allows. Two
+from the code, in `components/Timeline.tsx` and `screens/Recording.tsx`:
 
 ```tsx
-// design-ok(radius): a 2 px mark tick on a take's bar, a graphic that keeps its own corner
+// design-ok(radius): the marker's diamond on the waveform, a graphic that keeps its own corner
 // design-ok(px-text): the recording clock is sized from the window's height (CLOCK_SIZE)
 ```
 

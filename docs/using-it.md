@@ -526,9 +526,11 @@ line, the size on disk first, and once one has gone, pointing at them shows
 them all.
 
 Under the name are the day it was played, its set if it was played by one,
-and the path of its folder. Click the path to open the folder; pointing at
-it says **Show in Finder** (**Show in Explorer** on Windows). A long path is
-cut at its end, and pointing at it shows it whole.
+and the path of its folder: where the folder is on your computer, written
+out, such as `C:\Users\alex\RehearsalRecordings\Tuesday jam - 2026-09-18 19-00`.
+Click the path to open the folder; pointing at it says **Show in Finder**
+(**Show in Explorer** on Windows). A long path is cut at its end, and
+pointing at it shows it whole.
 
 A rehearsal played by a set has the set's name under its date in the list,
 and beside the date on its page. Over its songs, a card says how much of the
@@ -884,7 +886,8 @@ discards the take, and **Undo** brings it back. Esc never stops a recording;
 press **Stop** for that.
 
 ⌘Z on a Mac, Ctrl+Z elsewhere, is **Undo** for the last thing deleted,
-discarded or cropped, while its notice is up. See [Undo](#undo).
+discarded or cropped, or the last old name forgotten on a song's page, while
+its notice is up. See [Undo](#undo).
 
 While you are typing in a text field, the keys type. Press Esc to leave the
 field, and the keys work again.

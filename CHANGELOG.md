@@ -176,34 +176,33 @@ opening.
   not open, the red bar at the top says what went wrong and where it is
   written down, and **Try again** opens the app again.
 - **History's pages are calmer, and a rehearsal's folder opens from its
-  path.** The list down the left is on a grey panel, and the switch between
+  path.** The list down the left is on a grey panel. The switch between
   **Rehearsals**, **Songs** and **Marks** stays at its top while the list
-  scrolls. A long name in the list takes two lines, and so does a rehearsal's
-  name, a song's title or a label's name at the top of its page; past that it
-  is cut, and pointing at it shows it whole. The pencil is right after the
-  name's last word, and the bin at the right says what it does when you point
-  at it. The evening's figures beside the name give way before the name takes
-  its second line. The folder opens from the line under the name: click its
-  path, after the day and the set. Pointing at the path says **Show in
-  Finder** (**Show in Explorer** on Windows), and the button of that name
-  beside the figures is gone. The totals at the top of the window,
-  "5 rehearsals · 2 h 24 min played · 5.0 GB", give way one at a time in a
-  narrow window, the size first, where they used to go all at once. Each page
-  is one group, its parts split by lines: on a rehearsal's page the set
-  first, in two columns when there is room, then the songs; on a song's page
-  its starred takes, the marks from last time and every take; on a label's
-  page a part per rehearsal or song, with **Group by** at the top of the
-  group. On a song's page, a rehearsal with more takes than its line holds
-  carries its bars on to a second line. A take that cannot be loaded shows a
-  red warning sign in place of its ▶ on all three pages, and pressing it
-  tries again. Smaller things: a rehearsal whose folder is missing says
-  *Not found on disk* in red wherever it shows; the set's line reads
-  "Gig on the 25th · 4 of 6 played", on the rehearsal screen too; and while
+  scrolls. A long name takes up to two lines, in the list and at the top of a
+  page, and is then cut. Point at it to read it whole. The pencil comes right
+  after its last word. On a rehearsal's page, the evening's figures give way
+  before the name takes a second line. The bin at the right says what it does
+  when you point at it. Under the name are the day, the set and the folder's
+  path, where it is on the computer. Click the path to open the folder;
+  pointing at it says **Show in Finder** (**Show in Explorer** on Windows).
+  The button of that name beside the figures is gone from a rehearsal's page.
+  In a narrow window the totals at the top,
+  "5 rehearsals · 2 h 24 min played · 5.0 GB", give way one at a time, the
+  size first. They used to go all at once. Each page is one card, with thin
+  lines between its parts. For a rehearsal played by a set, the card starts
+  with the set, in two columns when there is room. A song's card has its
+  starred takes, the marks from last time and every take. When a rehearsal
+  has more takes of the song than fit on its line, they carry on to a second
+  line. On a label's page, **Group by** is at the top of the card. On all
+  three pages, a take that cannot be loaded shows a red warning sign in place
+  of its ▶, and pressing it tries again. A rehearsal whose folder is missing
+  says *Not found on disk* in red on History's pages. The set's line reads
+  "Gig on the 25th · 4 of 6 played", on the rehearsal screen too. While
   History reads the folder, a spinner shows after a second, and
   *Reading the folder…* only after ten.
 - **Forgetting a song's old name has Undo.** On a song's page in History,
-  the × beside an old name under *Also typed as* forgets it, and a notice
-  now says "“Palyn” was forgotten." with **Undo** for 10 seconds, or ⌘Z /
+  the × beside an old name under *Also typed as* forgets it. A notice now
+  says "“Palyn” was forgotten.", with **Undo** for 10 seconds, or ⌘Z /
   Ctrl+Z. **Undo** gives the name back to the song, so typing it leads to
   that song again. If the name has become another song's in the meantime,
   the notice says why it cannot come back. "Make Palyn a new song" under a
