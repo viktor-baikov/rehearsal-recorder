@@ -14,14 +14,21 @@ import { hereFor, placed, type PlacedPlayback, type PlacedTake, type Rung } from
 import { TakeRow } from "@/components/RehearsalOverview"
 
 /**
- * The ladder's columns, in rem so they grow with the Appearance scale: the
- * chevron, the day and the rehearsal, the takes as bars, how many. Where the
- * ladder has no room for the longest bar beside the rehearsal (25rem, at
- * 960 px and 150 %), the bars go under the day, across the last two columns.
+ * Where the ladder is narrower than 25rem, as at 960 px and 150 %: the
+ * columns beside the bars take 17.375rem with their gaps, which leaves the
+ * bars less than the longest one's 7.5rem. There the bars go under the day,
+ * across the last two columns, and their label goes. Tailwind reads a class
+ * whole, so the width is in each; this is the one place they are.
  */
-const COLUMNS =
-  "grid grid-cols-[1.125rem_9.5rem_minmax(0,1fr)_4.5rem] gap-x-3 @max-[25rem]:grid-cols-[1.125rem_minmax(0,1fr)_4.5rem]"
-const UNDER = "@max-[25rem]:col-span-2 @max-[25rem]:col-start-2 @max-[25rem]:row-start-2"
+const NARROW = {
+  columns: "@max-[25rem]:grid-cols-[1.125rem_minmax(0,1fr)_4.5rem]",
+  bars: "@max-[25rem]:col-span-2 @max-[25rem]:col-start-2 @max-[25rem]:row-start-2",
+  label: "@max-[25rem]:hidden",
+} as const
+
+/** The ladder's columns, in rem so they grow with the Appearance scale: the
+ *  chevron, the day and the rehearsal, the takes as bars, how many. */
+const COLUMNS = `grid grid-cols-[1.125rem_9.5rem_minmax(0,1fr)_4.5rem] gap-x-3 ${NARROW.columns}`
 
 type Handlers = {
   onPlay: (take: PlacedTake) => void
@@ -72,7 +79,7 @@ export function SongLadder({
       <div aria-hidden className={cn(COLUMNS, "-mx-2 px-2 text-xs text-muted-foreground")}>
         <span />
         <span>Rehearsal</span>
-        <span className="@max-[25rem]:hidden">Takes, to scale</span>
+        <span className={NARROW.label}>Takes, to scale</span>
         <span className="text-right">Takes</span>
       </div>
       {rungs.map((rung) => (
@@ -133,7 +140,10 @@ function RungRow({
       <WholeTip cut={cut} text={rung.rehearsal}>
         <CollapsibleTrigger asChild>
           <Item asChild size="sm">
-            {/* Open, it has no fill of its own: the chevron says it. */}
+            {/* Open, it has no fill of its own: the chevron says it. Its
+                data-state is the tip's, which WholeTip's trigger hands down
+                over the Collapsible's, so nothing styles it by
+                data-[state=open]; aria-expanded is the Collapsible's. */}
             <Button
               variant="ghost"
               data-rung={rung.folder}
@@ -163,7 +173,7 @@ function RungRow({
               <span
                 data-bars
                 aria-hidden
-                className={cn("flex min-w-0 flex-wrap items-center gap-1", UNDER)}
+                className={cn("flex min-w-0 flex-wrap items-center gap-1", NARROW.bars)}
               >
                 {rung.goes.map((take) => (
                   <Bar
@@ -216,7 +226,8 @@ function RungRow({
 }
 
 /** A take as a bar on its rung: as long as it ran against the song's
- *  longest take, never under 6 px, with its marks as ticks and its number. */
+ *  longest take, with its marks as ticks and its number. Never under 6 px:
+ *  its least, 0.375rem, is 6 px at 100 % but 5.4 px at 90 %. */
 function Bar({
   take,
   missing,
@@ -240,7 +251,7 @@ function Bar({
         "relative flex h-6 shrink-0 items-center overflow-hidden rounded-sm border",
         missing ? TAKE_FILLS.quiet : take.starred ? TAKE_FILLS.starred : TAKE_FILLS.rest
       )}
-      style={{ width: `${drawnLength(length, longest, 7.5, 0.375)}rem` }}
+      style={{ width: `max(6px, ${drawnLength(length, longest, 7.5, 0.375)}rem)` }}
     >
       {(take.markers ?? []).map((m) => (
         <MarkTick

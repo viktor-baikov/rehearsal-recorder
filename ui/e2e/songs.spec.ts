@@ -58,7 +58,7 @@ async function chooseSong(page: Page, title: string) {
 const EVERY_PALYN = `window.__FULL_EVENING__ = true; window.__EXTRA_SONGS__ = ["Pałyn", "Pałyn"];`
 
 const lastOpened = async (page: Page) =>
-  ((await calls(page, "player_open")).at(-1)?.args[0] as { file: string }[])[0].file
+  ((await calls(page, "player_open")).at(-1)!.args[0] as { file: string }[])[0].file
 
 /**
  * Pałyn 2 of Tuesday jam opened from Pałyn's page, scrolled 200 px down,
@@ -176,8 +176,13 @@ test.describe("Songs in History", () => {
     await openApp(page, { before: "window.__STARRED__ = ['/rec/older#1'];" })
     await openSongs(page)
     await expect(head(page)).toContainText("▶ plays ★ Daroha 1 · Tue 25 Aug")
-    await head(page).getByRole("button", { name: "Play Daroha 1" }).click()
-    await expect(head(page).getByRole("button", { name: "Pause Daroha 1" })).toBeVisible()
+    // Space is its key only once its take is the one in hand.
+    const play = head(page).getByRole("button", { name: "Play Daroha 1" })
+    await expect(play).not.toHaveAttribute("aria-keyshortcuts")
+    await play.click()
+    const pause = head(page).getByRole("button", { name: "Pause Daroha 1" })
+    await expect(pause).toBeVisible()
+    await expect(pause).toHaveAttribute("aria-keyshortcuts", "Space")
     expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
       { name: "Guitar", file: "/rec/older/d1.wav" },
     ])
@@ -267,7 +272,7 @@ test.describe("Songs in History", () => {
     await expect(gone).toHaveCount(2)
   })
 
-  test("a rehearsal not on disk is greyed, with nothing to play or open", async ({ page }) => {
+  test("a rehearsal not on disk has its takes greyed, with nothing to play or open", async ({ page }) => {
     await openApp(page)
     await openSongs(page)
     await chooseSong(page, "Pałyn")
@@ -840,6 +845,8 @@ test("the song page's head: play 48 px, the title on two lines then cut, the pen
   await name.hover()
   await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(KALYCHANKA)
   await page.mouse.move(0, 0, { steps: 8 })
+  // The heading is named by the whole title alone, the pencil apart.
+  await expect(h.getByRole("heading", { name: KALYCHANKA, exact: true })).toBeVisible()
 
   // The pencil right after the last word drawn, on its line.
   const pen = (await h
@@ -1004,7 +1011,7 @@ const THIRTY_PALYN = `
   };
 `
 
-test("a rung opens with Enter, and a 30-take evening's bars wrap, none under 6 px", async ({
+test("a rung opens with Enter and Space, and a 30-take evening's bars wrap, none under 6 px", async ({
   page,
 }) => {
   await openApp(page, { after: THIRTY_PALYN })
@@ -1020,11 +1027,17 @@ test("a rung opens with Enter, and a 30-take evening's bars wrap, none under 6 p
   await page.keyboard.press("Enter")
   await expect(gone).toHaveAttribute("aria-expanded", "false")
   await expect(rungGroup(page, "/rec/gone").locator("[data-take]")).toHaveCount(0)
+  // Space too: a button reached with the keys keeps Space.
+  await page.keyboard.press("Space")
+  await expect(gone).toHaveAttribute("aria-expanded", "true")
+  await page.keyboard.press("Space")
+  await expect(gone).toHaveAttribute("aria-expanded", "false")
 
   for (const [width, height, scale] of [
     [1180, 820, 1],
     [960, 680, 1],
     [960, 680, 1.5],
+    [960, 680, 0.9],
   ] as const) {
     if (scale !== 1) {
       // The stored scale is the whole stored config, so History comes back

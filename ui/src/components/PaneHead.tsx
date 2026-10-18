@@ -14,9 +14,10 @@ import { cn } from "@/lib/utils"
  * with the pencil right after its last word, as Review's take name has it
  * (TakeName). With `actions` beside it the title has its room first and the
  * actions get what it leaves: the figures among them give way to it whole,
- * before it takes a second line. `muted` is a title in grey, such as Not
- * named. Anything else given goes on the header, such as a `data-` mark for
- * a test.
+ * before it takes a second line. The heading is named by the whole title,
+ * cut or not, and the pencil by its own name. `muted` is a title in grey,
+ * such as Not named. Anything else given goes on the header, such as a
+ * `data-` mark for a test.
  */
 export function PaneHead({
   lead,
@@ -60,7 +61,11 @@ export function PaneHead({
       {lead && <div className="shrink-0">{lead}</div>}
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-start gap-2">
+          {/* Named by the whole title alone: the pencil drawn after its last
+              word is inside the heading, and would otherwise lend it its
+              name ("Pałyn Rename song Pałyn"). The pencil keeps its own. */}
           <h2
+            aria-label={title}
             className={cn(
               "min-w-0 text-xl font-semibold",
               actions ? "flex-[0_1_auto]" : "flex-1",

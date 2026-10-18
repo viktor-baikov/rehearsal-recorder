@@ -1136,6 +1136,23 @@ test("the path under the name opens its folder, its tip in the system's words", 
   ])
 })
 
+test("a pane head's heading is named by its title alone, on a rehearsal's page and a song's", async ({
+  page,
+}) => {
+  await openApp(page)
+  await openHistory(page)
+  const head = paneHead(page)
+  await expect(head.getByRole("heading", { name: "Tuesday jam", exact: true })).toBeVisible()
+  // The pencil after the last word keeps its own name, and the keys reach it.
+  const pencil = head.getByRole("button", { name: "Rename rehearsal Tuesday jam", exact: true })
+  await pencil.focus()
+  await expect(pencil).toBeFocused()
+
+  await page.getByRole("radio", { name: "Songs", exact: true }).click()
+  await expect(head.getByRole("heading", { name: "Daroha", exact: true })).toBeVisible()
+  await expect(head.getByRole("button", { name: "Rename song Daroha", exact: true })).toBeVisible()
+})
+
 test("Delete is an icon at the head's right with its tip", async ({ page }) => {
   await openApp(page)
   await openHistory(page)
