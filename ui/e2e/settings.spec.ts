@@ -94,9 +94,10 @@ test.describe("the frame and the section list", () => {
     await expect(nav).toHaveAttribute("data-sections", "rows")
     const rows = nav.getByRole("button")
     await expect(rows).toHaveText(TAB_NAMES)
-    // Each is the shared row, on a button the keys reach.
+    // Each is the shared row, on a button the keys reach. Its data-slot is
+    // the tip's, round it, so the row is told by Item's own class.
     for (const row of await rows.all()) {
-      await expect(row).toHaveAttribute("data-slot", "item")
+      await expect(row).toHaveClass(/(^|\s)group\/item(\s|$)/)
       expect(await row.evaluate((e) => e.tagName)).toBe("BUTTON")
     }
     const selected = await colour(page, "--selected")
@@ -158,6 +159,8 @@ test.describe("the frame and the section list", () => {
       await expect(tooltip(page)).toHaveCount(0)
       await icon.hover()
       await expect(tooltip(page), name).toHaveText(name)
+      // It only repeats the name, so it is not read out again.
+      await expect(icon, name).toHaveAccessibleDescription("")
       await expect(page.locator("[data-slot='tooltip-content']")).toHaveAttribute("data-side", "right")
     }
     await away(page)
@@ -212,6 +215,7 @@ test.describe("the frame and the section list", () => {
     // The tip names the tab; the news is in the name.
     await hood.hover()
     await expect(tooltip(page)).toHaveText("Under the hood")
+    await expect(hood).toHaveAccessibleDescription("")
   })
 
   test("a window made narrower keeps the open tab, its scroll, its focus and what was typed", async ({
@@ -248,6 +252,18 @@ test.describe("the frame and the section list", () => {
     await kept("rows")
     // Nothing was left, so nothing was saved.
     expect(await callCount(page, "set_false_start")).toBe(0)
+
+    // Focus on the list stays on its section as it turns to icons and back.
+    const folders = nav.locator("[data-tab='folders']")
+    await folders.focus()
+    for (const [size, look] of [
+      [{ width: 1180, height: 820 }, "icons"],
+      [{ width: 1400, height: 900 }, "rows"],
+    ] as const) {
+      await page.setViewportSize(size)
+      await expect(nav).toHaveAttribute("data-sections", look)
+      await expect(folders, look).toBeFocused()
+    }
   })
 
   test("choosing 150 % at 960x680 turns the list to icons, and the scale keeps focus", async ({
@@ -264,9 +280,12 @@ test.describe("the frame and the section list", () => {
     await expect(largest).toHaveAttribute("aria-checked", "true")
     await expect(largest).toBeFocused()
     // And back from the keys: the focus goes along the switch and stays.
-    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft")
+    // Radix moves it just after each key, so each step is waited for.
+    for (const percent of [130, 115, 100]) {
+      await page.keyboard.press("ArrowLeft")
+      await expect(page.getByRole("radio", { name: `Scale ${percent} percent` })).toBeFocused()
+    }
     const usual = page.getByRole("radio", { name: "Scale 100 percent" })
-    await expect(usual).toBeFocused()
     await page.keyboard.press("Space")
     await expect(nav).toHaveAttribute("data-sections", "rows")
     await expect(usual).toHaveAttribute("aria-checked", "true")
@@ -391,6 +410,12 @@ test("Appearance is one group: Theme and Scale as switches, applied at once and 
   }
   await expect(theme.getByRole("radio")).toHaveText(["Dark", "Light", "Match system"])
   await expect(scale.getByRole("radio")).toHaveText(["90%", "100%", "115%", "130%", "150%"])
+  // The figures are of one width, so no scale is wider for its digits.
+  expect(
+    await scale
+      .getByRole("radio")
+      .evaluateAll((els) => els.map((e) => getComputedStyle(e.firstElementChild ?? e).fontVariantNumeric))
+  ).toEqual(Array(5).fill("tabular-nums"))
   await expect(theme.getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true")
   await expect(scale.getByRole("radio", { name: "Scale 100 percent" })).toHaveAttribute(
     "aria-checked",

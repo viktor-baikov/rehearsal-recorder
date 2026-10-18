@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Mic, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { SAID } from "@/components/SettingsGroup"
 import { DevicePicker } from "@/components/DevicePicker"
 import { OutputChannels } from "@/components/OutputChannels"
 import { cn } from "@/lib/utils"
@@ -9,9 +10,6 @@ import { describeRescan, notConnected } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
 import { api, type Device, type OutputDevice, type Settings } from "@/lib/api"
 
-// What an action in Settings said: one slot, so each says over the last.
-// Folders says in it too.
-const SAID = "settings"
 // That the open take now plays somewhere else. Its own slot: it stays true
 // after "Found …" has gone, and after leaving Settings.
 const PLAYBACK = "playback"

@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { FolderOpen, Info, ListMusic, Palette, Sliders, Tags } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Item } from "@/components/ui/item"
+import { ITEM_CHOSEN, Item } from "@/components/ui/item"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AppearanceSettings } from "@/components/AppearanceSettings"
 import { AudioSettings } from "@/components/AudioSettings"
@@ -73,8 +73,9 @@ const TABS: {
  *  are (components/HistoryRow): these win over Item's padding and wrapping
  *  and over the Button's own size. */
 const ROW = "h-auto min-h-9 w-full flex-nowrap justify-start gap-2.5 px-3 py-2 text-left whitespace-normal"
-/** The chosen section: grey, with no frame (F2, F4). */
-const CHOSEN = "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected"
+/** A section as its icon: the icon Button's square, with none of Item's
+ *  padding, and room for the new version's dot at its corner. */
+const ICON = "relative gap-0 p-0"
 
 export function Settings({
   onBack,
@@ -119,48 +120,38 @@ export function Settings({
             data-sections={wide ? "rows" : "icons"}
             className={cn("flex shrink-0 flex-col gap-1", wide && "w-52")}
           >
+            {/* One button per section, whatever the list's look, so a
+                section with the focus keeps it as the window crosses the
+                width. Its tip is there only while it is an icon. */}
             {TABS.map((t) => {
               const chosen = t.id === tab
               const news = flagged(t.id) ? `${t.label}, a new version is out` : undefined
-              if (wide) {
-                return (
-                  <Item key={t.id} asChild size="sm">
-                    <Button
-                      variant="ghost"
-                      data-tab={t.id}
-                      aria-current={chosen ? "page" : undefined}
-                      aria-label={news}
-                      onClick={() => setTab(t.id)}
-                      className={cn(ROW, chosen && CHOSEN)}
-                    >
-                      {t.icon}
-                      {t.label}
-                      {flagged(t.id) && <NewDot className="ml-auto" />}
-                    </Button>
-                  </Item>
-                )
-              }
               return (
                 <Tooltip key={t.id}>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      data-tab={t.id}
-                      aria-current={chosen ? "page" : undefined}
-                      aria-label={news ?? t.label}
-                      onClick={() => setTab(t.id)}
-                      className={cn("relative", chosen && CHOSEN)}
-                    >
-                      {t.icon}
-                      {flagged(t.id) && <NewDot />}
-                    </Button>
+                    <Item asChild size="sm">
+                      <Button
+                        variant="ghost"
+                        size={wide ? "default" : "icon"}
+                        data-tab={t.id}
+                        aria-current={chosen ? "page" : undefined}
+                        aria-label={wide ? news : (news ?? t.label)}
+                        onClick={() => setTab(t.id)}
+                        className={cn(wide ? ROW : ICON, chosen && ITEM_CHOSEN)}
+                      >
+                        {t.icon}
+                        {wide && t.label}
+                        {flagged(t.id) && <NewDot className={wide ? "ml-auto" : undefined} />}
+                      </Button>
+                    </Item>
                   </TooltipTrigger>
                   {/* The tab's name only repeats the button's, so it is for
                       the eyes, and not read out again as its description. */}
-                  <TooltipContent side="right">
-                    <span aria-hidden>{t.label}</span>
-                  </TooltipContent>
+                  {!wide && (
+                    <TooltipContent side="right">
+                      <span aria-hidden>{t.label}</span>
+                    </TooltipContent>
+                  )}
                 </Tooltip>
               )
             })}
@@ -174,12 +165,16 @@ export function Settings({
               <p className="mt-1 text-sm text-muted-foreground">{current.blurb}</p>
             </div>
 
-            {/* 48 px between a tab's groups, and 32 under the last one. */}
+            {/* 48 px between a tab's groups, and 32 under the last one. It
+                reaches 4 px past each side, padded back in, so the scroll
+                does not cut a focus ring at its edge; and it keeps the
+                scrollbar's room, so nothing moves sideways when a tab grows
+                longer than the window. */}
             <div
               data-tab-body
               className={cn(
-                "flex min-h-0 flex-1 flex-col gap-12 pb-8",
-                !current.fills && "overflow-y-auto"
+                "-mx-1 flex min-h-0 flex-1 flex-col gap-12 px-1 pb-8",
+                !current.fills && "overflow-y-auto [scrollbar-gutter:stable]"
               )}
             >
               {tab === "audio" && <AudioSettings />}

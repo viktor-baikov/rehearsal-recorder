@@ -4,6 +4,16 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { rise as riseAt } from "@/lib/motion"
 import { cn } from "@/lib/utils"
 
+/** The one slot for what an action in Settings said, so each says over the
+ *  last, whichever tab it was on. */
+export const SAID = "settings"
+
+/** A titled group can have a hint under its heading and an action at its
+ *  right. An untitled one has neither: it has no head to put them in. */
+type GroupHead =
+  | { title: string; hint?: ReactNode; action?: ReactNode }
+  | { title?: undefined; hint?: never; action?: never }
+
 /**
  * One group of a Settings tab: a group on the card's fill (C7), 24 px inside,
  * rising in at its place in the tab (F10; the tab's head is 0). With a title
@@ -20,13 +30,10 @@ export function SettingsGroup({
   style,
   children,
   ...div
-}: {
-  title?: string
-  hint?: ReactNode
-  action?: ReactNode
+}: GroupHead & {
   /** Its place in the order the tab's groups rise in, from 1. */
   rise: number
-} & ComponentProps<"div">) {
+} & Omit<ComponentProps<"div">, "title">) {
   const id = useId()
   return (
     <Card

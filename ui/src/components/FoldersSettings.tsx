@@ -3,14 +3,11 @@ import { CloudUpload, FolderOpen, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SAID } from "@/components/SettingsGroup"
 import { dismiss, notify } from "@/lib/notices"
 import { loadLabels } from "@/lib/labels"
 import { endEveryOffer, endedByPython, keptText } from "@/lib/trash"
 import { api, type CloudFormat, type Settings, type ShareWhat } from "@/lib/api"
-
-// What an action in Settings said: one slot, so each says over the last.
-// Audio says in it too.
-const SAID = "settings"
 
 // Wording matches ShareDialog's manual share options, since the two places
 // talk about the same three choices.
