@@ -600,15 +600,34 @@ class Library:
         return answer
 
     def forget_song_name(self, name):
-        """Forgets an old name (D8): typed again, it is a new song. False when
-        no song had it."""
+        """Forgets an old name (D8): typed again, it is a new song. Returns
+        {"song_id", "name"}, the song that had it and the name as it was
+        spelt, for remember_song_name to put back; None when no song had it."""
         key = str(name or "").strip().casefold()
         with self._session.begin() as db:
             found = self._names_by_key(db).get(key)
             if found is None:
-                return False
+                return None
             db.delete(found)
-            return True
+            return {"song_id": found.song_id, "name": found.name}
+
+    def remember_song_name(self, song_id, name):
+        """
+        Puts back an old name that forget_song_name took, spelt as it was.
+        Refused (SongRefused) when its song has been merged into another
+        since ("Its song is gone"), and when the name has become another
+        song's title or old name (_taken). Nothing is added when it is the
+        song's own title now, or already one of its old names.
+        """
+        with self._session.begin() as db:
+            song = db.get(Song, song_id)
+            if song is None:
+                raise SongRefused("Its song is gone")
+            self._taken(db, name, song.id)
+            key = name.casefold()
+            if key == song.title.casefold() or key in self._names_by_key(db):
+                return
+            db.add(SongName(song_id=song.id, name=name))
 
     def songs(self):
         """

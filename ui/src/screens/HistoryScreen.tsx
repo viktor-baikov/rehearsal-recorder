@@ -756,7 +756,7 @@ export function HistoryScreen({
   /** An old name forgotten from a song's page: typed again, a new song. */
   const forgetName = async (name: string) => {
     dismiss(SAID)
-    if (await forgetSongName(name)) await loadSongs()
+    if (await forgetSongName(name, () => loadSongs())) await loadSongs()
   }
 
   // Python let go of the files before rewriting them, so the take has to be

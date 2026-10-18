@@ -940,8 +940,12 @@ type PyApi = {
   /** One song's goes become another's, numbered after its own; `dryRun`
    *  only counts them, for the question. */
   merge_songs(fromId: number, intoId: number, dryRun?: boolean): Promise<MergeAnswer>
-  /** An old name forgotten: typed again, it is a new song. */
-  forget_song_name(name: string): Promise<Ok>
+  /** An old name forgotten: typed again, it is a new song. Answers whose it
+   *  was and the name as it was spelt, to put it back with. */
+  forget_song_name(name: string): Promise<Ok<{ song_id?: number; name?: string }>>
+  /** An old name put back, for the Undo of its notice. Refused when its song
+   *  is gone, or the name is another song's now. */
+  remember_song_name(songId: number, name: string): Promise<Ok>
   /** Takes a rehearsal whose folder is gone out of history. Nothing on disk
    *  is touched — there is nothing left to touch. */
   forget_rehearsal(folder: string): Promise<Ok>

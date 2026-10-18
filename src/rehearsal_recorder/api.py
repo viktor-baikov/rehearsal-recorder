@@ -3208,10 +3208,24 @@ class Api:
 
     def forget_song_name(self, name):
         """Forgets an old name of a song, from its page or from a name field:
-        typed again, it is a new song."""
-        if self._lib.forget_song_name(name):
-            return {"ok": True}
-        return {"ok": False, "error": f"No song was called {str(name or '').strip()}"}
+        typed again, it is a new song. Answers {"ok": True, "song_id",
+        "name"}, the song that had it and the name as it was spelt, for
+        remember_song_name."""
+        forgot = self._lib.forget_song_name(name)
+        if forgot is None:
+            return {"ok": False, "error": f"No song was called {str(name or '').strip()}"}
+        return {"ok": True, **forgot}
+
+    def remember_song_name(self, song_id, name):
+        """Puts back an old name that forget_song_name took, for the Undo of
+        its notice (Library.remember_song_name): {"ok": True}, or {"ok":
+        False, "error"} when its song is gone or the name is another
+        song's now."""
+        try:
+            self._lib.remember_song_name(song_id, name)
+        except SongRefused as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True}
 
     def rename_rehearsal(self, folder, new_name):
         """Renames a rehearsal and its folder. Its takes' files are kept

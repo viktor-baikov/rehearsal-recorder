@@ -996,12 +996,42 @@ def main():
     ok("an old rehearsal imported names its takes through old names too",
        names13(old13) == ["Palyn 13", "Palyn 14"])
 
-    ok("an old name is forgotten", lib.forget_song_name("POLIN") is True)
+    ok("an old name is forgotten, and the answer says whose it was and how it was spelt",
+       lib.forget_song_name("POLIN") == {"song_id": target13, "name": "polin"})
     ok("typed again, it is then a new song",
        lib.resolve_name(three13, "polin", 9) == {"song": "polin", "go": 1, "name": "polin 1"}
        and lib.song_names() == {"Palyn": ["Pałyn", "Polyn"]})
     ok("a name no song was called is not forgotten twice",
-       lib.forget_song_name("polin") is False)
+       lib.forget_song_name("polin") is None)
+
+    ok("a name forgotten is remembered again, spelt as it was",
+       lib.remember_song_name(target13, "polin") is None
+       and lib.song_names() == {"Palyn": ["Pałyn", "polin", "Polyn"]}
+       and lib.resolve_name(three13, "POLIN", 9)["song"] == "Palyn")
+    lib.remember_song_name(target13, "Polin")
+    ok("remembered twice, it is still there once",
+       lib.song_names() == {"Palyn": ["Pałyn", "polin", "Polyn"]})
+    lib.remember_song_name(target13, "PALYN")
+    ok("the song's own title is not one of its old names",
+       lib.song_names() == {"Palyn": ["Pałyn", "polin", "Polyn"]})
+
+    lib.forget_song_name("Polyn")
+    lib.rename_song(viasna13, "Polyn")
+    ok("a name that is another song's title now is refused, naming that song",
+       refused13(lib.remember_song_name, target13, "polyn")
+       == ("There is already a song called Polyn", {"id": viasna13, "title": "Polyn"}))
+    lib.rename_song(viasna13, "Viasna")
+    ok("and one that is another song's old name now, naming that song",
+       refused13(lib.remember_song_name, target13, "Polyn")
+       == ("Polyn is Viasna now", {"id": viasna13, "title": "Viasna"})
+       and lib.song_names() == {"Palyn": ["Pałyn", "polin"], "Viasna": ["Polyn"]})
+
+    ok("another song's old name is forgotten the same way",
+       lib.forget_song_name("Polyn") == {"song_id": viasna13, "name": "Polyn"})
+    lib.merge_songs(viasna13, target13)
+    ok("and once its song is merged away it is not brought back: the song is gone",
+       refused13(lib.remember_song_name, viasna13, "Polyn") == ("Its song is gone", None)
+       and refused13(lib.remember_song_name, 999, "Polyn") == ("Its song is gone", None))
     lib.close()
 
     print("\n[14] Sets (migration 0006)")

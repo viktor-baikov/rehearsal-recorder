@@ -868,3 +868,58 @@ test("an Undo that fails in the page itself is said on the bar and sent to the c
   expect(String(sent.args[3])).toContain("TypeError")
   expectedError(pageErrors, /Undo failed/)
 })
+
+// An old name forgotten from a song's page is offered back, as a removal is:
+// the notice has Undo. Python refuses it when the name has become another
+// song's since, and the notice then says why.
+
+const OLD_PALYN = "window.__OLD_NAMES__ = [['Palyn', 'Pałyn']];"
+
+/** A song's page: Songs on the switch above History's list, then the song. */
+async function openSong(page: Page, title: string) {
+  await openHistory(page)
+  await page.getByRole("group", { name: "History view" }).getByText("Songs", { exact: true }).click()
+  await page.getByRole("navigation", { name: "Songs" }).locator(`[data-song='${title}']`).click()
+  await expect(
+    page.locator("[data-song-head]").getByRole("heading", { name: title, exact: true })
+  ).toBeVisible()
+}
+
+const forgetPalyn = (page: Page) =>
+  page.locator("[data-song-head] [data-old-names]").getByRole("button", {
+    name: "Forget Palyn",
+    exact: true,
+  })
+
+test("forgetting an old name on a song's page says so, and Undo brings it back", async ({
+  page,
+}) => {
+  await openApp(page, { before: OLD_PALYN })
+  await openSong(page, "Pałyn")
+  await forgetPalyn(page).click()
+  await expect(forgetPalyn(page)).toHaveCount(0)
+
+  const notice = said(page, "“Palyn” was forgotten.")
+  await expect(notice).toHaveAttribute("data-notice", "done")
+  await notice.getByRole("button", { name: "Undo" }).click()
+
+  await expect(forgetPalyn(page)).toBeVisible()
+  await expect(notice).toHaveCount(0)
+  expect((await calls(page, "remember_song_name")).map((c) => c.args[1])).toEqual(["Palyn"])
+})
+
+test("Undo of a forgotten name that has become another song's says why", async ({ page }) => {
+  await openApp(page, {
+    before: OLD_PALYN,
+    after:
+      "window.pywebview.api.remember_song_name = async () => ({ok: false, error: 'Palyn is Viasna now'});",
+  })
+  await openSong(page, "Pałyn")
+  await forgetPalyn(page).click()
+  await said(page, "“Palyn” was forgotten.").getByRole("button", { name: "Undo" }).click()
+
+  const refused = notices(page, "error")
+  await expect(refused).toHaveCount(1)
+  await expect(refused).toContainText("Could not bring back Palyn: Palyn is Viasna now")
+  await expect(forgetPalyn(page)).toHaveCount(0)
+})
