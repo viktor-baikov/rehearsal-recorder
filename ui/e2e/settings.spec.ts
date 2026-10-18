@@ -596,7 +596,7 @@ test.describe("Audio and Folders", () => {
     expect(await blue()).toEqual([])
 
     await group(page, "Folders").click()
-    await switches(["What the copies are written as", "What gets sent"])
+    await switches(["Copies are written as", "What gets sent"])
     // The shared box, ticked in the text's colour where the system's was blue.
     const auto = page.locator("#auto-publish")
     await expect(auto).toHaveAttribute("data-slot", "checkbox")

@@ -6437,7 +6437,7 @@ def main():
     sent59 = s59.send_starred(live59)
     ok("the starred takes not in the cloud folder are sent",
        sent59 == {"ok": True, "queued": [1], "failed": []})
-    ok("as Settings' What gets published says",
+    ok("as Settings' What gets sent says",
        [j[1:] for j in s59._cloud_queue._jobs] == [[1, "both"]])
     ok("a take already waiting is not sent again",
        s59.send_starred(live59) == {"ok": True, "queued": [], "failed": []}

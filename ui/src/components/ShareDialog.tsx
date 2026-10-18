@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils"
 import { api, type ShareWhat, type Take } from "@/lib/api"
 import { pollSoon } from "@/lib/activity"
 import { dismiss } from "@/lib/notices"
-import { SHARE_OPTIONS } from "@/lib/share"
+import { SHARE_INTRO, SHARE_OPTIONS } from "@/lib/share"
 import { reloadEveningSettings } from "@/hooks/useEveningSettings"
 import { useAfter } from "@/hooks/useAfter"
 import { useErrorNotice } from "@/hooks/useErrorNotice"
@@ -53,7 +53,10 @@ export function ShareDialog({
   onOpenChange: (open: boolean) => void
   onDone: () => void
 }) {
-  const [cloudDir, setCloudDir] = useState<string | null>(null)
+  // The cloud folder, null when none is set, and undefined until the
+  // setting is read: then the line says nothing either way.
+  const [cloudDir, setCloudDir] = useState<string | null | undefined>(undefined)
+  const none = cloudDir === null
   const [busy, setBusy] = useState<ShareWhat | "remove" | null>(null)
   const failed = useErrorNotice(SHARE)
   // Remove keeps its icon for the first second of a removal (B5).
@@ -128,30 +131,34 @@ export function ShareDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Copy “{shown?.name ?? ""}” to the cloud</DialogTitle>
-          <DialogDescription>
-            The files are copied into your cloud folder, and the app that syncs it does the
-            uploading.
-          </DialogDescription>
+          <DialogDescription>{SHARE_INTRO}</DialogDescription>
         </DialogHeader>
 
         {/* With no folder, the shared warning look: the triangle in the
-            warn colour and the words in the text's own. */}
+            warn colour and the words in the text's own. Until the setting
+            is read, the folder's icon and nothing else, with the button's
+            room kept, so a folder that is set never shows as missing. */}
         <div className="flex items-center gap-2 rounded-lg border bg-background/50 px-3 py-2">
-          {cloudDir ? (
-            <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
-          ) : (
+          {none ? (
             <TriangleAlert className="size-3.5 shrink-0 text-warn" />
+          ) : (
+            <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
           )}
           <span
             className={cn(
               "flex-1 truncate text-xs",
-              cloudDir ? "font-mono text-muted-foreground" : "text-foreground"
+              none ? "text-foreground" : "font-mono text-muted-foreground"
             )}
           >
-            {cloudDir ?? "No cloud folder chosen yet"}
+            {none ? "No cloud folder chosen yet" : cloudDir}
           </span>
-          <Button variant="ghost" size="row" onClick={pickFolder}>
-            {cloudDir ? "Change" : "Choose"}
+          <Button
+            variant="ghost"
+            size="row"
+            onClick={pickFolder}
+            className={cn(cloudDir === undefined && "invisible")}
+          >
+            {none ? "Choose" : "Change"}
           </Button>
         </div>
 

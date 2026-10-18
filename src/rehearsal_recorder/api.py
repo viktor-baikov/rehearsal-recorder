@@ -5541,7 +5541,7 @@ class Api:
     def send_starred(self, folder):
         """
         Send starred: every ★ take of a rehearsal with nothing of it in the
-        cloud folder and no copy waiting, queued as What gets published says.
+        cloud folder and no copy waiting, queued as What gets sent says.
         A take already there is not sent again, even if the setting has
         changed since; its share dialog is there for that. A take that cannot
         be sent (its files gone) is in `failed`, with why.

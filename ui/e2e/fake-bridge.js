@@ -1844,7 +1844,7 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({ok:true, take, cloud:shared}));
   }),
   // api.send_starred: the ★ takes with nothing in the cloud folder go as
-  // What gets published says. A tonight's copy is made at once here; an
+  // What gets sent says. A tonight's copy is made at once here; an
   // older rehearsal's waits in the activity list, as Python's queue has it.
   // __UNSENDABLE__ lists take numbers whose files are gone.
   send_starred: track('send_starred', async (folder) => {

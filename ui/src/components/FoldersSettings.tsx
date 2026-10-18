@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { CloudUpload, FolderOpen, RotateCcw } from "lucide-react"
 import { Warning } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,8 @@ export function FoldersSettings() {
   const [dir, setDir] = useState("")
   const [cloudDir, setCloudDir] = useState("")
   const [falseStart, setFalseStart] = useState("")
+  // The false-start field's unit, which a screen reader says after its name.
+  const unitId = useId()
 
   useEffect(() => {
     ;(async () => {
@@ -226,9 +228,10 @@ export function FoldersSettings() {
             onKeyDown={(e) => {
               if (e.key === "Enter") void applyFalseStart()
             }}
+            aria-describedby={unitId}
             className="tnum w-20"
           />
-          <span>seconds</span>
+          <span id={unitId}>seconds</span>
         </div>
       </SettingsGroup>
 
@@ -282,10 +285,10 @@ export function FoldersSettings() {
 
         {/* The cloud folder is the gate. Without one there are no copies,
             so the questions below have no subject: what a copy is written
-            as, whether it goes on its own, what of it goes. They are not
-            greyed out but absent, and the field above says the whole of it,
-            with its own Browse beside it. Greyed out they were dead rows
-            and sentences about copies that cannot happen. */}
+            as, whether it goes on its own, what of it goes. They are left
+            out, and the field above says the whole of it, with its own
+            Browse beside it. Greyed out they were dead rows and sentences
+            about copies that cannot happen. */}
         {settings?.cloud_dir && (
           <>
             {/* What a copy is written as comes first, right under the
@@ -294,7 +297,7 @@ export function FoldersSettings() {
                 the row, the word on the choice in force. */}
             <div className="flex flex-col gap-2">
               <PickRow
-                label="What the copies are written as"
+                label="Copies are written as"
                 value={settings.cloud_format}
                 options={settings.cloud_formats.map((f) => ({ value: f.id, label: f.label }))}
                 onChange={(f) => void setFormat(f)}
@@ -303,9 +306,8 @@ export function FoldersSettings() {
               {settings.encoder_hint && settings.cloud_format !== "wav" && (
                 <Warning>{settings.encoder_hint}</Warning>
               )}
-              {/* Not about the choice above but about all of them, so it
-                  is set apart from the answer rather than read as a second
-                  sentence of it. */}
+              {/* This is about every format, so it stands apart from the
+                  chosen one's words, where it would read as more of them. */}
               <p className="mt-2 text-xs text-muted-foreground">
                 Only the copies are affected. What was recorded stays untouched
                 WAV on disk: it is the one thing here that cannot be made again.

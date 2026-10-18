@@ -1010,7 +1010,7 @@ type PyApi = {
   >
   clear_cloud_dir(): Promise<Ok>
   /** Queues the rehearsal's ★ takes with no copy in the cloud folder and
-   *  none waiting, as What gets published says. `failed`: the ones that
+   *  none waiting, as What gets sent says. `failed`: the ones that
    *  could not be sent (their files gone), with why. */
   send_starred(folder: string): Promise<
     Ok<{

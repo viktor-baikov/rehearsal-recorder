@@ -17,7 +17,7 @@ const OFF =
 
 /**
  * The evening's two buttons, over its takes: Send starred copies every ★
- * take not yet in the cloud folder, as Settings' What gets published says;
+ * take not yet in the cloud folder, as Settings' What gets sent says;
  * Clear false starts moves the takes too short to be anything to the Trash,
  * at once, with Undo. Each says how many it would act on, and when that is
  * none, why: in a tip under the mouse, and as the button's description for
@@ -57,7 +57,7 @@ export function EveningActions({
     : !takes.some((t) => t.starred)
       ? "No take has ★"
       : toSend.length > 0
-        ? "Copy every ★ take to the cloud folder, as What gets published says"
+        ? "Copy every ★ take to the cloud folder, as What gets sent says"
         : onTheWay
           ? "Every ★ take is in the cloud folder or on its way"
           : "Every ★ take is in the cloud folder"

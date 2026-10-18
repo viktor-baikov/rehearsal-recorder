@@ -1,5 +1,9 @@
 import type { ShareWhat } from "@/lib/api"
 
+/** What the share dialog says under its title: how a copy gets up. */
+export const SHARE_INTRO =
+  "The files are copied into your cloud folder, and the app that syncs it does the uploading."
+
 /**
  * What a take can go up to the cloud folder as, each with the line that
  * says what it is for. The share dialog offers them for one take, and
