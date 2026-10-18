@@ -1,11 +1,12 @@
 // `npm run design-check`: refuses source that breaks the design rules (K3).
 // The rules themselves are in design-rules.mjs; this walks src/ and reports.
 //
-// Screens that have not been redone yet are in design-check.allow.json, as
-// { "src/screens/X.tsx": ["radius", ...] }: that file and that rule are let
-// through. Each screen's PR takes its entries out; the check fails on an entry
-// that no longer matches anything, so the list can only shrink. Nothing in
-// src/components/ui/ can be listed: fix it there.
+// design-check.allow.json let a screen not yet redone break a rule, as
+// { "src/screens/X.tsx": ["radius", ...] }, while the screens were redone one
+// PR at a time. Every screen is redone, and the list is empty for good, `{}`:
+// design-rules.test.mjs fails when anything is put back on it. The check
+// still reads it, and fails on an entry that matches nothing and on any entry
+// in src/components/ui/.
 //
 // Prints one line per problem, `path:line rule text`, and exits 1 if there is
 // any.

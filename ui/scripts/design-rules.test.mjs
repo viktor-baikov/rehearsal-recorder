@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { checkText, judge, missingStories, RULES } from "./design-rules.mjs"
 
@@ -547,5 +548,14 @@ describe("the allow-list", () => {
     expect(ui.some((p) => /components\/ui/.test(p.text))).toBe(true)
     const odd = judge(found, { "src/screens/A.tsx": ["radius", "uppercase", "nonsense"] })
     expect(odd.some((p) => p.rule === "nonsense")).toBe(true)
+  })
+})
+
+describe("design-check.allow.json", () => {
+  // Settings was the last screen: the list is empty for good, so a new
+  // screen keeps the rules from its first line.
+  it("the allow-list is empty: every screen is redone", () => {
+    const list = new URL("../design-check.allow.json", import.meta.url)
+    expect(JSON.parse(readFileSync(list, "utf8"))).toEqual({})
   })
 })

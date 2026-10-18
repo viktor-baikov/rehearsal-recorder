@@ -17,25 +17,19 @@ shows the app as it is; the site keeps its own big headings and layout
 ## Where things stand
 
 The foundation is in: the theme values, the shared components, Undo, the
-showcase and the check. The start screen is redone on it, and so are the
+showcase and the check. Every screen is redone on it: the start screen, the
 rehearsal screen, the recording screen, Review (the screen after Stop),
-History, Drafts (the unsaved takes the app offers at its start), and the
-big player that Review and History open takes in: their pieces are the
-shared ones, and their files are off the check's
-[allow-list](#the-check). The one piece the start screen still builds on
-its own is the song list in New set, which it shares with Settings' Sets
-and which is redone with Settings. Settings is the last screen, in a pull
-request of its own. Until its turn it is on the allow-list and may still
-break the rules it is listed for. Where a rule below says "as each screen
-is redone", the screens' pull requests carry it out, and so far the start
-screen's, the rehearsal screen's, the recording screen's, Review's,
-History's and Drafts' have. On reha.stream the pieces of the app are the
-real components and follow the theme already, but the page itself takes
+History, Drafts (the unsaved takes the app offers at its start), Settings,
+and the big player that Review and History open takes in. Their pieces are
+the shared ones, New set's song list included, which the start screen
+shares with Settings' Sets, and the check's [allow-list](#the-check) is
+empty. Where a rule below says "as each screen is redone", the screens'
+pull requests have carried it out. On reha.stream the pieces of the app are
+the real components and follow the theme already, but the page itself takes
 only the accent from it so far (`--page-accent: var(--primary)` in
-`site/src/page/page.css`). After the last screen, reha.stream's own
-background, text colours and font (Instrument Sans) take the shared ones,
-and the release comes when the allow-list is empty: the new look goes out
-in that one release.
+`site/src/page/page.css`). Next, reha.stream's own background, text colours
+and font (Instrument Sans) take the shared ones, and then the new look goes
+out in one release.
 
 ## The foundation
 
@@ -325,8 +319,18 @@ piece of its own moves onto the shared one when it is redone.
   pane head, `PaneHead` (`components/PaneHead.tsx`), heads History's three
   pages, a rehearsal's, a song's and a label's: what leads it, the title
   with the pencil after it, the lines under it and the actions at the right
-  (B6). Only History uses it, so it is not in `components/ui/` (U3). The
-  rest are added by the first screen's pull request that needs them: one ✕,
+  (B6). Only History uses it, so it is not in `components/ui/` (U3).
+  Settings' tabs are built from two more, in `components/SettingsGroup.tsx`.
+  `SettingsGroup` is one group of a tab: a `Card` 24 px inside that rises
+  in at its place. Given a title, it is a region named by its heading, with
+  a hint under the heading and an action at its right, where Keys puts its
+  switches. `PickRow` is a pick-one in a group: the row's name with the
+  shared `switch` beside it, named by it. Rate, Depth, the copies' format,
+  What gets sent, Theme and Scale are `PickRow`s, and Keys' On and Off are
+  the same switch at a group's head, so every choice of one among a few
+  words in Settings looks and works alike. Only Settings uses them, so they
+  are not in `components/ui/` (U3). The rest are added by the first
+  screen's pull request that needs them: one ✕,
   one link, one size of icon button, a field with a button (InputGroup),
   screen header and side panel. A take's name is written by `TakeTitle`
   (`components/TakeTitle.tsx`) everywhere, where today one list uses it and
@@ -605,8 +609,14 @@ as the `cn` import.
   `lib/songNames.ts`), or says why it cannot, when the name has become
   another song's since or its song was merged away. "Make Palyn a new song"
   under a name field forgets the name with no notice: the field takes it at
-  once, as a new song's. One more removal that happens at once gets the same
-  notice when Settings is redone: a song taken out of a set.
+  once, as a new song's. A song taken out of a set by its ✕ in
+  Settings › Sets has it too ("“Pałyn” was taken out of the set."), a
+  notice for each song, so two taken out keep an Undo each
+  (`set-song:{n}`). Undo puts the song back into its set as Python has it
+  then, before the song that followed it, or at its old place if that one
+  has gone too (`putSongBack` in `hooks/useSets.ts`), whichever screen is up
+  by then; if the set has been deleted, it says so. In New set on the start
+  screen ✕ raises no notice: nothing is saved there until Create set.
 - **B2. A question only where nothing can be undone**: finishing a rehearsal
   by Esc, removing a rehearsal from history, deleting a label that has
   marks, deleting a set, and merging two songs. Each is a `ConfirmDialog`,
@@ -638,8 +648,11 @@ as the `cn` import.
   shows its progress in the place of its line, both 16 px, so the row keeps
   its height, and the footer's word and the rows' Recover stay as they were
   when a button was pressed until the run ends. A footer button's error is
-  an error notice (C4), so it moves nothing. These are the model; the rest
-  as each screen is redone.
+  an error notice (C4), so it moves nothing. With its keys off in
+  Settings › Keys (B9), a key chip is not drawn and keeps no room. The
+  unseen chips above hold theirs because they come back while their screen
+  is up; keys turned off come back only from Settings, another screen.
+  These are the model; the rest as each screen is redone.
 - **B5. Loading.** Under 1 s nothing shows, so a quick answer does not
   flash; from 1 s a spinner takes the place of what is loading; past 10 s it
   says what it is doing. `PlayButton` already waits its second
@@ -649,8 +662,12 @@ as the `cn` import.
   their second too, then turn a Spinner in the button that is working, and
   a take's progress comes from the journal. While History reads its
   rehearsals, it shows the Spinner, unseen for its first second, and from
-  10 s "Reading the folder…" beside it (`useAfter`). The rest as each
-  screen is redone, on shadcn's Spinner.
+  10 s "Reading the folder…" beside it (`useAfter`). Settings' Look again
+  keeps its words and its width while it looks, and after its second a
+  Spinner takes its icon's place. While Under the hood asks Python for its
+  page, it shows the Spinner, unseen for its first second, and from 10 s
+  says beside it what it is doing. The rest as each screen is redone, on
+  shadcn's Spinner.
 - **B6. Long names.** A name never gives way to a secondary figure: the name
   is what tells one thing from another. The figure wraps, goes first, or
   hides and shows on hover, as a recording tile's dB figure does; a cut
@@ -697,15 +714,33 @@ as the `cn` import.
   no song yet ("A take named after a song shows up here."), a rehearsal
   with no takes left, and a label with no marks, which says where they come
   from ("Marks given the label Fix in the player gather here, from every
-  rehearsal.").
+  rehearsal."). Settings › Sets has two. With no set yet, one across both
+  columns says what a set is and how one is made ("A set is the songs a
+  rehearsal goes through, in order. Make one with New set, then pick it
+  beside Start rehearsal."), with New set in it. A set with no songs says
+  "No songs yet" and "Add them below, in the order you play them."
 - **B8. Wording.** A name in a title is in quotes (*Delete “Fix”?*). A
   sentence said in two places comes from one place. Each kind of figure is
   written one way, through `lib/format.ts`, and a screen shows a figure
   once.
-- **B9. Single-key shortcuts can be turned off** in Settings, on by default.
-  Space starts a take and ↑ and ↓ pick the next take's song, and WCAG 2.1.4
-  asks for a way to turn off shortcuts that are one plain key. Nothing does
-  this yet.
+- **B9. Single-key shortcuts can be turned off**, in Settings › Keys, and
+  are on by default. Space starts a take and ↑ and ↓ pick the next take's
+  song, and WCAG 2.1.4 asks for a way to turn off shortcuts that are one
+  plain key. The tab has two groups, each with its switch at its head (the
+  shared `switch`, On and Off) and a row per screen under it of what its
+  keys do there. "Space and Esc" is Space's main action and Esc's step back
+  on every screen. "The player's keys" are the arrows, Home, M, R and ? in
+  the player, and ↑ and ↓ on the rehearsal screen and in History's lists.
+  `lib/keys.ts` holds the two, in force as soon as they are switched, and
+  Python keeps them (`save_keys`, as `space_keys` and `player_keys`).
+  Anything there but `false` is on, so a config edited by hand never turns
+  keys off. Off, the key hooks (`hooks/useSpacebar.ts`) leave those keys to
+  the browser: Space presses the focused button, even one the mouse left
+  focused, and ↑ and ↓ in the Next take field are the field's. Their chips
+  (`Kbd`) are not drawn (B4), and their keys leave the buttons'
+  `aria-keyshortcuts`. The player's keys button stays, and its list names
+  only the keys that work. ⌘Z or Ctrl+Z, and Esc in a dialog or a text
+  field, always work.
 
 ## Where the rules live
 
@@ -769,20 +804,16 @@ says what each broken rule is for. The rules are in
 | `dialog` | `role="dialog"` or `<dialog>` outside `components/ui/`; a selector that finds one, `[role="dialog"]`, passes |
 | `story` | a component in `components/ui/` with no story beside it |
 
-**The allow-list.** The screens not yet redone are in
-`ui/design-check.allow.json`, by file and rule; one of its entries:
-
-```json
-{
-  "src/screens/Settings.tsx": ["raw-colour", "raw-button"]
-}
-```
-
-A file on the list may break the rules it is listed for, and no others.
-Each screen's pull request takes its files off. A listed pair with nothing
-left to find fails the check too, so the list only ever gets shorter; it is
-empty before the release. Nothing in `components/ui/` can be listed: that is
-where the rules are kept, so a problem there is fixed.
+**The allow-list.** While the screens were redone, one pull request each,
+`ui/design-check.allow.json` let a file not yet redone break the rules it
+was listed for, by file and rule, and each screen's pull request took its
+files off. Every screen is redone, and the list is empty for good, `{}`: a
+new screen or feature keeps the rules from its first line. The test
+*the allow-list is empty: every screen is redone*, in
+`ui/scripts/design-rules.test.mjs`, fails when anything is put back on the
+list, and the check says "0 known cases in 0 files are on the allow-list".
+Nothing in `components/ui/` could ever be listed: that is where the rules
+are kept, so a problem there is fixed.
 
 **`design-ok`.** Two kinds of thing are outside what the rules mean: a
 small graphic that keeps its own corner, such as a marker's diamond on the
@@ -797,6 +828,6 @@ from the code, in `components/Timeline.tsx` and `screens/Recording.tsx`:
 // design-ok(px-text): the recording clock is sized from the window's height (CLOCK_SIZE)
 ```
 
-A comment with no reason lets off nothing. It is not a way round the
-allow-list: a screen that is not done yet belongs on the list, where its own
-pull request will find it.
+A comment with no reason lets off nothing, and it is for those two kinds
+only: any other line that breaks a rule is fixed, since nothing goes on the
+allow-list any more.
