@@ -146,7 +146,7 @@ test("the sets tile shows a rehearsal mid-set", async ({ page }) => {
   const piece = tile.getByRole("img", { name: /Gig on the 25th/ })
   await expect(piece.locator("textarea")).toHaveValue("Viasna")
   const card = piece.locator("[data-set-card]")
-  await expect(card.locator("h2")).toHaveText("Gig on the 25th — 1 of 6 played")
+  await expect(card.locator("h2")).toHaveText("Gig on the 25th · 1 of 6 played")
   await expect(card.locator("[data-set-song]")).toHaveText([
     /^1Pałyn4 takes$/,
     /^2Viasna$/,

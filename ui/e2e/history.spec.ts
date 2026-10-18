@@ -858,7 +858,7 @@ for (const [what, long] of LONG_NAMES) {
     expect(meta.y, "the line under the name").toBeGreaterThanOrEqual(title.y + title.height - 0.5)
 
     await name.hover()
-    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(LONG_SONG)
   })
 }
 
@@ -1418,6 +1418,10 @@ const PLAYED_BY_SET =
   "window.__FULL_EVENING__ = true;" +
   `window.__PLAYED_BY__ = {"/rec/old": {name: "Gig on the 25th", songs: ["Viasna", "Pałyn", "Ahoń", "Kupalle"]}};`
 
+/** The same set with a last song whose name is longer than its row. */
+const LONG_SONG = "A song whose name is far too long for its half of the set card, however it is read"
+const PLAYED_BY_SET_LONG = PLAYED_BY_SET.replace('"Kupalle"', JSON.stringify(LONG_SONG))
+
 test("a rehearsal played by a set shows its name in the list and under its title", async ({
   page,
 }) => {
@@ -1446,7 +1450,7 @@ test("a rehearsal played by a set shows its name in the list and under its title
   const cut = under.locator("[data-cut]")
   await expect(cut).toHaveText(long)
   await cut.hover()
-  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
+  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(LONG_SONG)
   await page.mouse.move(0, 0, { steps: 8 })
 
   // The set gives way before the folder does: its button keeps its icon
@@ -1500,9 +1504,11 @@ test("the set card counts what was played and says not played for the rest", asy
 test("the set card is the first part of the evening's group, in two columns when wide", async ({
   page,
 }) => {
-  await openApp(page, { before: PLAYED_BY_SET })
+  await openApp(page, { before: PLAYED_BY_SET_LONG })
   await openHistory(page, "Tuesday jam")
   await settled(page)
+  // History's own scrolling pane: the window never scrolls sideways here.
+  const pane = () => page.locator("section").filter({ has: paneHead(page) })
   const group = page.locator("[data-songs-group]")
   const head = group.locator("[data-overview-head]")
   const part = group.locator("[data-set-part]")
@@ -1536,6 +1542,7 @@ test("the set card is the first part of the evening's group, in two columns when
     return new Set(boxes.map((b) => Math.round(b.x))).size
   }
   expect(await columns()).toBe(2)
+  expect(await sideways(page, pane()), "wide: nothing scrolls sideways").toBe(false)
   await page.setViewportSize({ width: 960, height: 680 })
   await page.addInitScript(scaled(1.5))
   await page.reload()
@@ -1546,10 +1553,8 @@ test("the set card is the first part of the evening's group, in two columns when
   const ys = await Promise.all([0, 1, 2, 3].map(async (i) => (await rows.nth(i).boundingBox())!.y))
   expect(ys).toEqual([...ys].sort((a, b) => a - b))
   expect(new Set(ys).size).toBe(4)
-  // Nothing scrolls sideways.
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
-  ).toBe(true)
+  // The long name is cut in its row: nothing scrolls sideways.
+  expect(await sideways(page, pane()), "narrow: nothing scrolls sideways").toBe(false)
 })
 
 test("the set card's ticks are in the text's colour", async ({ page }) => {
@@ -1566,16 +1571,15 @@ test("a song of the set card cut short is whole on hover, though it was not play
   page,
 }) => {
   // A disabled button gets no pointer events, so the item round it carries the tip.
-  const long = "A song whose name is far too long for its half of the set card, however it is read"
   await page.setViewportSize({ width: 960, height: 680 })
-  await openApp(page, { before: PLAYED_BY_SET.replace('"Kupalle"', JSON.stringify(long)) })
+  await openApp(page, { before: PLAYED_BY_SET_LONG })
   await openHistory(page, "Tuesday jam")
   await settled(page)
-  const song = page.locator(`[data-set-song=${JSON.stringify(long)}]`)
+  const song = page.locator(`[data-set-song=${JSON.stringify(LONG_SONG)}]`)
   await expect(song).toBeDisabled()
   expect(await song.locator("[data-row-title]").evaluate((e) => e.scrollWidth > e.clientWidth)).toBe(true)
   await song.locator("xpath=..").hover()
-  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
+  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(LONG_SONG)
 })
 
 test("a click on a played song in the set card scrolls to it", async ({ page }) => {

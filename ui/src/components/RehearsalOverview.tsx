@@ -179,7 +179,8 @@ export function RehearsalOverview({
         {head}
         {/* The set the evening was played by is the group's first part: what
             was played of it, each song played going to its own below. The
-            card's rows line up with the songs' names, as a take's row does. */}
+            card's title lines up with the songs' names; its rows reach 8 px
+            further out, as a take's row does. */}
         {set && (
           <div data-set-part className={cn("px-6 py-6", head && "border-t")}>
             <div className="-mx-2">

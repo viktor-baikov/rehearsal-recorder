@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils"
 // the set the rehearsal plays by, then the band's other songs, as rows like
 // the set's. A click on a row names the next take after it. Each is a part
 // of the panel's one group, under a line the screen draws; neither has a
-// frame of its own.
+// frame of its own. The set's card is History's too, over the songs of a
+// rehearsal played by a set (`onGoTo`): there a click goes to the song's takes.
 
 // A row is the shared Button (C1); the row the field names is selected, grey
 // (F2), and the ↑ ↓ row while typing shows the focus ring rather than a ring
@@ -21,9 +22,9 @@ import { cn } from "@/lib/utils"
 const ROW = "h-9 w-full justify-start gap-3 px-2 text-left text-sm font-normal"
 
 /** One song: its number in the set (none in the other songs, whose names
- *  still line up with the set's), the title, and its goes tonight. With
- *  `recap` (History's card) a song with no goes is disabled and says *not
- *  played*, and a click on one played goes to it. */
+ *  still line up with the set's), the title, and its takes tonight. With
+ *  `recap` (History's card) a song with no takes is disabled and says *not
+ *  played*, and a click on one played scrolls to its takes. */
 function SongRow({
   title,
   number,
@@ -41,7 +42,7 @@ function SongRow({
   lit: boolean
   next?: boolean
   highlighted: boolean
-  onPick?: (title: string) => void
+  onPick: (title: string) => void
   data: Record<string, string>
   recap?: boolean
 }) {
@@ -59,7 +60,7 @@ function SongRow({
       // half typed in it is dropped, not sent (TakeNameField's `put`).
       // History has no field to keep it for.
       onMouseDown={recap ? undefined : (e) => e.preventDefault()}
-      onClick={() => onPick?.(title)}
+      onClick={() => onPick(title)}
       className={cn(
         ROW,
         // A row that is not played is not dimmed as a disabled button is:
@@ -139,6 +140,29 @@ export function PanelParts({ children, bleed = 0 }: { children: ReactNode; bleed
   ))
 }
 
+/** The field's state, or History's `onGoTo`: not both. */
+type SetCardProps = {
+  set: RehearsalSet
+  /** Takes tonight by song. */
+  goes: Map<string, number>
+} & (
+  | {
+      /** The song the field names. */
+      current: string | null
+      onPick: (title: string) => void
+      /** The row the arrow keys are on while the field is typed in. */
+      highlighted: string | null
+      onGoTo?: undefined
+    }
+  | {
+      /** History's card: a click on a song played scrolls to its takes. */
+      onGoTo: (title: string) => void
+      current?: undefined
+      onPick?: undefined
+      highlighted?: undefined
+    }
+)
+
 /**
  * The set (R1): "Gig on the 25th · 2 of 6 played", then its songs in
  * order, numbered. The song the field names is lit and the row after it
@@ -147,31 +171,18 @@ export function PanelParts({ children, bleed = 0 }: { children: ReactNode; bleed
  * evening as it is long.
  *
  * It is the same card in History (`onGoTo`), where the evening is over: a
- * song played goes to its own takes, one not played is disabled and says so,
- * and nothing is next, lit or under the arrow keys. A card 32rem wide or
- * more reads the songs down two columns, as a numbered list is read, and
- * under that in one.
+ * song played scrolls to its own takes, one not played is disabled and says
+ * so, and nothing is next, lit or under the arrow keys: it is given none of
+ * the field's state, and ignores it if it is. A card 32rem wide or more
+ * reads the songs down two columns, as a numbered list is read, and under
+ * that in one.
  */
-export function SetCard({
-  set,
-  goes,
-  current = null,
-  onPick,
-  highlighted = null,
-  onGoTo,
-}: {
-  set: RehearsalSet
-  /** Goes tonight by song. */
-  goes: Map<string, number>
-  /** The song the field names. */
-  current?: string | null
-  onPick?: (title: string) => void
-  /** The row the arrow keys are on while the field is typed in. */
-  highlighted?: string | null
-  /** History's card: a click on a song played goes to its takes. */
-  onGoTo?: (title: string) => void
-}) {
-  const recap = onGoTo !== undefined
+export function SetCard(props: SetCardProps) {
+  const { set, goes } = props
+  const recap = props.onGoTo !== undefined
+  const current = props.onGoTo ? null : props.current
+  const highlighted = props.onGoTo ? null : props.highlighted
+  const pick = props.onGoTo ? props.onGoTo : props.onPick
   const titles = set.songs.map((s) => s.title)
   const played = titles.filter((t) => (goes.get(t) ?? 0) > 0).length
   const at = current === null ? -1 : titles.indexOf(current)
@@ -219,7 +230,7 @@ export function SetCard({
               lit={i === at}
               next={i !== at && title === next}
               highlighted={highlighted === title}
-              onPick={onGoTo ?? onPick}
+              onPick={pick}
               recap={recap}
               data={{ "data-set-song": title }}
             />
