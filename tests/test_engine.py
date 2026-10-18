@@ -12280,7 +12280,7 @@ def main():
     ok("and they are still off after a restart, the player's keys still on",
        keys78(again78) == (False, True))
     saved78 = (tmp78 / "config.json").read_text()
-    ok("keys there are not are refused, and change nothing",
+    ok("a kind that is not Space or the player's keys is refused, and changes nothing",
        again78.save_keys("arrows", False) == {"ok": False, "error": "Unknown keys"}
        and keys78(again78) == (False, True)
        and (tmp78 / "config.json").read_text() == saved78)

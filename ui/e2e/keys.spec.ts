@@ -11,7 +11,7 @@ import {
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
-// Settings › Keys (Q1): Space and Esc, and the player's keys, each turned off
+// Settings › Keys: Space and Esc, and the player's keys, each turned off
 // on its own. Off, those keys do nothing on any screen. Ctrl+Z, and Esc in a
 // dialog or a text field, work whatever the switches say. Python keeps both
 // with the other settings; the fake keeps them in its config.
@@ -44,6 +44,18 @@ test("with Space and Esc off, they do nothing on the start, rehearsal, recording
   await press(page, "Space", "Escape")
   expect(await callCount(page, "start_rehearsal")).toBe(0)
   await expect(startButton(page)).toBeVisible()
+
+  // The set button, its focus left by the mouse: Space presses it as it
+  // presses any button, and its menu opens.
+  await page.locator("[data-set-picker]").click()
+  const sets = page.getByRole("menu", { name: "Sets" })
+  await sets.getByRole("menuitemradio", { name: /No set/ }).click()
+  await expect(sets).toHaveCount(0)
+  await press(page, "Space")
+  await expect(sets).toBeVisible()
+  expect(await callCount(page, "start_rehearsal")).toBe(0)
+  await page.keyboard.press("Escape")
+  await expect(sets).toHaveCount(0)
 
   // Settings: Esc would take you back to the start screen.
   await page.getByRole("button", { name: "Settings", exact: true }).click()
@@ -94,7 +106,7 @@ test("with the player's keys off, the arrows, Home, M, R and ? do nothing", asyn
   await expect(nextTake(page)).toHaveValue(named)
   expect(await callCount(page, "set_next_take_name")).toBe(sent)
 
-  // Pałyn 1 open, with three more goes at Pałyn tonight for up and down.
+  // Pałyn 1 open, with three more takes of Pałyn tonight for up and down.
   await firstTake(overview).click()
   const play = page.getByRole("toolbar", { name: "Transport" }).getByRole("button", {
     name: "Play",

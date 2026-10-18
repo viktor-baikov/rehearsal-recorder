@@ -24,6 +24,7 @@ import { SetSongsEditor } from "@/components/SetEditor"
 import { api, type SongChoices, type SongSet } from "@/lib/api"
 import { songsLabel } from "@/lib/format"
 import { asSetSongs } from "@/lib/setSongs"
+import { keysOn } from "@/lib/keys"
 import { focusIsLeftover } from "@/hooks/useSpacebar"
 
 // The set a rehearsal plays by, picked on the start screen beside Start
@@ -61,8 +62,11 @@ export function SetPicker({
             data-set-picker
             // Focus the mouse left here (a set picked, the menu shut) is not
             // aimed at it: Space starts the rehearsal, as with any button.
+            // With Space and Esc off in Settings › Keys, Space presses this
+            // button as it presses any other, and the menu opens.
             onKeyDown={(e) => {
-              if (e.key === " " && focusIsLeftover(e.currentTarget)) e.preventDefault()
+              if (e.key === " " && keysOn("space") && focusIsLeftover(e.currentTarget))
+                e.preventDefault()
             }}
             className="max-w-[18rem] px-5 has-[>svg]:px-5"
           >

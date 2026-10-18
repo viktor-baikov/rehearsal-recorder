@@ -3,7 +3,7 @@ import { api, type KeyKind, type Settings } from "@/lib/api"
 import { dismiss, notify } from "@/lib/notices"
 
 /**
- * Which of the app's single keys work, as Settings › Keys sets them (Q1):
+ * Which of the app's single keys work, as Settings › Keys sets them:
  * Space and Esc ("space"), and the player's keys ("player"): the arrows,
  * Home, M, R and ?. Python keeps both with the other settings, and App reads
  * them when it starts. Until then, and for a setting Python does not have,
