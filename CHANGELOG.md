@@ -110,15 +110,14 @@ opening.
   the lanes, so no part of a lane shows beside it. In History, with no take
   open, the evening's figures have moved from over the songs into the
   rehearsal's own head: they sit beside its name, give way when the name
-  needs the room, and pointing at them shows them all. The name wraps there
-  too instead of being cut, and the day, the set and the folder run across
-  the head under them. Smaller things: the player's **Play**, the share
-  dialog and a lane of notes being read show a spinner only after a second,
-  and a lane whose notes cannot be read says so; the row names in a lane of
-  notes are 12 px, up from 9, and the lane is taller to hold them;
-  **Repeat**, **M** and **S** are grey when on; the marker's labels are one
-  switch that the arrow keys move along; on the map the part on screen is
-  grey; and an empty set under **Next take** says how to fill it.
+  needs the room, and pointing at them shows them all. Smaller things: the
+  player's **Play**, the share dialog and a lane of notes being read show a
+  spinner only after a second, and a lane whose notes cannot be read says
+  so; the row names in a lane of notes are 12 px, up from 9, and the lane is
+  taller to hold them; **Repeat**, **M** and **S** are grey when on; the
+  marker's labels are one switch that the arrow keys move along; on the map
+  the part on screen is grey; and an empty set under **Next take** says how
+  to fill it.
 - **A new layout for the recording screen, with its status beside Stop.**
   At the top is the take: its name, the clock, and under them the bar that
   shows how far you are against the song's last take. Below are the
@@ -176,6 +175,39 @@ opening.
   red bar too, and nothing was left to press. Now the screen says it could
   not open, the red bar at the top says what went wrong and where it is
   written down, and **Try again** opens the app again.
+- **History's pages are calmer, and a rehearsal's folder opens from its
+  path.** The list down the left is on a grey panel, and the switch between
+  **Rehearsals**, **Songs** and **Marks** stays at its top while the list
+  scrolls. A long name in the list takes two lines, and so does a rehearsal's
+  name, a song's title or a label's name at the top of its page; past that it
+  is cut, and pointing at it shows it whole. The pencil is right after the
+  name's last word, and the bin at the right says what it does when you point
+  at it. The evening's figures beside the name give way before the name takes
+  its second line. The folder opens from the line under the name: click its
+  path, after the day and the set. Pointing at the path says **Show in
+  Finder** (**Show in Explorer** on Windows), and the button of that name
+  beside the figures is gone. The totals at the top of the window,
+  "5 rehearsals · 2 h 24 min played · 5.0 GB", give way one at a time in a
+  narrow window, the size first, where they used to go all at once. Each page
+  is one group, its parts split by lines: on a rehearsal's page the set
+  first, in two columns when there is room, then the songs; on a song's page
+  its starred takes, the marks from last time and every take; on a label's
+  page a part per rehearsal or song, with **Group by** at the top of the
+  group. On a song's page, a rehearsal with more takes than its line holds
+  carries its bars on to a second line. A take that cannot be loaded shows a
+  red warning sign in place of its ▶ on all three pages, and pressing it
+  tries again. Smaller things: a rehearsal whose folder is missing says
+  *Not found on disk* in red wherever it shows; the set's line reads
+  "Gig on the 25th · 4 of 6 played", on the rehearsal screen too; and while
+  History reads the folder, a spinner shows after a second, and
+  *Reading the folder…* only after ten.
+- **Forgetting a song's old name has Undo.** On a song's page in History,
+  the × beside an old name under *Also typed as* forgets it, and a notice
+  now says "“Palyn” was forgotten." with **Undo** for 10 seconds, or ⌘Z /
+  Ctrl+Z. **Undo** gives the name back to the song, so typing it leads to
+  that song again. If the name has become another song's in the meantime,
+  the notice says why it cannot come back. "Make Palyn a new song" under a
+  name field forgets the name at once, as before, with no **Undo**.
 
 ## 0.11.1
 

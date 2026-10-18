@@ -18,17 +18,17 @@ shows the app as it is; the site keeps its own big headings and layout
 
 The foundation is in: the theme values, the shared components, Undo, the
 showcase and the check. The start screen is redone on it, and so are the
-rehearsal screen, the recording screen, Review (the screen after Stop) and
-the big player, which History opens takes in too: their pieces are the
-shared ones, and their files are off the check's
+rehearsal screen, the recording screen, Review (the screen after Stop),
+History, and the big player that Review and History open takes in: their
+pieces are the shared ones, and their files are off the check's
 [allow-list](#the-check). The one piece the start screen still builds on
 its own is the song list in New set, which it shares with Settings' Sets
 and which is redone with Settings. The other screens follow, one pull
-request each, in this order: History, Drafts, and Settings. Until its turn
-a screen is on the allow-list and may still break the rules it is listed
+request each, in this order: Drafts, then Settings. Until its turn a
+screen is on the allow-list and may still break the rules it is listed
 for. Where a rule below says "as each screen is redone", the screens' pull
 requests carry it out, and so far the start screen's, the rehearsal
-screen's, the recording screen's and Review's have. On
+screen's, the recording screen's, Review's and History's have. On
 reha.stream the pieces of the app are the real components and follow the
 theme already, but the page itself takes only the accent from it so far
 (`--page-accent: var(--primary)` in `site/src/page/page.css`). After the
@@ -311,11 +311,20 @@ piece of its own moves onto the shared one when it is redone.
   list row (`Item`, every row reachable by keyboard), warnings (`Alert`),
   loading (`Spinner`), empty states (`Empty`), tooltips (`Tooltip`) and
   meters (`Meter`); added with Review, checkboxes (`Checkbox`) and a song's
-  takes as columns (`TakeColumns`), which Last time and Review share. The
+  takes as columns (`TakeColumns`), which Last time and Review share; added
+  with History, expanding (`Collapsible`), which opens a rung of a song's
+  ladder. Two more of our own live in `components/`. The set card,
+  `SetCard` (`components/NextTakeSongs.tsx`), is one piece under Next take
+  and in History, with the same title on both, "Gig on the 25th · 4 of 6
+  played". Given `onGoTo` it is History's: a song played goes to its takes,
+  one not played is disabled and says so, and no song is next or lit. The
+  pane head, `PaneHead` (`components/PaneHead.tsx`), heads History's three
+  pages, a rehearsal's, a song's and a label's: what leads it, the title
+  with the pencil after it, the lines under it and the actions at the right
+  (B6). Only History uses it, so it is not in `components/ui/` (U3). The
   rest are added by the first screen's pull request that needs them: one ✕,
-  one link, one size of icon button, expanding (Collapsible), a field with a
-  button (InputGroup), and our own set list for both screens, screen
-  header, side panel and pane head. A take's name is written by `TakeTitle`
+  one link, one size of icon button, a field with a button (InputGroup),
+  screen header and side panel. A take's name is written by `TakeTitle`
   (`components/TakeTitle.tsx`) everywhere, where today one list uses it and
   the rest write the name their own way. A track that records is one tile,
   `TrackTile` (`components/TrackTile.tsx`), where the MIDI tile was a copy
@@ -325,10 +334,14 @@ piece of its own moves onto the shared one when it is redone.
   on the card's fill, each tile on a well of its own (C7), and reha.stream
   shows them so. A take drawn as a bar is as tall as
   it ran against the longest, through `drawnLength` (`lib/takeScale.ts`),
-  never under a few pixels. "Selected" has two looks instead of seven: the
-  white plate inside a switch, and a grey fill for a row, pill, tab or
-  toggle that is on. The full table, with every place each piece is built
-  today, is C8 in the spec.
+  never under a few pixels. The bars of an evening's takes, on the
+  rehearsal screen and in History, of a song's ladder and of the Marks page
+  are filled alike, from `TAKE_FILLS` beside it: the plain fill, the
+  starred one and the quiet one (a false start, or a take not on disk). Each
+  place adds only what its bars do under the pointer. "Selected" has two
+  looks instead of seven: the white plate inside a switch, and a grey fill
+  for a row, pill, tab or toggle that is on. The full table, with every
+  place each piece is built today, is C8 in the spec.
 
 The other shared components, each with its stories:
 
@@ -357,8 +370,10 @@ The other shared components, each with its stories:
   or down. Nothing uses it yet; the dividers made by hand move onto it.
 - **Badge**, `badge.tsx`: a small pill for a word or a count, in the accent,
   a neutral grey, the danger red (full in both themes, as a destructive
-  Button is), the signal green or the warning yellow, its word at 600.
-  Nothing uses it yet; the chips made by hand move onto it.
+  Button is), the signal green or the warning yellow, its word at 600. The
+  *false start* on a take's row is one, and so is each of a song's old
+  names under its title in History, `outline` with its ✕; the chips still
+  made by hand move onto it.
 - **Progress**, `progress.tsx`: a thin bar in the accent for how far along a
   job is, where it was started (the take being saved under Stop, a crop, a
   draft) and in the background work list.
@@ -393,12 +408,15 @@ The other shared components, each with its stories:
   keys moving along the group and Tab leaving it. `default` and `outline` are
   Toggles joined into a bar; `switch` is History's switch, a grey track with
   the chosen item a plate on it with a light shadow, as wide as the screen
-  makes it (`size` does nothing for it). With `type="single"`, pressing the
-  chosen item again empties the group (`onValueChange("")`), so a pick-one
-  that must always have one chosen ignores the "", as Audio · Both · MIDI
-  does (`ModeSwitch`), and so does the kind of a marker. In a dialog a
-  pick-one group is one Tab stop too (`useDialogFocusKeys`). C8's three
-  identical segmented switches and its pick-one groups.
+  makes it (`size` does nothing for it). History's two, the view and Group
+  by, are `orientation="horizontal"`: ← and → move along them, and ↑ and ↓
+  stay the list's while one of them has focus. With `type="single"`,
+  pressing the chosen item again empties the group (`onValueChange("")`),
+  so a pick-one that must always have one chosen ignores the "", as
+  Audio · Both · MIDI does (`ModeSwitch`), and so does the kind of a
+  marker. In a dialog a pick-one group is one Tab stop too
+  (`useDialogFocusKeys`). C8's three identical segmented switches and its
+  pick-one groups.
 - **Alert**, `alert.tsx`: a box for a line the screen has to say, with an
   icon, a title and a text, all optional. `warning` is the theme's `warn`
   colour on the icon and the edge with a faint wash behind; `destructive` is
@@ -490,6 +508,13 @@ The other shared components, each with its stories:
   (`longest`). The columns are a picture, hidden from a screen reader: the
   screen that uses them says them in words; Review also puts the tip on
   them.
+- **Collapsible**, `collapsible.tsx`: shadcn's, C8's expanding. A part that
+  opens and closes under its trigger: `Collapsible`, `CollapsibleTrigger`
+  and `CollapsibleContent`. It has no look of its own. The trigger is what
+  the screen puts in it, a `Button` as a rule; Radix sets `aria-expanded`
+  on it, and Enter or Space opens and closes the part. A rung of a song's
+  ladder in History is its one use so far: the rung is the trigger, its
+  chevron says whether it is open, and its takes are the part.
 
 ## Writing components
 
@@ -564,9 +589,14 @@ as the `cn` import.
   and sends it on to the Trash when the notice ends, when the app quits, or
   at the next start after a crash; nothing is destroyed either way. A track
   taken off the start screen has it too ("{name} was taken off."), and puts
-  the track back in its place with its readings; two more removals that
-  happen at once get the same notice as their screens are redone: a song
-  taken out of a set and a song's old name forgotten.
+  the track back in its place with its readings. So does a song's old name
+  forgotten from the song's page in History ("“Palyn” was forgotten."):
+  Undo gives the name back to its song (`forgetSongName` in
+  `lib/songNames.ts`), or says why it cannot, when the name has become
+  another song's since or its song was merged away. "Make Palyn a new song"
+  under a name field forgets the name with no notice: the field takes it at
+  once, as a new song's. One more removal that happens at once gets the same
+  notice when Settings is redone: a song taken out of a set.
 - **B2. A question only where nothing can be undone**: finishing a rehearsal
   by Esc, removing a rehearsal from history, deleting a label that has
   marks, deleting a set, and merging two songs. Each is a `ConfirmDialog`,
@@ -574,8 +604,7 @@ as the `cn` import.
   text counts properly, "1 take is saved", through `savedLine()` in
   `lib/format.ts`.
 - **B3. Load errors show everywhere.** A ▶ that fails without a word looks
-  like a button that does nothing, and today History's three views fall
-  back to ▶ silently; an honest failure beats a silent fallback
+  like a button that does nothing; an honest failure beats a silent fallback
   (CONTRIBUTING.md). A take that fails to load says so wherever its ▶ is:
   `PlayButton`'s failed look (C2). The screens get it with the small
   player.
@@ -601,8 +630,10 @@ as the `cn` import.
   says what it is doing. `PlayButton` already waits its second
   (`SPINNER_AFTER_MS`), and so do the player's Play, the share dialog's
   options and its Remove, and a lane of notes being read, which says so in
-  its place if they cannot be read; the rest as each screen is redone, on
-  shadcn's Spinner.
+  its place if they cannot be read. While History reads its rehearsals, it
+  shows the Spinner, unseen for its first second, and from 10 s "Reading
+  the folder…" beside it (`useAfter`). The rest as each screen is redone,
+  on shadcn's Spinner.
 - **B6. Long names.** A name never gives way to a secondary figure: the name
   is what tells one thing from another. The figure wraps, goes first, or
   hides and shows on hover, as a recording tile's dB figure does; a cut
@@ -624,12 +655,29 @@ as the `cn` import.
   title's tooltip says them, and the 1 px line after them goes too. The
   subtitle never makes them give way: a long rehearsal name runs on into the
   room the columns leave, is cut where that ends, and is whole in the
-  tooltip.
+  tooltip. In History each page has the pane head (`PaneHead`, C8): the
+  title on up to two lines, then cut and whole in the tooltip, with the
+  pencil after its last word, as on Review. The actions at its right get
+  what the title leaves: a rehearsal's figures give way to its name whole,
+  before the name takes a second line, and Delete stays. Under the name the
+  date is whole, the set is cut to half the line at most, and the folder's
+  path has the rest. The path is the button that opens the folder, cut at
+  its end, and its name and tip are in the system's words (P2), "Show in
+  Finder", with the whole path in the tip while it is cut. A rehearsal not
+  on disk has its path as plain text. A row in History's lists has its name
+  on up to two lines, then cut, and the figures beside it give way first,
+  as on Earlier's rows. The header's totals are `Figures` too, the size
+  dropping first and the count last.
 - **B7. Empty states.** An empty list that only says it is empty leaves the
   person to guess what to do next. So an empty list says, in its own place,
   what will appear there and how it gets there: an empty set under Next take
   says "This set has no songs yet. Add them in Settings › Sets." On shadcn's
-  Empty, as each screen is redone.
+  Empty, as each screen is redone. History's four use it: no rehearsal
+  yet ("Every rehearsal where you saved at least one take shows up here."),
+  no song yet ("A take named after a song shows up here."), a rehearsal
+  with no takes left, and a label with no marks, which says where they come
+  from ("Marks given the label Fix in the player gather here, from every
+  rehearsal.").
 - **B8. Wording.** A name in a title is in quotes (*Delete “Fix”?*). A
   sentence said in two places comes from one place. Each kind of figure is
   written one way, through `lib/format.ts`, and a screen shows a figure

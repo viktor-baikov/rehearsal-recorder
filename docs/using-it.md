@@ -184,7 +184,7 @@ take is of the same song as the one before it, so the name stays until you
 move on to another song.
 
 Playing by a set, the set is the first part of the panel, under the field:
-"Gig on the 25th — 3 of 6 played", then its songs in order. The song in the
+"Gig on the 25th · 3 of 6 played", then its songs in order. The song in the
 field is lit, and the one after it says **next**. A song played tonight has
 ✓ and how many takes it got. The evening's first take is the set's first
 song. A set with no songs in it yet says so, and that they are added in
@@ -458,7 +458,7 @@ screen or in History. The folder on disk is renamed too, and a rehearsal
 folder keeps its date: `Tuesday jam - 2026-09-18 19-00`. If you rename a take
 that is open in the player, it starts again from the beginning.
 
-To rename a song, use the pencil beside its title on its page in History.
+To rename a song, use the pencil after its title on its page in History.
 Every take is renamed, with its folder on disk and its copies in the cloud
 folder; the files follow in the background, and the background-work list
 says so. A title that differs only in capitals respells the song. Here a
@@ -477,9 +477,13 @@ its takes one by one.
 A title a song leaves behind, renamed or merged away, is remembered: typed
 again in any name field, with or without a number, it is that song. The
 field says "Palyn → Pałyn 12", and under it, "Palyn is Pałyn now. Make
-Palyn a new song". The link forgets the old name, and the take is a new
-song, Palyn 1. A song's page lists its old names under the title, **Also
-typed as** Palyn, each with × to forget it.
+Palyn a new song". The link forgets the old name at once, with no
+**Undo**, and the take is a new song, Palyn 1.
+
+A song's page lists its old names under the title, **Also typed as** Palyn,
+each with × to forget it. A notice then says "“Palyn” was forgotten.", and
+its **Undo** gives the name back to the song. If Undo cannot, because the
+name is another song's by then, the notice says why.
 
 ## History
 
@@ -488,7 +492,7 @@ typed as** Palyn, each with × to forget it.
 **History** has three views, switched at the top of its list: **Rehearsals**,
 evening by evening, **Songs**, song by song, and **Marks**, label by label.
 It opens on the one you used last, or on the rehearsal or song you opened
-from the setup screen.
+from the setup screen. The switch stays in view while the list scrolls.
 
 **Rehearsals** lists your past rehearsals down the left, by month, and shows
 the chosen one beside the list. It opens on the newest. Each rehearsal in the
@@ -497,39 +501,50 @@ with the evening drawn as a strip: a bar for each take, as long as the take,
 grouped by song, and green for a starred take. You can see at a
 glance how many songs you played and how many takes each one got.
 
+At the top of the window, beside the title, are how many rehearsals there
+are, how long you played in all and how much of the disk they use:
+"5 rehearsals · 2 h 24 min played · 5.0 GB". In a narrow window they give
+way one at a time, the size first, and pointing at them then shows them all.
+
 Click a rehearsal to show it, or go through them with ↑ and ↓. Its takes
 work the same way as on the rehearsal screen: **Play** on a take plays it
 right there, and the take's bar opens it in the player, which then has the
 whole window. Esc brings the list back. An evening is sorted here the same
 way too: the songs under a take nobody named, the false starts, **Send
-starred** and **Clear false starts**.
+starred** and **Clear false starts**. A take that cannot be loaded shows a
+red warning sign in place of its ▶, here, on a song's page and in Marks;
+press it to try again.
 
-The rehearsal's own head, over its songs, has the evening's figures beside
-its name, as the rehearsal screen's header does: how long its takes run,
-how many takes there are and of how many songs, how many are in the cloud
-and how much of the disk it uses, then **Show in Finder** (**Show in
-Explorer** on Windows). The figures give way when the name needs the room,
-the size on disk first, and once one has gone, pointing at them shows them
-all. A long name wraps, and is never cut. Under them, across the whole
-head, are the day it was played, its set if it was played by one, and its
-folder.
+The rehearsal's name is at the top of its page, with the pencil after its
+last word (**Rename rehearsal**) and the bin at the right (**Delete
+rehearsal**). A long name takes two lines, here and in the list, and is then
+cut: point at it to read it whole. Beside the name are the evening's
+figures, as in the rehearsal screen's header: how long its takes run, how
+many takes there are and of how many songs, how many are in the cloud and
+how much of the disk it uses. They give way before the name takes a second
+line, the size on disk first, and once one has gone, pointing at them shows
+them all.
 
-A rehearsal played by a set has the set's name under its date, in the list
-and under its title. Over its songs, a card says how much of the set was
-played, "Gig on the 25th — 4 of 6 played", and lists the set's songs in
-order: each one played with ✓ and its takes, each other **not played**. Click
-a played song to go to its takes. The card shows the set as it was that
-evening, whatever has changed in it since.
+Under the name are the day it was played, its set if it was played by one,
+and the path of its folder. Click the path to open the folder; pointing at
+it says **Show in Finder** (**Show in Explorer** on Windows). A long path is
+cut at its end, and pointing at it shows it whole.
 
-You can rename and delete takes and whole rehearsals here. The pencil
-beside the rehearsal's name and the bin at the end of its head work on the
-rehearsal. Deleting moves the take or the rehearsal's folder to the Trash
-at once; **Undo** brings it back. See [Undo](#undo).
-The header shows how many rehearsals there are, how long you played in all
-and how much disk space they take.
+A rehearsal played by a set has the set's name under its date in the list,
+and beside the date on its page. Over its songs, a card says how much of the
+set was played, "Gig on the 25th · 4 of 6 played", and lists the set's songs
+in order, in two columns when there is room: each one played with ✓ and its
+takes, each other **not played**. Click a played song to go to its takes.
+The card shows the set as it was that evening, whatever has changed in it
+since.
+
+You can rename and delete takes and whole rehearsals here. Deleting moves
+the take or the rehearsal's folder to the Trash at once; **Undo** brings it
+back. See [Undo](#undo).
 
 If a rehearsal's folder was moved or renamed outside the app, or is on a
-drive that is not plugged in, the rehearsal is marked **Not found on disk**.
+drive that is not plugged in, the rehearsal is marked **Not found on disk**
+in red, in the list and on its page, and its path can no longer be clicked.
 **Locate folder…** lets you show the app where the folder is now.
 **Remove from history** takes it off the list without touching any files.
 
@@ -541,14 +556,17 @@ are starred. The takes nobody named come last, as **Not named**. Click a
 song, or go through them with ↑ and ↓.
 
 A song's page starts with a big **▶**, which plays its newest ★ take, or its
-last take when none is starred. The pencil beside the title renames the song,
-or merges it into another (see [Names and songs](#names-and-songs)); what is
-playing stops first. Its ★ takes come next, then the marks left on it
-the last time it was played; a mark opens its take at that spot. Then every
-take of the song, one line a rehearsal, newest first: the rehearsal's day and
-name, and its takes as bars side by side, all drawn to the song's longest
-take. A take that ran long or stopped short shows without reading a number;
-a ★ take is green, and a mark is a tick in its label's colour.
+last take when none is starred. The pencil after the title (**Rename song**)
+renames the song, or merges it into another (see [Names and
+songs](#names-and-songs)); what is playing stops first. A long title takes
+two lines and is then cut, as a rehearsal's name is. Its ★ takes come next,
+then the marks left on it the last time it was played; a mark opens its take
+at that spot. Then every take of the song, one line a rehearsal, newest
+first: the rehearsal's day and name, and its takes as bars side by side, all
+drawn to the song's longest take. When a rehearsal has more takes than fit
+on its line, they carry on to a second line. A take that ran long or stopped
+short shows without reading a number; a ★ take is green, and a mark is a
+tick in its label's colour.
 
 Click a line to open it to its takes, and again to close it. The newest
 rehearsal is open to begin with, and the lines you open stay open while
@@ -557,9 +575,9 @@ starred, renamed or deleted, as they are anywhere else, and **Open … in
 Rehearsals** under them shows the whole evening. Esc from the player comes
 back to the song, scrolled where you were.
 
-A rehearsal whose folder is not on disk stays on a song's page, greyed and
-marked **not on disk**. Its takes are counted, but they cannot be played or
-opened until the drive is back.
+A rehearsal whose folder is not on disk stays on a song's page, marked
+**Not found on disk** in red, and its bars have a dashed edge. Its takes
+are counted, but they cannot be played or opened until the drive is back.
 
 ![History's Marks view: every Went wrong, from every rehearsal](screenshots/history-marks.png)
 
@@ -569,10 +587,11 @@ newest was left. A label nothing has yet is dimmed. Click a label, or go
 through them with ↑ and ↓.
 
 Beside the list are the label's marks, from every rehearsal, newest first.
-**Group by** at the top puts them under a heading per rehearsal (**By
-rehearsal**), per song (**By song**, the takes nobody named last), or in
-**One list**. The choice is kept, and is the same for every label. A heading
-opens its rehearsal in Rehearsals, or its song's page.
+**Group by**, at the top right of them, puts them under a heading per
+rehearsal (**By rehearsal**), per song (**By song**, the takes nobody named
+last), or in **One list**. The choice is kept, and is the same for every
+label. A heading says how many marks are under it, and opens its rehearsal
+in Rehearsals, or its song's page.
 
 Each mark is a row: its comment, or the label's name when it has none, then
 the take and the moment, *Pałyn 4 · 1:51*. Then the take as a bar, drawn to
@@ -580,14 +599,15 @@ the longest take in the list, with the mark as a tick in the label's colour.
 
 - **▶** plays the take right there, from 5 seconds before the mark, so you
   hear the moment coming. Press it again to pause.
-- Clicking the row opens the take in the player at the mark. Esc comes back
-  to the list, scrolled where you were.
+- Clicking the row opens the take in the player at the mark. So does Enter
+  on its comment, which Tab reaches. Esc comes back to the list, scrolled
+  where you were.
 - A song's name in a row opens the song's page.
 - A mark given another label in the player moves to that label's list.
 
 A rehearsal whose folder is not on disk keeps its marks in the list, greyed
-and marked **not on disk**: they are counted, but cannot be played or opened
-until the drive is back.
+and marked **Not found on disk** in red: they are counted, but cannot be
+played or opened until the drive is back.
 
 ## Sending takes to the cloud
 
@@ -883,6 +903,10 @@ elsewhere) puts it back where it was: a take with its star, marks and cloud copy
 with all its takes, a cropped take as it was before the crop, a discarded
 take on the screen after it with the name and marks it had. Holding the
 mouse over the notice keeps it up.
+
+Forgetting a song's old name on its page in History works the same way: the
+notice says "“Palyn” was forgotten.", and **Undo** gives the name back to
+its song. See [Names and songs](#names-and-songs).
 
 ⌘Z brings back the newest one first; an older notice keeps its own
 **Undo**. While you type in a field, ⌘Z is the field's own, and it does
