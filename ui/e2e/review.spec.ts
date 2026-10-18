@@ -232,11 +232,8 @@ for (const scale of [1, 1.5]) {
     await drawn(page).hover()
     await expect(tip(page)).toContainText(`${KALYCHANKA} 1: `)
     await expect(tip(page)).toContainText(`${KALYCHANKA} 2: 2:31`)
-    if (scale === 1) return
-    // At 150 % the rehearsal's name is cut too, and whole on hover.
-    await expect(subtitle(page)).toHaveAttribute("data-cut")
-    await subtitle(page).hover()
-    await expect(tip(page)).toHaveText(STRESS_SUBTITLE)
+    // Whether the rehearsal's name is cut here depends on the font: the
+    // next test cuts it whatever the font, and hovers it.
   })
 }
 
