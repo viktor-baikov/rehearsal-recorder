@@ -263,7 +263,7 @@ test("one false start cleared is said as one", async ({ page }) => {
 })
 
 test.describe("on the screen after a take", () => {
-  const title = (page: Page) => page.locator("[data-take-summary] h2")
+  const title = (page: Page) => page.locator("[data-take-summary]")
 
   test("Esc leaves it, and Undo opens it again as it was left", async ({ page }) => {
     await openApp(page)

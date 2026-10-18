@@ -22,7 +22,7 @@ import type { Page } from "@playwright/test"
 
 /** The take's name field in Rename take, on the screen after a take. */
 const nameField = (page: Page) => page.locator("#take-name")
-/** That screen's title: the take's song, without its go. */
+/** That screen's title: the take's song and its number. */
 const reviewTitle = (page: Page) => page.locator("[data-take-summary] [data-go-title]")
 const renameReview = (page: Page) =>
   page.locator("[data-take-summary]").getByRole("button", { name: "Rename take" }).click()
@@ -249,13 +249,13 @@ test.describe("the next take", () => {
     await page.keyboard.press("Space")
     await expect(page.getByRole("heading", { level: 1, name: "Viasna" })).toBeVisible()
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(reviewTitle(page)).toHaveText("Viasna")
+    await expect(reviewTitle(page)).toHaveText("Viasna 1")
 
     // Thrown away, it is played again under the same name.
     await page.getByRole("button", { name: /^Discard/ }).click()
     await expect(field(page)).toHaveValue("Viasna")
     await recordTake(page, 2)
-    await expect(reviewTitle(page)).toHaveText("Viasna")
+    await expect(reviewTitle(page)).toHaveText("Viasna 1")
     await page.getByRole("button", { name: /Save take/ }).click()
     // Kept, it is used up, and the next one follows on from it.
     await expect(field(page)).toHaveValue("Viasna")
@@ -446,9 +446,10 @@ test.describe("after Stop", () => {
     await page.keyboard.press("Enter")
     await page.getByRole("button", { name: /Record take 1/ }).click()
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(reviewTitle(page)).toHaveText("Viasna")
-    // Beside Save take, with a line between it and the buttons.
-    await expect(page.locator("footer [data-footer-rule]")).toHaveCount(1)
+    await expect(reviewTitle(page)).toHaveText("Viasna 1")
+    // The header's title, and no line in the footer between it and the buttons.
+    await expect(page.locator("header [data-take-summary]")).toHaveCount(1)
+    await expect(page.locator("footer [data-footer-rule]")).toHaveCount(0)
 
     await renameReview(page)
     await expect(nameField(page)).toHaveValue("Viasna")
@@ -470,7 +471,7 @@ test.describe("after Stop", () => {
     await expect(nameField(page)).toHaveValue("Ahoń")
     await page.keyboard.press("Enter")
     await expect(page.getByRole("dialog")).toHaveCount(0)
-    await expect(reviewTitle(page)).toHaveText("Ahoń")
+    await expect(reviewTitle(page)).toHaveText("Ahoń 1")
     await page.keyboard.press("Space")
     await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ahoń")
   })

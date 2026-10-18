@@ -103,7 +103,9 @@ export function Shell({
           )}
           {/* With facts beside it the name keeps its width and the facts give
               way to it (components/EveningFacts); one longer than the whole
-              row wraps to a second line rather than being cut. */}
+              row wraps to a second line rather than being cut. A title that
+              fits itself to its lines, as Review's take does, is never cut
+              here either. */}
           <div className={cn("min-w-0", facts ? "flex-[0_1_auto]" : "flex-1")}>
             {subtitle && (
               <div className="text-xs text-muted-foreground">
@@ -114,7 +116,7 @@ export function Shell({
               <h1
                 className={cn(
                   "text-xl leading-tight font-semibold",
-                  facts ? "break-words" : "truncate"
+                  facts || typeof title !== "string" ? "break-words" : "truncate"
                 )}
               >
                 {title}

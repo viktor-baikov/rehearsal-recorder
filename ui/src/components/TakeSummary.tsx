@@ -1,40 +1,35 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { TakeColumns, type TakeColumn } from "@/components/ui/take-columns"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useFitted } from "@/components/ui/whole"
 import { RenameTakeDialog } from "@/components/ConfirmDialog"
 import { GoTitle } from "@/components/TakeTitle"
-import { api, type SongChoices, type Take } from "@/lib/api"
-import { against, formatDate, formatMMSS } from "@/lib/format"
+import type { SongChoices, Take } from "@/lib/api"
+import { formatMMSS } from "@/lib/format"
 import { UNNAMED, goFor, songFor } from "@/lib/goes"
-import { drawnLength } from "@/lib/takeScale"
 import { cn } from "@/lib/utils"
 
-type Go = { take_number: number; go: number | null; duration_sec: number; starred: boolean }
-/** The go before tonight, asked for `song`: null when there was none. */
-type Before = { song: string; go: { sec: number; day: string } | null }
-
-/** The bars' room: the longest go is this tall. */
-const BAR_PX = 36
-/** The most bars shown: the last goes, this one last, so a song played all
- *  evening still leaves its title the room. */
-const MOST_BARS = 10
+/** The most columns shown: the last takes, this one last, so a song played
+ *  all evening still leaves its title the room. */
+const MOST_COLUMNS = 10
 
 /**
- * The take on the screen after it, where its name field was (issue #12
- * step 8, A1–A4): its song big, with the go it will be and a pencil that
- * opens Rename take; under it how long it ran against the song's go before;
- * left of it the song's goes tonight as bars, each as tall as it ran, this
- * one in the text colour and ★ goes green, the last ten at most. A take
- * nobody named is "Take 7", grey, with its length alone. A first go at a song has no bars.
+ * What the screen after a take says about it (issue #12 step 8, Q1 "the name
+ * in the header"): its song and the number it will be, or the name as typed
+ * for a take nobody named ("Take 7"); and the song's takes tonight as
+ * columns, the last ten, this one lit. A song's first take tonight has no
+ * columns, nor does a take nobody named. The length is the transport's to
+ * say, under the header.
  */
-export function TakeSummary({
+// oxlint-disable-next-line react/only-export-components -- the screen reads the take's facts once, for its title and for the figures beside it
+export function takeFacts({
   name,
   takeNumber,
   durationSec,
   takes,
   choices,
-  fallback,
-  onRename,
 }: {
   name: string
   takeNumber: number
@@ -42,153 +37,186 @@ export function TakeSummary({
   /** Tonight's takes kept so far. */
   takes: Take[]
   choices: SongChoices | null
-  /** What ✕ in Rename take puts back: the name it would have had. */
-  fallback: string
-  onRename: (name: string) => void
 }) {
-  const [renaming, setRenaming] = useState(false)
-  // A title no song has yet is a new song, at its first go; "Take 7" is a
+  // A title no song has yet is a new song, at its first take; "Take 7" is a
   // take nobody named.
   const typed = name.trim()
   const unnamed = typed === "" || UNNAMED.test(typed)
   const song = unnamed ? null : (songFor(typed, choices)?.choice.song ?? typed)
-  // Until the songs are in, the go is not guessed.
+  // Until the songs are in, the number is not guessed.
   const go = song ? goFor(typed, choices) : null
-
-  const tonight: Go[] = song
-    ? takes
-        .filter((t) => t.song === song && t.take_number !== takeNumber)
-        .map((t) => ({
-          take_number: t.take_number,
-          go: t.go ?? null,
-          duration_sec: t.duration_sec,
-          starred: Boolean(t.starred),
-        }))
+  const before = song
+    ? takes.filter((t) => t.song === song && t.take_number !== takeNumber)
     : []
-  const last = tonight.at(-1) ?? null
+  const columns: TakeColumn[] =
+    before.length === 0
+      ? []
+      : [
+          ...before.map((t) => ({
+            key: t.take_number,
+            sec: t.duration_sec,
+            starred: Boolean(t.starred),
+            lit: false,
+            label: t.go ?? null,
+          })),
+          { key: takeNumber, sec: durationSec, starred: false, lit: true, label: go },
+        ].slice(-MOST_COLUMNS)
+  return {
+    song,
+    go,
+    unnamed: !song,
+    /** What the title says: the song, or the name as typed. */
+    shown: song ?? name,
+    columns,
+    /** The columns in words, each by the take's own name, for their tip and
+     *  for the title's once they have given way. */
+    columnsText: columns
+      .map((c) => `${song} ${c.label ?? "?"}: ${formatMMSS(c.sec)}`)
+      .join(", "),
+  }
+}
 
-  // With no go tonight, the go before tonight, with its day, as the
-  // recording screen measures against. Until it is in, the length is said
-  // alone, so nothing said is taken back.
-  const [before, setBefore] = useState<Before | null>(null)
-  const askBefore = song !== null && last === null
-  useEffect(() => {
-    if (!askBefore || song === null) return
-    let current = true
-    api()
-      .last_attempt(song)
-      .then((a) => {
-        if (current)
-          setBefore({
-            song,
-            go: a?.created_at ? { sec: a.duration_sec, day: formatDate(a.created_at) } : null,
-          })
-      })
-      .catch(() => {
-        if (current) setBefore({ song, go: null })
-      })
-    return () => {
-      current = false
-    }
-  }, [askBefore, song])
-  const told = before && before.song === song ? before : null
+export type TakeFacts = ReturnType<typeof takeFacts>
 
-  const compare = last
-    ? against(
-        durationSec,
-        last.duration_sec,
-        last.go != null ? `${song} ${last.go}` : `Take ${last.take_number}`
-      )
-    : told?.go
-      ? against(durationSec, told.go.sec, `on ${told.go.day}`)
-      : told
-        ? "the song's first take tonight"
-        : null
-
-  const goes: (Go & { here?: boolean })[] = [
-    ...tonight,
-    { take_number: takeNumber, go, duration_sec: durationSec, starred: false, here: true },
-  ].slice(-MOST_BARS)
-  const longest = Math.max(...goes.map((g) => g.duration_sec), 1)
-  const shown = song ?? name
-
+/**
+ * The take as the header's title: its song and number on up to two lines,
+ * then cut with the number kept, whole in the shared tooltip; grey for a
+ * take nobody named. The pencil after the last word opens Rename take.
+ * `figures` is the columns in words once they have given way to the title:
+ * the title's tip says them then.
+ */
+export function TakeName({
+  facts,
+  name,
+  fallback,
+  choices,
+  onRename,
+  figures,
+}: {
+  facts: TakeFacts
+  name: string
+  /** What ✕ in Rename take puts back: the name it would have had. */
+  fallback: string
+  choices: SongChoices | null
+  onRename: (name: string) => void
+  figures?: string
+}) {
+  const [renaming, setRenaming] = useState(false)
   return (
-    <div data-take-summary className="flex min-w-0 items-center gap-4">
-      {song && tonight.length > 0 && (
-        <div
-          role="img"
-          aria-label={`Takes of ${song} tonight`}
-          title={goes.map((g) => `${song} ${g.go ?? "?"}: ${formatMMSS(g.duration_sec)}`).join(", ")}
-          className="flex shrink-0 items-end gap-1"
-        >
-          {goes.map((g) => (
-            <span
-              key={g.take_number}
-              data-go-bar={g.go ?? undefined}
-              data-here={g.here ? "" : undefined}
-              data-starred={g.starred ? "" : undefined}
-              className="flex w-3.5 flex-col items-center gap-1"
-            >
-              <span className="flex items-end" style={{ height: BAR_PX }}>
-                <span
-                  data-bar
-                  className={cn(
-                    "w-2 rounded-sm",
-                    g.here
-                      ? "bg-foreground"
-                      : g.starred
-                        ? "bg-signal/80"
-                        : "bg-muted-foreground/40"
-                  )}
-                  style={{ height: drawnLength(g.duration_sec, longest, BAR_PX, 5) }}
-                />
-              </span>
-              <span
-                className={cn(
-                  "text-[10px] leading-none tabular-nums",
-                  g.here ? "font-semibold text-foreground" : "text-muted-foreground"
-                )}
+    <span
+      data-take-summary
+      className={cn("flex min-w-0", facts.unnamed && "text-muted-foreground")}
+    >
+      <GoTitle
+        title={facts.shown}
+        go={facts.go}
+        cut
+        lines={2}
+        start
+        figures={figures}
+        after={
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-row"
+                aria-label="Rename take"
+                onClick={() => setRenaming(true)}
+                className="text-muted-foreground hover:text-foreground"
               >
-                {g.go}
-              </span>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex min-w-0 flex-col gap-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <h2
-            title={shown}
-            className={cn(
-              "flex min-w-0 text-xl leading-7 font-semibold tracking-tight",
-              !song && "text-muted-foreground"
-            )}
-          >
-            <GoTitle title={shown} go={go} cut />
-          </h2>
-          <Button
-            variant="ghost"
-            size="icon-row"
-            aria-label="Rename take"
-            title="Rename"
-            onClick={() => setRenaming(true)}
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-          >
-            <Pencil />
-          </Button>
-        </div>
-        <p data-take-line className="truncate text-sm text-muted-foreground tabular-nums">
-          {formatMMSS(durationSec)}
-          {compare && ` · ${compare}`}
-        </p>
-      </div>
-
+                <Pencil />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span aria-hidden>Rename take</span>
+            </TooltipContent>
+          </Tooltip>
+        }
+      />
       <RenameTakeDialog
         draft={renaming ? { name, fallback } : null}
         choices={choices}
         onOpenChange={setRenaming}
         onSubmit={onRename}
       />
+    </span>
+  )
+}
+
+/**
+ * The song's takes tonight as columns at the header's right, where the
+ * rehearsal screen has its figures, each as tall as it ran with its number
+ * under it, said in words on hover and to a screen reader. They take only
+ * the room the title leaves and give way to it whole: `onGone` hears when
+ * they have, so the title's tip, which still has room to hover, says them.
+ */
+export function TakeFigures({
+  facts,
+  onGone,
+}: {
+  facts: TakeFacts
+  /** Told true while the columns have given way; a state setter, or
+   *  anything that keeps its identity. */
+  onGone?: (gone: boolean) => void
+}) {
+  const box = useRef<HTMLDivElement>(null)
+  const ruler = useRef<HTMLSpanElement>(null)
+  const [room] = useFitted(
+    1,
+    facts.columnsText,
+    () => {
+      const b = box.current
+      const r = ruler.current
+      if (!b || !r) return null
+      const free = b.clientWidth - parseFloat(getComputedStyle(b).paddingLeft)
+      return [free >= r.getBoundingClientRect().width]
+    },
+    [box, ruler]
+  )
+  const gone = facts.columns.length > 0 && !room
+  useEffect(() => {
+    onGone?.(gone)
+  }, [gone, onGone])
+  // Gone with them when they go: a song's first take tonight has none.
+  useEffect(() => () => onGone?.(false), [onGone])
+  const said = `Takes of ${facts.song} tonight: ${facts.columnsText}`
+  return (
+    <div
+      ref={box}
+      data-take-figures
+      data-columns-gone={gone || undefined}
+      // Contained, so the figures ask for no room of their own: the title
+      // takes what it needs first and they have what is left. The columns
+      // with their numbers are taller than a title of one line with the line
+      // over it (52 px to 38 at 100 %), so they reach into the header's
+      // padding rather than make it taller: the header is as tall with them
+      // as without, and a rename that brings them or takes them away moves
+      // nothing under it (B4).
+      className="relative -my-2.5 flex min-w-0 flex-1 items-center justify-end self-stretch overflow-hidden pl-6 [contain:inline-size]"
+    >
+      {gone ? (
+        <span className="sr-only">{said}</span>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div role="img" aria-label={said}>
+              <TakeColumns columns={facts.columns} height={36} numbers />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tnum">
+            <span aria-hidden>{facts.columnsText}</span>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {/* The columns as drawn, out of sight, to measure. */}
+      <div
+        aria-hidden
+        className="pointer-events-none invisible absolute top-0 right-0 h-0 overflow-hidden"
+      >
+        <span ref={ruler} className="block w-max">
+          <TakeColumns columns={facts.columns} height={36} numbers />
+        </span>
+      </div>
     </div>
   )
 }

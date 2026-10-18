@@ -95,7 +95,11 @@ function MeteredFader({
           "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground",
           "[&::-webkit-slider-thumb]:ring-2 [&::-webkit-slider-thumb]:ring-card",
           "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:border-0",
-          "[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-foreground"
+          "[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-foreground",
+          // The focus is the thumb's, in the shared ring: the input's own
+          // outline is off, and it would be round the whole track.
+          "focus-visible:[&::-webkit-slider-thumb]:ring-[3px] focus-visible:[&::-webkit-slider-thumb]:ring-ring/50",
+          "focus-visible:[&::-moz-range-thumb]:ring-[3px] focus-visible:[&::-moz-range-thumb]:ring-ring/50"
         )}
       />
     </div>

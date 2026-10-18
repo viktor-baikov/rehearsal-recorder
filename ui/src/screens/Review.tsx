@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react"
 import { Check, Cloud, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Kbd } from "@/components/ui/kbd"
+import { Whole } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
 import { Shell } from "@/components/Shell"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
-import { TakeSummary } from "@/components/TakeSummary"
+import { TakeFigures, TakeName, takeFacts } from "@/components/TakeSummary"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import { MarkerDialog } from "@/components/MarkerDialog"
@@ -18,7 +20,6 @@ import {
   type ShareWhat,
   type Take,
 } from "@/lib/api"
-import { formatMMSS } from "@/lib/format"
 import { nameWithGo } from "@/lib/goes"
 import { dismiss } from "@/lib/notices"
 import { endedByPython, offerCropUndo } from "@/lib/trash"
@@ -100,6 +101,7 @@ export function Review({
     format: string
   } | null>(null)
   const [send, setSend] = useState(kept?.send ?? false)
+  const cloudBox = useRef<HTMLButtonElement>(null)
   // A take brought back by Undo keeps the answer it had.
   const keptSend = useRef(kept?.send)
   useEffect(() => {
@@ -124,6 +126,9 @@ export function Review({
     }
   }, [])
   const [editing, setEditing] = useState<Marker | null>(null)
+  // The columns in the header have given way to the title, which then says
+  // them in its tip.
+  const [columnsGone, setColumnsGone] = useState(false)
 
   // The take as the screen calls it, with its go, for what a notice says.
   const title = nameWithGo(name, songChoices) || take.default_name || `Take ${take.take_number}`
@@ -252,27 +257,80 @@ export function Review({
     )
   }
 
+  const facts = takeFacts({
+    name,
+    takeNumber: take.take_number,
+    durationSec: take.duration_sec,
+    takes,
+    choices: songChoices,
+  })
+  // The cloud line holds its room from the start, so nothing moves when the
+  // setting answers (B4). It is one line, cut at its end where the buttons
+  // leave it too little room, and whole in the shared tip.
+  const cloudLine = !cloud ? (
+    <p aria-hidden data-cloud-line="waiting" className="invisible flex items-center gap-2 text-sm">
+      <Cloud className="size-4" />
+      &nbsp;
+    </p>
+  ) : cloud.dir ? (
+    <label
+      htmlFor="send-to-cloud"
+      data-cloud-line={send ? "on" : "off"}
+      className="flex min-w-0 cursor-pointer items-center gap-2 text-sm text-muted-foreground"
+    >
+      <Checkbox
+        ref={cloudBox}
+        id="send-to-cloud"
+        checked={send}
+        onCheckedChange={(on) => {
+          setSend(on === true)
+          // Focus left on the box would give it the next Space, which on
+          // this screen means Save take.
+          cloudBox.current?.blur()
+        }}
+        disabled={busy}
+      />
+      <Cloud className="size-4 shrink-0" />
+      <Whole
+        text={`Send to the cloud: ${WHAT_GOES[cloud.what]}, ${cloud.format.toUpperCase()}`}
+        className="min-w-0 truncate"
+      />
+    </label>
+  ) : (
+    <p data-cloud-line="none" className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Cloud className="size-4 shrink-0" />
+      <Whole text="Stays on this computer: no cloud folder is set" className="min-w-0 truncate" />
+    </p>
+  )
+
   return (
     <Shell
       playback
-      subtitle={`${rehearsalName} · ${formatMMSS(take.duration_sec)}`}
-      title={`Take ${take.take_number} recorded`}
+      // The other screens' air: 32 round the screen.
+      air
+      className="px-8 [--screen-pad-y:2rem]"
+      subtitle={
+        <Whole
+          data-subtitle
+          text={`Take ${take.take_number} · ${rehearsalName}`}
+          className="truncate"
+        />
+      }
+      title={
+        <TakeName
+          facts={facts}
+          name={name}
+          fallback={take.default_name ?? `Take ${take.take_number}`}
+          choices={songChoices}
+          onRename={setName}
+          figures={columnsGone && facts.columns.length > 0 ? facts.columnsText : undefined}
+        />
+      }
+      facts={
+        facts.columns.length > 0 ? <TakeFigures facts={facts} onGone={setColumnsGone} /> : undefined
+      }
       footer={
-        <FooterRow
-          error={error}
-          rule
-          left={
-            <TakeSummary
-              name={name}
-              takeNumber={take.take_number}
-              durationSec={take.duration_sec}
-              takes={takes}
-              choices={songChoices}
-              fallback={take.default_name ?? `Take ${take.take_number}`}
-              onRename={setName}
-            />
-          }
-        >
+        <FooterRow error={error} left={cloudLine}>
           <div className="flex items-center gap-3">
             {/* Escape discards, as the button does; Undo brings it back. */}
             <Button
@@ -286,46 +344,14 @@ export function Review({
               Discard
               <Kbd aria-hidden>Esc</Kbd>
             </Button>
-            <Button
-              size="footer-aside"
-              onClick={keep}
-              disabled={busy}
-              aria-keyshortcuts="Space"
-            >
+            {/* The evening's main button keeps its size: Start, Record, Stop
+                and Save take are all the footer's 56 px. */}
+            <Button size="footer" onClick={keep} disabled={busy} aria-keyshortcuts="Space">
               <Check />
               Save take
               <Kbd aria-hidden>Space</Kbd>
             </Button>
           </div>
-          {cloud &&
-            (cloud.dir ? (
-              <label
-                htmlFor="send-to-cloud"
-                className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground"
-              >
-                <input
-                  id="send-to-cloud"
-                  type="checkbox"
-                  checked={send}
-                  onChange={(e) => {
-                    setSend(e.target.checked)
-                    // Focus left on the box would give it the next Space,
-                    // which on this screen means Save take.
-                    e.currentTarget.blur()
-                  }}
-                  disabled={busy}
-                  className="size-4 accent-primary"
-                />
-                <Cloud className="size-4" />
-                Send to the cloud — {WHAT_GOES[cloud.what]},{" "}
-                {cloud.format.toUpperCase()}
-              </label>
-            ) : (
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Cloud className="size-4" />
-                Stays on this computer — no cloud folder is set
-              </p>
-            ))}
         </FooterRow>
       }
     >
@@ -341,6 +367,7 @@ export function Review({
           onCrop={(from, to) => void cropDraft(from, to)}
           canCrop={!busy}
           status={cropping && <RunningLine entry={cropping} label="Cropping" />}
+          rising
         />
       </div>
 

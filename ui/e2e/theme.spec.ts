@@ -88,7 +88,7 @@ test.describe("a take's bar", () => {
     })
     await startRehearsal(page, 2)
     await recordTake(page, 2)
-    const summary = page.locator("[data-take-summary] [data-bar]")
+    const summary = page.locator("header [data-take-figures] [role='img'] [data-bar]")
     await expect(summary.first()).toBeVisible()
     expect(await corner(summary.first())).toBe("4px")
 

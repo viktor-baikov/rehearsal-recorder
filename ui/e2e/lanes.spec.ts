@@ -754,17 +754,16 @@ test.describe("track lanes", () => {
     await page.setViewportSize({ width: 1180, height: 600 })
     await review(page, band(8))
     const main = page.locator("main")
+    // Review has the other screens' air, 32 px, as its own value of the token.
     expect(
-      await page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--screen-pad-y").trim()
-      )
-    ).toBe("1.5rem")
+      await main.evaluate((el) => getComputedStyle(el).getPropertyValue("--screen-pad-y").trim())
+    ).toBe("2rem")
     expect(await style(main, "padding-top", "padding-bottom")).toEqual({
-      "padding-top": "24px",
-      "padding-bottom": "24px",
+      "padding-top": "32px",
+      "padding-bottom": "32px",
     })
     // A roomier screen: the padding follows the token, and so does the master.
-    await page.evaluate(() => document.documentElement.style.setProperty("--screen-pad-y", "3rem"))
+    await main.evaluate((el) => el.style.setProperty("--screen-pad-y", "3rem"))
     expect(await style(main, "padding-top", "padding-bottom")).toEqual({
       "padding-top": "48px",
       "padding-bottom": "48px",

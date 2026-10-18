@@ -6,6 +6,7 @@ import {
   openApp,
   openHistory,
   recordTake,
+  settled,
   startRehearsal,
   test,
 } from "./app.ts"
@@ -164,4 +165,23 @@ test.describe("Playback volume in the header", () => {
     await turn(page, await openVolume(page), 0.25)
     await expect.poll(() => lastArg(page, "player_set_master")).toBeLessThan(0.5)
   })
+})
+
+test("a fader shows keyboard focus on its thumb", async ({ page }) => {
+  // Its own outline is off, as the thumb is drawn here: the focus is a ring
+  // round the thumb, so a keyboard sees which fader the arrows will turn.
+  await openApp(page)
+  await startRehearsal(page)
+  await recordTake(page)
+  await settled(page)
+  const fader = page.getByRole("slider", { name: "Guitar volume" })
+  const box = (await fader.boundingBox())!
+  const clip = { x: box.x - 6, y: box.y - 6, width: box.width + 12, height: box.height + 12 }
+  await page.mouse.move(0, 0)
+  const resting = await page.screenshot({ clip })
+  await fader.focus()
+  // A key down is what tells Chromium the focus is the keyboard's.
+  await page.keyboard.press("Shift")
+  await expect(fader).toBeFocused()
+  expect((await page.screenshot({ clip })).equals(resting)).toBe(false)
 })
