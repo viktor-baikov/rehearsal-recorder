@@ -112,6 +112,12 @@ test("says the app's name with its logo, and fills the band in from the template
       })
     )
     .toBe(true)
+  // A title is cut at the end of its row, never wrapped, unless the screen
+  // says it fits itself to its lines (Review's take).
+  expect(await style(page.locator("header h1"), "white-space", "text-overflow")).toEqual({
+    "white-space": "nowrap",
+    "text-overflow": "ellipsis",
+  })
   await expect(page.locator("textarea[aria-label='Track 1 name']")).toHaveValue("Guitar")
   // Free space is always on screen. The fake's disk lasts for weeks: past
   // two days the estimate is "many hours", which "about" does not go in

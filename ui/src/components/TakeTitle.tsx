@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { flushSync } from "react-dom"
 import { WholeTip } from "@/components/ui/whole"
 import type { Take } from "@/lib/api"
@@ -16,31 +16,73 @@ import { cn } from "@/lib/utils"
  * tails. One line has that leading too: then how tall the title is depends
  * only on the lines drawn, never on what it was last fitted to, and the
  * screen round it, which is fitted to it in turn, comes to rest (Recording).
+ *
+ * `start` sets it at the start of its lines, as Review's header has it.
+ * `after` is a button that follows the last word, such as Review's pencil: the
+ * title keeps room for it on its last line, held to the last word so it never
+ * starts a line alone, and it is fitted with that room counted, so on two
+ * lines it sits after the last word and not at the box's edge. The button is
+ * laid over that room rather than inside the title, so the title's tip is not
+ * the button's and a cut title, hidden from a screen reader for the whole one
+ * beside it, does not hide the button too.
  */
-function TwoLines({ title, go }: { title: string; go: number | null | undefined }) {
+function TwoLines({
+  title,
+  go,
+  start = false,
+  after,
+  figures,
+}: {
+  title: string
+  go: number | null | undefined
+  start?: boolean
+  after?: ReactNode
+  figures?: ReactNode
+}) {
   const probe = useRef<HTMLSpanElement>(null)
   const box = useRef<HTMLSpanElement>(null)
+  const button = useRef<HTMLSpanElement>(null)
+  const room = useRef<HTMLSpanElement>(null)
   // A no-break space: the go never starts a line of its own.
   const suffix = go != null ? `\u00a0${go}` : ""
-  const [fit, setFit] = useState({ text: title, cut: false, lines: 1 })
+  const [fit, setFit] = useState({ text: title, cut: false, lines: 1, room: 0 })
   const measure = useCallback(() => {
     const el = probe.current
     if (!el) return
     const line = parseFloat(getComputedStyle(el).fontSize) * 1.1
+    // The button's room, as wide as it is drawn.
+    const wide = button.current?.offsetWidth ?? 0
     // The same markup as the title drawn, the go in its own figures: a
     // tabular 2 is wider than a plain one, and a line that only just fits in
     // plain text does not with it.
     const lines = (t: string) => {
       el.textContent = t
+      // With a button, the last character goes on with the go and the
+      // button's room, which never start a line alone.
+      let tail: HTMLElement = el
+      if (wide) {
+        const chars = Array.from(t)
+        tail = document.createElement("span")
+        tail.className = "whitespace-nowrap"
+        tail.textContent = chars.pop() ?? ""
+        el.textContent = chars.join("")
+        el.appendChild(tail)
+      }
       if (suffix) {
         const number = document.createElement("span")
         number.className = "tnum"
         number.textContent = suffix
-        el.appendChild(number)
+        tail.appendChild(number)
+      }
+      if (wide) {
+        const kept = document.createElement("span")
+        kept.className = "ml-1.5 inline-block"
+        kept.style.width = `${wide}px`
+        tail.appendChild(kept)
       }
       return Math.round(el.getBoundingClientRect().height / line)
     }
-    let next = { text: title, cut: false, lines: lines(title) }
+    let next = { text: title, cut: false, lines: lines(title), room: wide }
     if (next.lines > 2) {
       let lo = 0
       let hi = title.length
@@ -53,14 +95,29 @@ function TwoLines({ title, go }: { title: string; go: number | null | undefined 
       // as a person would cut it.
       const space = title.lastIndexOf(" ", lo)
       const at = space > 0 && lo - space <= 12 ? space : lo
-      next = { text: `${title.slice(0, at).trimEnd()}…`, cut: true, lines: 2 }
+      next = { text: `${title.slice(0, at).trimEnd()}…`, cut: true, lines: 2, room: wide }
     }
     // The copy holds no words between fits: the heading's are the title's.
     el.textContent = ""
     setFit((was) =>
-      was.text === next.text && was.cut === next.cut && was.lines === next.lines ? was : next
+      was.text === next.text &&
+      was.cut === next.cut &&
+      was.lines === next.lines &&
+      was.room === next.room
+        ? was
+        : next
     )
   }, [title, suffix])
+  // The button over the room kept for it, wherever the last line put it.
+  const place = useCallback(() => {
+    const b = button.current
+    const r = room.current
+    if (!b || !r) return
+    b.style.left = `${r.offsetLeft}px`
+    b.style.top = `${r.offsetTop}px`
+    b.style.height = `${r.offsetHeight}px`
+  }, [])
+  useLayoutEffect(() => place())
   useLayoutEffect(() => {
     measure()
     const el = box.current
@@ -68,17 +125,31 @@ function TwoLines({ title, go }: { title: string; go: number | null | undefined 
     // The measure above comes before the screen's own fit (Recording's),
     // which can draw the title smaller. The observer measures it again at
     // that size before the frame is drawn, and flushSync puts the words it
-    // finds in that frame, not the next.
-    const watch = new ResizeObserver(() => flushSync(measure))
+    // finds in that frame, not the next. A new width can move the last word
+    // without changing the words, so the button is placed again either way.
+    const watch = new ResizeObserver(() => {
+      flushSync(measure)
+      place()
+    })
     watch.observe(el)
+    if (button.current) watch.observe(button.current)
     return () => watch.disconnect()
-  }, [measure])
+  }, [measure, place])
+  const chars = Array.from(fit.text)
+  const last = after ? (chars.pop() ?? "") : ""
+  const number = suffix && <span data-go className="tnum text-muted-foreground">{suffix}</span>
   return (
-    <span ref={box} className="relative flex w-full min-w-0 justify-center">
+    <span
+      ref={box}
+      className={cn("relative flex w-full min-w-0", start ? "justify-start" : "justify-center")}
+    >
       <span
         ref={probe}
         aria-hidden
-        className="invisible absolute inset-x-0 top-0 text-center leading-[1.1] break-words"
+        className={cn(
+          "invisible absolute inset-x-0 top-0 leading-[1.1] break-words",
+          start ? "text-left" : "text-center"
+        )}
       />
       {fit.cut && (
         <span className="sr-only">
@@ -86,18 +157,43 @@ function TwoLines({ title, go }: { title: string; go: number | null | undefined 
           {suffix}
         </span>
       )}
-      <WholeTip cut={fit.cut} text={title}>
+      <WholeTip cut={fit.cut} text={title} figures={figures}>
         <span
           data-go-title
           data-lines={fit.lines}
           data-cut={fit.cut || undefined}
           aria-hidden={fit.cut || undefined}
-          className="line-clamp-2 min-w-0 text-center leading-[1.1] break-words"
+          className={cn(
+            "line-clamp-2 min-w-0 leading-[1.1] break-words",
+            start ? "text-left" : "text-center"
+          )}
         >
-          {fit.text}
-          {suffix && <span data-go className="tnum text-muted-foreground">{suffix}</span>}
+          {after ? (
+            <>
+              {chars.join("")}
+              <span className="whitespace-nowrap">
+                {last}
+                {number}
+                <span
+                  ref={room}
+                  className="ml-1.5 inline-block h-lh align-top"
+                  style={{ width: fit.room }}
+                />
+              </span>
+            </>
+          ) : (
+            <>
+              {fit.text}
+              {number}
+            </>
+          )}
         </span>
       </WholeTip>
+      {after && (
+        <span ref={button} className="absolute flex items-center">
+          {after}
+        </span>
+      )}
     </span>
   )
 }
@@ -112,19 +208,29 @@ function TwoLines({ title, go }: { title: string; go: number | null | undefined 
  * go stays whole: it is what tells goes at a song apart. The wrapper is a
  * flex box that takes the room it is given, so give it a width to cut at.
  * With `lines={2}` as well, the title wraps to a second line before it is
- * cut (TwoLines).
+ * cut (TwoLines), and can take `start`, `after` and `figures`.
  */
 export function GoTitle({
   title,
   go,
   cut = false,
   lines = 1,
+  start = false,
+  after,
+  figures,
 }: {
   title: string
   go: number | null | undefined
   cut?: boolean
   /** With `cut`, how many lines the title may take before it is cut. */
   lines?: 1 | 2
+  /** With two lines, at the start of the line rather than centred. */
+  start?: boolean
+  /** With two lines, a button right after the last word (TwoLines). */
+  after?: ReactNode
+  /** With two lines, figures beside the title that have given way to it:
+   *  its tip says them under it (WholeTip). */
+  figures?: ReactNode
 }) {
   const number =
     go != null ? (
@@ -140,7 +246,8 @@ export function GoTitle({
         {number}
       </>
     )
-  if (lines === 2) return <TwoLines title={title} go={go} />
+  if (lines === 2)
+    return <TwoLines title={title} go={go} start={start} after={after} figures={figures} />
   return (
     <span className="flex max-w-full min-w-0">
       <span data-go-title className="truncate">{title}</span>

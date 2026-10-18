@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type CSSProperties } from "react"
 import {
   CircleAlert,
   Flag,
@@ -26,6 +26,7 @@ import { useKey } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
+import { rise } from "@/lib/motion"
 import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import { api, type Marker, type MissingNotes, type NotesFile, type TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
@@ -104,6 +105,7 @@ export function TakePlayer({
   spaceKey = false,
   goKeys = false,
   status,
+  rising = false,
 }: {
   player: MultitrackPlayer
   /** The take's .mid files, drawn under their audio or in lanes of their
@@ -132,6 +134,10 @@ export function TakePlayer({
   spaceKey?: boolean
   /** ↑ and ↓ go to the song's other goes: the take strip is above. */
   goKeys?: boolean
+  /** Its groups rise in as the screen comes up, the transport and then the
+   *  take, 40 ms apart (F10): on Review, which opens on the player. Where a
+   *  take is opened in a screen already up, it is simply there. */
+  rising?: boolean
 }) {
   const notesRead = useTakeNotes(notes, notesMissing)
   // The same rule the timeline draws by: one end set reaches to the take's
@@ -154,13 +160,18 @@ export function TakePlayer({
         markers={markers}
         onAddMarker={onAddMarker}
         onEditMarker={onEditMarker}
+        className={cn(rising && "animate-rise")}
+        style={rising ? rise(0) : undefined}
       />
 
       <PlayerLine error={player.loadError} status={status} warning={player.outputWarning} />
 
       {/* The take is one group, 24 px apart inside it. The line above holds
           that room itself, so it has no gap round it. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-6">
+      <div
+        className={cn("flex min-h-0 flex-1 flex-col gap-6", rising && "animate-rise")}
+        style={rising ? rise(1) : undefined}
+      >
         <Timeline
           player={player}
           markers={markers}
@@ -348,6 +359,8 @@ function Transport({
   onEditMarker,
   spaceKey,
   goKeys,
+  className,
+  style,
 }: {
   player: MultitrackPlayer
   spaceKey: boolean
@@ -355,6 +368,8 @@ function Transport({
   markers: Marker[]
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
+  className?: string
+  style?: CSSProperties
 }) {
   const { looping, position, duration } = player
 
@@ -375,7 +390,8 @@ function Transport({
     <div
       role="toolbar"
       aria-label="Transport"
-      className="flex flex-wrap items-center gap-3 rounded-xl bg-card px-6 py-4"
+      className={cn("flex flex-wrap items-center gap-3 rounded-xl bg-card px-6 py-4", className)}
+      style={style}
     >
       <Tooltip>
         <TooltipTrigger asChild>

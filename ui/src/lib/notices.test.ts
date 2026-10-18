@@ -70,6 +70,34 @@ describe("onGone", () => {
     expect(getNotices().map((n) => n.key)).toEqual(["k1", "k2", "k3"])
   })
 
+  it("makes room with the oldest notice that has no action, so an Undo stays", () => {
+    const undone = vi.fn()
+    notify({
+      key: "undo:1",
+      kind: "done",
+      text: "went to the Trash",
+      action: { label: "Undo", run: vi.fn() },
+      onGone: undone,
+    })
+    notify({ key: "copy", kind: "done", text: "copied" })
+    notify({ key: "stop", kind: "warning", text: "stopped by itself" })
+    notify({ key: "save", kind: "error", text: "could not save" })
+    expect(getNotices().map((n) => n.key)).toEqual(["undo:1", "stop", "save"])
+    expect(undone).not.toHaveBeenCalled()
+  })
+
+  it("lets an Undo go only when every other notice up has an action too", () => {
+    const gone = [vi.fn(), vi.fn(), vi.fn()]
+    for (const [i, onGone] of gone.entries()) {
+      notify({ key: `undo:${i}`, kind: "done", text: `${i}`, action: { label: "Undo", run: vi.fn() }, onGone })
+    }
+    // The newest is said whatever it is: the oldest Undo makes room for it.
+    notify({ key: "save", kind: "error", text: "could not save" })
+    expect(getNotices().map((n) => n.key)).toEqual(["undo:1", "undo:2", "save"])
+    expect(gone[0]).toHaveBeenCalledTimes(1)
+    expect(gone[1]).not.toHaveBeenCalled()
+  })
+
   it("does not run when the notice's action runs", () => {
     const onGone = vi.fn()
     const run = vi.fn()

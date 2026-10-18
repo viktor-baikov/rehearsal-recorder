@@ -41,6 +41,7 @@ import { useAfter } from "@/hooks/useAfter"
 import { useSteady } from "@/hooks/useSteady"
 import { chosenSet, useSets } from "@/hooks/useSets"
 import { useSongChoices } from "@/hooks/useSongChoices"
+import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
 import { byFiles, useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { cn } from "@/lib/utils"
@@ -78,6 +79,9 @@ const MIDI_PORTS_POLL_MS = 1000
 /** The notices' slots this screen says things in, a track taken off in each:
  *  one of its own per track, so each keeps its Undo (`setup-track:{n}`). */
 const SAID = "setup-track"
+
+/** The notice a button's failure is said in: Look again, Check signal, Start. */
+const ERROR = "setup"
 
 /** What a track's band entry keeps across interfaces: what is on screen when
  *  a card found by looking again is laid out. */
@@ -129,7 +133,6 @@ export function Setup({
   const [tracks, setTracks] = useState<Track[]>([])
   const [saved, setSaved] = useState(false)
   const [starting, setStarting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   // Signal check: listen to the inputs without recording, so everyone can
   // confirm they land on their own track.
@@ -415,6 +418,9 @@ export function Setup({
   // their Undo, and leaving the screen takes all of them with it.
   const saidKeys = useRef(new Set<string>())
   const saidCount = useRef(0)
+  // A button's failure, said until it is closed, tried again or the screen
+  // goes.
+  const sayError = useErrorNotice(ERROR)
   // Each track taken off, with the one that came after it then (null when
   // it was the last): an Undo follows this chain to find its place.
   const nextOf = useRef(new WeakMap<Track, Track | null>())
@@ -537,14 +543,14 @@ export function Setup({
   // PortAudio lists the interfaces once, when the app starts, so a desk
   // switched on afterwards is found only by looking again.
   const lookAgain = async () => {
-    setError(null)
+    dismiss(ERROR)
     setStillMissing(false)
     if (checking) await stopCheck()
     setRescanning(true)
     try {
       const res = await api().rescan_devices()
       if (!res.ok) {
-        setError(res.error ?? "Could not look for interfaces")
+        sayError(res.error ?? "Could not look for interfaces")
         return
       }
       setStillMissing(
@@ -596,7 +602,7 @@ export function Setup({
     // Listening to last time and to the inputs at once is one sound too
     // many to tell which track is which.
     uncue()
-    setError(null)
+    dismiss(ERROR)
     setCheckProblem(null)
     // What this check opens, by each track's place, is set down before
     // Python is asked, from the tracks it is given. A track taken off, added
@@ -620,7 +626,7 @@ export function Setup({
       setOpeningCheck(false)
     })
     if (!res.ok) {
-      setError(res.error ?? "Could not open the input for checking")
+      sayError(res.error ?? "Could not open the input for checking")
       return
     }
     setSeen({})
@@ -722,7 +728,7 @@ export function Setup({
     // down is still held, and nothing is missed while they would reopen.
     await stopMonitorQuietly(true)
     setStarting(true)
-    setError(null)
+    dismiss(ERROR)
     const res = await api().start_rehearsal(
       name.trim() || "Rehearsal",
       deviceIndex,
@@ -736,7 +742,7 @@ export function Setup({
       // No rehearsal took the ports the check left open: they go, or one
       // another app could use stays held with nothing listening to it.
       await stopMonitorQuietly()
-      setError(res.error ?? "Could not start the rehearsal")
+      sayError(res.error ?? "Could not start the rehearsal")
       return
     }
     onStarted()
@@ -1160,7 +1166,7 @@ export function Setup({
       className={cn("p-0", wide && "flex overflow-hidden")}
       footer={
         <div className="animate-rise" style={rise(2)}>
-          <FooterRow error={error} rule left={nameField}>
+          <FooterRow rule left={nameField}>
             <div className="flex items-center gap-3">
               <SetPicker
                 sets={sets.sets}

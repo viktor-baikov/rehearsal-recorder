@@ -9,6 +9,7 @@ import {
   setFake,
   startButton,
   startRehearsal,
+  style,
   test,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
@@ -179,6 +180,30 @@ test.describe("the background work button, from any screen", () => {
     await activity(page, [entry()])
     await expect(workButton(page)).toBeVisible()
   })
+})
+
+test("the list's headings are written as they read (F7)", async ({ page }) => {
+  await openApp(page, { before: "window.__ACTIVITY__ = [];" })
+  await startRehearsal(page)
+  await activity(page, [
+    entry({ id: 1 }),
+    entry({ id: 2, state: "done", fraction: 1, step: null, detail: "MP3 of the mix" }),
+  ])
+  await workButton(page).click()
+  const list = page.getByRole("dialog", { name: "Background work" })
+  const headings = [
+    list.getByRole("heading", { name: "Working" }),
+    list.getByRole("heading", { name: "Done" }),
+  ]
+  for (const heading of headings) {
+    await expect(heading).toBeVisible()
+    expect(await style(heading, "text-transform", "letter-spacing")).toEqual({
+      "text-transform": "none",
+      "letter-spacing": "normal",
+    })
+    // innerText is the text as drawn, capitals made by the style and all.
+    expect(await heading.innerText()).toBe(await heading.evaluate((el) => el.textContent))
+  }
 })
 
 test.describe("long work shows its progress where it runs", () => {

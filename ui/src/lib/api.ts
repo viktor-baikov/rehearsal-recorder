@@ -871,10 +871,6 @@ type PyApi = {
   /** Names the take recorded next; blank goes back to the name it would
    *  have had. Holds until a take is kept. */
   set_next_take_name(name: string): Promise<Ok<{ next_take_name?: string; next_take_go?: number | null }>>
-  /** The latest go at the song `name` resolves to, by session_state's rule
-   *  for last_attempt: what the screen after a take measures it against.
-   *  null with no rehearsal on, no song, or a song never played. */
-  last_attempt(name: string): Promise<LastAttempt | null>
   get_levels(): Promise<Record<string, number>>
   stop_take(): Promise<PendingTake | { ok: false; error: string }>
   keep_take(
@@ -1274,7 +1270,6 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "list_drafts",
   "list_labels",
   "list_sets",
-  "last_attempt",
   "get_settings",
   "startup_problems",
 ])
