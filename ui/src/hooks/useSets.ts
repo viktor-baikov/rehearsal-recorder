@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react"
 import { api, type SongSet } from "@/lib/api"
+import { withSongBack } from "@/lib/setSongs"
 
 /**
  * The band's sets, and the one Start rehearsal plays by (issue #12 step 8,
@@ -60,6 +61,27 @@ export function chooseSet(id: number | null) {
 /** What a change to the sets answered: the sets as they are now. */
 export function setsChanged(sets: SongSet[]) {
   put({ ...state, sets })
+}
+
+/**
+ * Puts a song taken out of a set back in it, the Undo of its notice: into
+ * the set as Python has it now, which may have changed since, before the
+ * song that came after it (lib/setSongs withSongBack). Whatever screen is
+ * open, the sets here follow. Returns why it could not, or null.
+ */
+export async function putSongBack(
+  setId: number,
+  title: string,
+  at: number,
+  next: string | null
+): Promise<string | null> {
+  const set = (await api().list_sets()).find((s) => s.id === setId)
+  if (!set) return "its set was deleted"
+  const titles = withSongBack(set.songs.map((s) => s.title), title, at, next)
+  const res = await api().update_set(setId, null, titles)
+  if (!res.ok) return res.error ?? "Could not change the set"
+  if (res.sets) setsChanged(res.sets)
+  return null
 }
 
 export function useSets(): {

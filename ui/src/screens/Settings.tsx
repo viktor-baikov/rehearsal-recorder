@@ -55,6 +55,8 @@ const TABS: {
     label: "Sets",
     icon: <ListMusic className="size-4" />,
     blurb: "Songs in the order a rehearsal goes through them",
+    // The list and the set each scroll on their own.
+    fills: true,
   },
   {
     id: "appearance",

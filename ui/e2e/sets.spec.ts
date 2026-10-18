@@ -1,18 +1,25 @@
 import {
   callCount,
   calls,
+  colour,
+  EDGE,
   expect,
   expectedError,
   GIG,
+  holdFor,
+  letThrough,
+  notices,
   openApp,
   recordTake,
   startButton,
   startRehearsal,
+  style,
   test,
+  waitingFor,
   withSets,
 } from "./app.ts"
 import type { SetSeed } from "./app.ts"
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 
 // Song sets (issue #12 step 8): a set is a named list of songs in order,
 // kept in the library and picked beside Start rehearsal.
@@ -517,6 +524,25 @@ test.describe("on the start screen", () => {
     expect(await callCount(page, "start_rehearsal")).toBe(0)
   })
 
+  test("New set's cross on the start screen raises no notice", async ({ page }) => {
+    await openApp(page, { before: onlySets([SHORT_SET]) })
+    await picker(page).click()
+    await menu(page).getByRole("menuitem", { name: "New set…" }).click()
+    const dialog = page.getByRole("dialog", { name: "New set" })
+    const add = dialog.locator("[data-set-add]")
+    await add.getByRole("button", { name: "Viasna" }).click()
+    await add.getByRole("button", { name: "Pałyn" }).click()
+    // Nothing is kept until Create set, so there is nothing to undo.
+    await dialog.getByRole("button", { name: "Take Pałyn out" }).click()
+    await expect(dialog.locator("[data-set-editor-song]")).toHaveCount(1)
+    await expect(notices(page)).toHaveCount(0)
+    expect(await callCount(page, "update_set")).toBe(0)
+    // Taken out to the last, it says it has no songs, as in Settings.
+    await dialog.getByRole("button", { name: "Take Viasna out" }).click()
+    await expect(dialog.locator("[data-slot=empty-title]")).toHaveText("No songs yet")
+    await expect(notices(page)).toHaveCount(0)
+  })
+
   test("Enter in New set's name is Create set, once it has a name and a song", async ({ page }) => {
     await openApp(page, { before: onlySets([SHORT_SET]) })
     await picker(page).click()
@@ -704,6 +730,84 @@ test.describe("in Settings", () => {
     detail(page)
       .locator("[data-set-editor-song]")
       .evaluateAll((els) => els.map((e) => e.getAttribute("data-set-editor-song")))
+  const songRow = (page: Page, title: string) =>
+    detail(page).locator(`[data-set-editor-song=${JSON.stringify(title)}]`)
+  const box = async (el: Locator) => (await el.boundingBox())!
+  /** The shared tip a cut name shows whole in, the open one. */
+  const tip = (page: Page) => page.locator("[data-whole][data-state$='open']")
+  const away = (page: Page) => page.mouse.move(0, 0, { steps: 8 })
+  /** The notice whose words are exactly `text`. */
+  const said = (page: Page, text: string) =>
+    notices(page).filter({
+      has: page.locator("p", { hasText: new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }),
+    })
+  /** Until `el`, with the pointer away from it, has this fill: it eases to
+   *  it over 200 ms after a click. */
+  const filled = async (page: Page, el: Locator, fill: string) => {
+    await away(page)
+    await expect.poll(async () => (await style(el, "background-color"))["background-color"]).toBe(fill)
+  }
+  const edgeClear = async (el: Locator) => {
+    const edge = await style(el, ...EDGE)
+    return ["top", "right", "bottom", "left"].every(
+      (side) =>
+        edge[`border-${side}-width`] === "0px" || edge[`border-${side}-color`] === "rgba(0, 0, 0, 0)"
+    )
+  }
+  /** At 150 %, over the config withSets wrote. */
+  const AT_150 =
+    'localStorage.setItem("mock-python-config", JSON.stringify(' +
+    '{...JSON.parse(localStorage.getItem("mock-python-config")), ui_scale: 1.5}));'
+
+  // The sixteen sets of the screen's stress case: one with a name of 40
+  // letters, and one of 24 songs, among them the 84-letter Kalychanka.
+  const KALY =
+    "Kalychanka (slow version for the wedding, with the long intro the bride asked for)"
+  const BARE = "Dancing barefoot on the roof of the old brewery"
+  const LAKE = "Wedding at the lake house, third sitting"
+  const BAND = ["Pałyn", "Viasna", "Ahoń", "Sonca", "Dym", "Ptuška", "Daroha"]
+  const MORE = ["Zorka", "Vecharyna", "Ranica", "Kupalle", "Žniŭnaja", "Kalada"]
+  const FULL = [
+    ...BAND,
+    ...MORE,
+    BARE,
+    KALY,
+    ...["Kupalinka", "Siabry", "Charot", "Biarozka", "Maci", "Lasy", "Zima", "Vyshyvanka", "Zvon"],
+  ]
+  const MANY_SETS: SetSeed[] = [
+    { id: 1, name: "Gig on the 25th", songs: BAND.slice(0, 6) },
+    {
+      id: 2,
+      name: "Wedding set",
+      songs: [KALY, "Zorka", "Viasna", "Kupalle", "Sonca", "Dym", "Kalada", "Daroha"],
+    },
+    { id: 3, name: LAKE, songs: [KALY, "Zorka", "Ranica", "Vecharyna", "Ptuška"] },
+    { id: 4, name: "Open-air, short", songs: ["Dym", "Ahoń", "Pałyn", "Viasna", "Sonca"] },
+    { id: 5, name: "Full night at the brewery", songs: FULL.slice(0, 24) },
+    { id: 6, name: "Open-air, long", songs: FULL.slice(0, 12) },
+    { id: 7, name: "Acoustic hour", songs: ["Sonca", "Daroha", "Ptuška", "Viasna", "Zorka", "Ranica"] },
+    {
+      id: 8,
+      name: "Christmas party",
+      songs: ["Kalada", "Zorka", "Dym", "Ahoń", "Pałyn", "Vecharyna", "Kupalle"],
+    },
+    {
+      id: 9,
+      name: "Folk club Friday",
+      songs: ["Viasna", "Žniŭnaja", "Kalada", "Sonca", "Ahoń", "Dym", "Ptuška", "Daroha", "Zorka"],
+    },
+    { id: 10, name: "Warm-up", songs: ["Dym", "Pałyn", "Viasna"] },
+    { id: 11, name: "New songs", songs: ["Kupalinka", "Siabry", "Charot", "Biarozka"] },
+    { id: 12, name: "Slow ones", songs: ["Daroha", "Sonca", "Maci", "Lasy", "Zima"] },
+    { id: 13, name: "Street festival", songs: FULL.slice(0, 9) },
+    { id: 14, name: "Radio session", songs: ["Ptuška", "Dym", "Viasna", "Pałyn"] },
+    {
+      id: 15,
+      name: "Kupalle night",
+      songs: ["Kupalle", "Kupalinka", "Kalada", "Zorka", "Vyshyvanka", "Zvon", "Ranica", "Vecharyna"],
+    },
+    { id: 16, name: "Backup set", songs: ["Pałyn", "Viasna", "Ahoń", "Dym"] },
+  ]
 
   test("Settings has a Sets tab after Marks", async ({ page }) => {
     await openSets(page)
@@ -833,26 +937,295 @@ test.describe("in Settings", () => {
     await expect(nameField(page)).toHaveValue("New songs")
   })
 
-  test("no sets says how sets work", async ({ page }) => {
-    await openSets(page, withSets([], null))
-    await expect(page.getByText("No sets yet.")).toContainText(
-      "A set is the songs a rehearsal goes through, in order. Pick one beside Start rehearsal, or play freely as before."
+  test("the sets are the shared rows, the chosen one grey with no frame", async ({ page }) => {
+    await openSets(page)
+    for (const row of await items(page).all()) {
+      // Item's own class: the row is the shared one, on a button the keys
+      // reach. Its data-slot is the tip's, round it.
+      await expect(row).toHaveClass(/(^|\s)group\/item(\s|$)/)
+      expect(await row.evaluate((e) => e.tagName)).toBe("BUTTON")
+    }
+    // A name over its count: the name in 600, the count in 12 px grey.
+    const gig = item(page, "Gig on the 25th")
+    expect(await style(gig.locator("[data-name]"), "font-weight")).toEqual({ "font-weight": "600" })
+    expect(await style(gig.getByText("4 songs"), "font-size", "color")).toEqual({
+      "font-size": "12px",
+      color: await colour(page, "--muted-foreground"),
+    })
+    // No tip of the browser's own: a cut name is whole in the shared one.
+    await expect(page.locator("[data-tab-body] [title]")).toHaveCount(0)
+
+    const selected = await colour(page, "--selected")
+    await expect(gig).toHaveAttribute("aria-current", "true")
+    await filled(page, gig, selected)
+    expect(await edgeClear(gig)).toBe(true)
+    await filled(page, item(page, "New songs"), "rgba(0, 0, 0, 0)")
+    await item(page, "New songs").click()
+    await expect(item(page, "New songs")).toHaveAttribute("aria-current", "true")
+    await expect(gig).not.toHaveAttribute("aria-current")
+    await filled(page, item(page, "New songs"), selected)
+    await filled(page, gig, "rgba(0, 0, 0, 0)")
+
+    // The set beside them is a group: the card's fill, with no frame.
+    await expect(detail(page)).toHaveAttribute("data-slot", "card")
+    expect((await style(detail(page), "background-color"))["background-color"]).toBe(
+      await colour(page, "--card")
     )
-    await expect(detail(page)).toHaveCount(0)
-    await page.getByRole("button", { name: "New set", exact: true }).click()
-    await expect(page.getByText("No sets yet.")).toHaveCount(0)
-    await expect(nameField(page)).toHaveValue("New set")
+    expect(await edgeClear(detail(page))).toBe(true)
   })
 
-  test("on a narrow window the chosen set is under the list", async ({ page }) => {
-    await page.setViewportSize({ width: 820, height: 700 })
+  test("a set's songs on the shared pieces, a cut name whole in its tip", async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openSets(page, withSets(MANY_SETS, 5, AT_150))
+    await expect(nameField(page)).toHaveValue("Full night at the brewery")
+    expect(await songsNow(page)).toEqual(FULL.slice(0, 24))
+    for (const title of ["Pałyn", KALY, "Zvon"]) {
+      const row = songRow(page, title)
+      const move = row.getByRole("button", { name: `Move ${title}`, exact: true })
+      const out = row.getByRole("button", { name: `Take ${title} out`, exact: true })
+      for (const button of [move, out]) {
+        expect(await button.evaluate((e) => e.tagName)).toBe("BUTTON")
+        await expect(button).toHaveAttribute("data-variant", "ghost")
+        await expect(button).toHaveAttribute("data-size", "icon-tiny")
+        // 24 px, at 150 %.
+        const b = await box(button)
+        expect(b.width, title).toBeCloseTo(36, 0)
+        expect(b.height, title).toBeCloseTo(36, 0)
+      }
+      // The ✕ is round, as the other ✕s are.
+      expect(
+        await out.evaluate((e) => parseFloat(getComputedStyle(e).borderTopLeftRadius) >= e.clientWidth / 2)
+      ).toBe(true)
+    }
+    // The ✕ says what it does in the shared tip.
+    const out = songRow(page, "Pałyn").getByRole("button", { name: "Take Pałyn out" })
+    await out.hover()
+    await expect(page.getByRole("tooltip")).toHaveText("Take it out of the set")
+    await away(page)
+    await expect(page.getByRole("tooltip")).toHaveCount(0)
+
+    // The long name is cut at the end of its room, and whole on hover.
+    const name = songRow(page, KALY).locator("[data-cut]")
+    await expect(name).toHaveText(KALY)
+    expect(await name.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+    await name.hover()
+    await expect(tip(page)).toHaveText(KALY)
+    await expect(page.locator("[data-tab-body] [title]")).toHaveCount(0)
+    // Its row is as tall as the others.
+    expect((await box(songRow(page, KALY))).height).toBeCloseTo(
+      (await box(songRow(page, "Pałyn"))).height,
+      0
+    )
+  })
+
+  test("16 sets at 960x680 and 150 %: two columns, each scrolling on its own", async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openSets(page, withSets(MANY_SETS, 5, AT_150))
+    await expect(nameField(page)).toHaveValue("Full night at the brewery")
+    const list = page.getByRole("list", { name: "Sets" })
+    const listColumn = page.locator("[data-column='list']")
+    const setColumn = page.locator("[data-column='set']")
+    await expect(items(page)).toHaveCount(16)
+
+    // Side by side: the list's column 13 rem wide, with a quarter rem each
+    // side for the focus ring, and the set in the rest.
+    const l = await box(list)
+    const s = await box(setColumn)
+    expect((await box(listColumn)).width).toBeCloseTo(13.5 * 24, 0)
+    expect(s.x).toBeGreaterThan(l.x + l.width)
+    expect((await box(detail(page))).y).toBeCloseTo(l.y, 0)
+    expect(s.width).toBeGreaterThan(400)
+
+    // Each longer than the window, and scrolled on its own.
+    for (const column of [listColumn, setColumn]) {
+      expect(await column.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true)
+    }
+    const head = await box(page.locator("[data-tab-head]"))
+    await listColumn.hover()
+    await page.mouse.wheel(0, 300)
+    await expect.poll(() => listColumn.evaluate((e) => e.scrollTop)).toBeGreaterThan(0)
+    expect(await setColumn.evaluate((e) => e.scrollTop)).toBe(0)
+    await setColumn.hover()
+    await page.mouse.wheel(0, 300)
+    await expect.poll(() => setColumn.evaluate((e) => e.scrollTop)).toBeGreaterThan(0)
+    expect(await page.locator("[data-tab-body]").evaluate((e) => e.scrollTop)).toBe(0)
+    expect(await box(page.locator("[data-tab-head]"))).toEqual(head)
+
+    // The 40-letter name is cut, and whole in the shared tip on hover and on
+    // keyboard focus.
+    const lake = item(page, LAKE)
+    const lakeName = lake.locator("[data-name]")
+    await expect(lakeName).toHaveText(LAKE)
+    await listColumn.evaluate((e) => (e.scrollTop = 0))
+    expect(await lakeName.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+    await lake.hover()
+    await expect(tip(page)).toHaveText(LAKE)
+    await away(page)
+    await expect(tip(page)).toHaveCount(0)
+    await item(page, "Wedding set").focus()
+    await page.keyboard.press("Tab")
+    await expect(lake).toBeFocused()
+    await expect(tip(page)).toHaveText(LAKE)
+    await page.keyboard.press("Tab")
+    await expect(tip(page)).toHaveCount(0)
+
+    // The 16th picked: the list stays where it is, and the set's top is in
+    // view, wherever the last set was scrolled to.
+    await away(page)
+    const last = item(page, "Backup set")
+    await listColumn.evaluate((e) => (e.scrollTop = e.scrollHeight))
+    await expect(last).toBeInViewport()
+    const at = await box(last)
+    const scrolled = await listColumn.evaluate((e) => e.scrollTop)
+    await last.click()
+    await expect(nameField(page)).toHaveValue("Backup set")
+    await expect(last).toHaveAttribute("aria-current", "true")
+    expect(await box(last)).toEqual(at)
+    expect(await listColumn.evaluate((e) => e.scrollTop)).toBe(scrolled)
+    expect(await setColumn.evaluate((e) => e.scrollTop)).toBe(0)
+    const set = await box(detail(page))
+    expect(set.y).toBeGreaterThanOrEqual((await box(setColumn)).y - 1)
+    await expect(nameField(page)).toBeInViewport()
+
+    // Nothing runs off sideways.
+    for (const el of [
+      page.locator("html"),
+      page.locator("main"),
+      page.locator("[data-tab-body]"),
+      listColumn,
+      setColumn,
+    ]) {
+      expect(await el.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
+    }
+  })
+
+  test("a song taken out goes at once, and Undo puts it back in its place", async ({ page }) => {
     await openSets(page)
-    const list = (await page.getByRole("list", { name: "Sets" }).boundingBox())!
-    const box = (await detail(page).boundingBox())!
-    expect(box.y).toBeGreaterThan(list.y + list.height)
-    await page.setViewportSize({ width: 1180, height: 700 })
-    const wide = (await detail(page).boundingBox())!
-    const listWide = (await page.getByRole("list", { name: "Sets" }).boundingBox())!
-    expect(wide.x).toBeGreaterThan(listWide.x + listWide.width)
+    const titles = ["Pałyn", "Viasna", "Ahoń", "Sonca"]
+    const where = async () => Promise.all(titles.map(async (t) => (await box(songRow(page, t))).y))
+    const before = await where()
+    await holdFor(page, "update_set", 1)
+    await detail(page).getByRole("button", { name: "Take Viasna out" }).click()
+    // Gone before Python has answered: the rows after it move up one, and
+    // the rows before it stay.
+    expect(await songsNow(page)).toEqual(["Pałyn", "Ahoń", "Sonca"])
+    await expect(item(page, "Gig on the 25th")).toContainText("3 songs")
+    expect((await box(songRow(page, "Pałyn"))).y).toBeCloseTo(before[0], 0)
+    expect((await box(songRow(page, "Ahoń"))).y).toBeCloseTo(before[1], 0)
+    expect((await box(songRow(page, "Sonca"))).y).toBeCloseTo(before[2], 0)
+    expect(await waitingFor(page)).toBe(1)
+    // Said once Python has taken it out.
+    await expect(notices(page)).toHaveCount(0)
+    await letThrough(page)
+    const notice = said(page, "“Viasna” was taken out of the set.")
+    await expect(notice).toHaveAttribute("data-notice", "done")
+    expect((await calls(page, "update_set")).at(-1)?.args).toEqual([1, null, ["Pałyn", "Ahoń", "Sonca"]])
+
+    await notice.getByRole("button", { name: "Undo" }).click()
+    await expect.poll(() => songsNow(page)).toEqual(titles)
+    expect((await calls(page, "update_set")).at(-1)?.args).toEqual([1, null, titles])
+    await expect(item(page, "Gig on the 25th")).toContainText("4 songs")
+    expect(await where()).toEqual(before)
+    await expect(notices(page)).toHaveCount(0)
+  })
+
+  test("Undo after picking another set puts the song back in its own set", async ({ page }) => {
+    await openSets(page)
+    await detail(page).getByRole("button", { name: "Take Ahoń out" }).click()
+    const notice = said(page, "“Ahoń” was taken out of the set.")
+    await expect(notice).toHaveCount(1)
+    await item(page, "New songs").click()
+    await expect(nameField(page)).toHaveValue("New songs")
+
+    await notice.getByRole("button", { name: "Undo" }).click()
+    await expect(item(page, "Gig on the 25th")).toContainText("4 songs")
+    expect((await calls(page, "update_set")).at(-1)?.args).toEqual([
+      1,
+      null,
+      ["Pałyn", "Viasna", "Ahoń", "Sonca"],
+    ])
+    // New songs is still the set shown, as it was.
+    await expect(item(page, "New songs")).toHaveAttribute("aria-current", "true")
+    await expect(nameField(page)).toHaveValue("New songs")
+    expect(await songsNow(page)).toEqual(["Kupalle", "Dym"])
+    await expect(item(page, "New songs")).toContainText("2 songs")
+    await item(page, "Gig on the 25th").click()
+    expect(await songsNow(page)).toEqual(["Pałyn", "Viasna", "Ahoń", "Sonca"])
+  })
+
+  test("two songs taken out each keep their Undo", async ({ page }) => {
+    await openSets(page)
+    await detail(page).getByRole("button", { name: "Take Viasna out" }).click()
+    const viasna = said(page, "“Viasna” was taken out of the set.")
+    await expect(viasna).toHaveCount(1)
+    await detail(page).getByRole("button", { name: "Take Sonca out" }).click()
+    const sonca = said(page, "“Sonca” was taken out of the set.")
+    await expect(sonca).toHaveCount(1)
+    await expect(viasna.getByRole("button", { name: "Undo" })).toBeVisible()
+    expect(await songsNow(page)).toEqual(["Pałyn", "Ahoń"])
+
+    // From the start screen too: each puts its own song back in its place,
+    // the older first.
+    await page.keyboard.press("Escape")
+    await expect(startButton(page)).toBeVisible()
+    await viasna.getByRole("button", { name: "Undo" }).click()
+    await expect(viasna).toHaveCount(0)
+    await expect(sonca.getByRole("button", { name: "Undo" })).toBeVisible()
+    await sonca.getByRole("button", { name: "Undo" }).click()
+    await expect(notices(page)).toHaveCount(0)
+    await expect
+      .poll(async () => (await calls(page, "update_set")).at(-1)?.args)
+      .toEqual([1, null, ["Pałyn", "Viasna", "Ahoń", "Sonca"]])
+    await page.getByRole("button", { name: "Settings" }).click()
+    await page.getByRole("button", { name: "Sets", exact: true }).first().click()
+    await expect.poll(() => songsNow(page)).toEqual(["Pałyn", "Viasna", "Ahoń", "Sonca"])
+  })
+
+  test("Undo of a song whose set was deleted says why", async ({ page }) => {
+    await openSets(page)
+    await detail(page).getByRole("button", { name: "Take Viasna out" }).click()
+    const notice = said(page, "“Viasna” was taken out of the set.")
+    await expect(notice).toHaveCount(1)
+    await detail(page).getByRole("button", { name: "Delete set" }).click()
+    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click()
+    await expect(items(page)).toHaveCount(1)
+
+    await notice.getByRole("button", { name: "Undo" }).click()
+    await expect(said(page, "Could not put “Viasna” back: its set was deleted")).toHaveAttribute(
+      "data-notice",
+      "error"
+    )
+    // Only the taking out was sent; the set is not made again.
+    expect(await callCount(page, "update_set")).toBe(1)
+    await expect(items(page)).toHaveCount(1)
+    await expect(nameField(page)).toHaveValue("New songs")
+  })
+
+  test("no sets, or a set with no songs, says so on the shared Empty", async ({ page }) => {
+    await openSets(page, withSets([], null))
+    const empty = page.locator("[data-tab-body] [data-slot=empty]")
+    await expect(empty).toHaveCount(1)
+    await expect(empty.locator("[data-slot=empty-title]")).toHaveText("No sets yet")
+    await expect(empty.locator("[data-slot=empty-description]")).toHaveText(
+      "A set is the songs a rehearsal goes through, in order. Make one with New set, then pick it beside Start rehearsal."
+    )
+    // Across both columns, as wide as the tab's head, with New set in it.
+    expect((await box(empty)).width).toBeCloseTo((await box(page.locator("[data-tab-head]"))).width, 0)
+    await expect(page.getByRole("list", { name: "Sets" })).toHaveCount(0)
+    await expect(detail(page)).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "New set", exact: true })).toHaveCount(1)
+    await empty.getByRole("button", { name: "New set", exact: true }).click()
+    await expect(nameField(page)).toHaveValue("New set")
+    await expect(page.getByText("No sets yet")).toHaveCount(0)
+
+    // The new set has no songs, and says how they come.
+    const none = detail(page).locator("[data-slot=empty]")
+    await expect(none.locator("[data-slot=empty-title]")).toHaveText("No songs yet")
+    await expect(none.locator("[data-slot=empty-description]")).toHaveText(
+      "Add them below, in the order you play them."
+    )
+    await detail(page).locator("[data-set-add]").getByRole("button", { name: "Dym" }).click()
+    await expect(none).toHaveCount(0)
+    expect(await songsNow(page)).toEqual(["Dym"])
   })
 })

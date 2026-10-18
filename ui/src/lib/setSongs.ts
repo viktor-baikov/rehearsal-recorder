@@ -99,6 +99,26 @@ export function asSetSongs(titles: string[], choices: SongChoices | null): SetSo
   return titles.map((title) => ({ title, new: choices !== null && !songNamed(title, choices) }))
 }
 
+/**
+ * A set's songs with `title` back in them, for the Undo of a song taken
+ * out: before `next`, the song that came after it then, wherever that is
+ * now, or last when nothing came after it; at its old place `at` when
+ * `next` has gone too, or last in a set that is shorter now. A set that
+ * has the song again, in any case, is left as it is.
+ */
+export function withSongBack(
+  titles: string[],
+  title: string,
+  at: number,
+  next: string | null
+): string[] {
+  const key = (t: string) => t.toLocaleLowerCase()
+  if (titles.some((t) => key(t) === key(title))) return titles
+  const after = next === null ? titles.length : titles.findIndex((t) => key(t) === key(next))
+  const place = after >= 0 ? after : Math.min(at, titles.length)
+  return [...titles.slice(0, place), title, ...titles.slice(place)]
+}
+
 /** The choices less the songs a set already has, for its Add pills. */
 export function notInSet(choices: SongChoices | null, titles: string[]): SongChoices | null {
   if (!choices) return null

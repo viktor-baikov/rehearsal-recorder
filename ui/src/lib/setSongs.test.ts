@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest"
 import type { SongChoices } from "@/lib/api"
-import { asSetSongs, notInSet, otherSongs, rowsFor, shortList, songOf } from "@/lib/setSongs"
+import {
+  asSetSongs,
+  notInSet,
+  otherSongs,
+  rowsFor,
+  shortList,
+  songOf,
+  withSongBack,
+} from "@/lib/setSongs"
 
 const CHOICES: SongChoices = {
   here: [{ song: "Dym", go: 3, also: [] }],
@@ -103,5 +111,47 @@ describe("notInSet", () => {
       other: [{ song: "Pałyn", go: 1, also: ["Palyn"] }],
     })
     expect(notInSet(null, [])).toBeNull()
+  })
+})
+
+describe("withSongBack", () => {
+  it("puts the song before the one that followed it, wherever that is now", () => {
+    expect(withSongBack(["Pałyn", "Ahoń", "Sonca"], "Viasna", 1, "Ahoń")).toEqual([
+      "Pałyn",
+      "Viasna",
+      "Ahoń",
+      "Sonca",
+    ])
+    expect(withSongBack(["Dym", "Pałyn", "Ahoń"], "Viasna", 1, "Ahoń")).toEqual([
+      "Dym",
+      "Pałyn",
+      "Viasna",
+      "Ahoń",
+    ])
+    // Nothing followed it: it was the last, and is again.
+    expect(withSongBack(["Pałyn", "Viasna", "Ahoń"], "Sonca", 2, null)).toEqual([
+      "Pałyn",
+      "Viasna",
+      "Ahoń",
+      "Sonca",
+    ])
+  })
+
+  it("puts it at its place when the song after it has gone too", () => {
+    expect(withSongBack(["Pałyn", "Sonca"], "Viasna", 1, "Ahoń")).toEqual([
+      "Pałyn",
+      "Viasna",
+      "Sonca",
+    ])
+  })
+
+  it("puts it at the end of a set that is shorter now than its place", () => {
+    expect(withSongBack(["Pałyn"], "Sonca", 3, "Dym")).toEqual(["Pałyn", "Sonca"])
+    expect(withSongBack([], "Sonca", 3, "Dym")).toEqual(["Sonca"])
+  })
+
+  it("leaves the set as it is when the song is in it again, in any case", () => {
+    const titles = ["Pałyn", "viasna", "Ahoń"]
+    expect(withSongBack(titles, "Viasna", 0, "Pałyn")).toEqual(titles)
   })
 })

@@ -1,21 +1,29 @@
 import { useState } from "react"
 import { GripVertical, X } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Figures, Whole } from "@/components/ui/whole"
 import { SongPills } from "@/components/SongPills"
 import { SortableList } from "@/components/SortableList"
 import type { SetSong, SongChoices } from "@/lib/api"
 import { songNamed } from "@/lib/goes"
 import { notInSet } from "@/lib/setSongs"
 
+/** A song taken out with its ✕: its title, and where it was. */
+export type SongOut = { title: string; at: number }
+
 /**
  * A set's songs (issue #12 step 8, S3 and T3): numbered in the order they
  * are played, dragged into another by their handles, and ✕ to take one out.
  * Under them, *Add*: *Another song…*, a field for a song not played yet,
  * and the band's other songs as pills, as under a take's name, which
- * typing in the field narrows. A song the band has not played says so.
+ * typing in the field narrows. A song the band has not played says so,
+ * where its name leaves room.
  *
- * `onChange` hears the titles in their new order; the caller puts them in
- * place at once.
+ * `onChange` hears the titles in their new order, and `out`, the song taken
+ * out, when it was a ✕; the caller puts them in place at once.
  */
 export function SetSongsEditor({
   songs,
@@ -24,7 +32,7 @@ export function SetSongsEditor({
 }: {
   songs: SetSong[]
   choices: SongChoices | null
-  onChange: (titles: string[]) => void
+  onChange: (titles: string[], out?: SongOut) => void
 }) {
   const [typed, setTyped] = useState("")
   const titles = songs.map((s) => s.title)
@@ -42,9 +50,12 @@ export function SetSongsEditor({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {songs.length === 0 ? (
-        <p className="rounded-lg bg-muted/50 px-3 py-3 text-sm text-muted-foreground">
-          No songs yet: add them below, in the order you play them.
-        </p>
+        <Empty className="items-start p-0 text-left md:p-0">
+          <EmptyHeader className="items-start text-left">
+            <EmptyTitle className="text-sm">No songs yet</EmptyTitle>
+            <EmptyDescription>Add them below, in the order you play them.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <SortableList
           items={songs.map((s) => ({ id: s.title, song: s }))}
@@ -55,39 +66,52 @@ export function SetSongsEditor({
             onChange(next)
           }}
         >
-          {({ song }, handleRef) => (
-            <div
-              data-set-editor-song={song.title}
-              className="flex h-9 items-center gap-3 rounded-lg px-2 transition-colors hover:bg-accent/40"
-            >
-              <button
-                ref={handleRef}
-                type="button"
-                aria-label={`Move ${song.title}`}
-                className="flex w-5 shrink-0 cursor-grab touch-none justify-center text-muted-foreground hover:text-foreground"
-              >
-                <GripVertical className="size-4" />
-              </button>
-              <span className="tnum w-5 shrink-0 text-right text-xs text-muted-foreground">
-                {titles.indexOf(song.title) + 1}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-sm" title={song.title}>
-                {song.title}
-              </span>
-              {song.new && (
-                <span className="shrink-0 text-xs text-muted-foreground">not played yet</span>
-              )}
-              <button
-                type="button"
-                aria-label={`Take ${song.title} out`}
-                title="Take it out of the set"
-                onClick={() => onChange(titles.filter((t) => t !== song.title))}
-                className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          )}
+          {({ song }, handleRef) => {
+            const at = titles.indexOf(song.title)
+            return (
+              <div data-set-editor-song={song.title} className="flex h-9 items-center gap-3">
+                <Button
+                  ref={handleRef}
+                  variant="ghost"
+                  size="icon-tiny"
+                  aria-label={`Move ${song.title}`}
+                  className="cursor-grab touch-none text-muted-foreground hover:text-foreground"
+                >
+                  <GripVertical className="size-4" />
+                </Button>
+                <span className="tnum w-5 shrink-0 text-right text-xs text-muted-foreground">
+                  {at + 1}
+                </span>
+                {/* The name has the room first: "not played yet" gives way
+                    to it, whole (B6). */}
+                <Whole text={song.title} className="min-w-0 flex-[0_1_auto] truncate text-sm" />
+                {song.new ? (
+                  <Figures
+                    parts={[{ text: "not played yet", keep: 0 }]}
+                    className="text-right text-xs text-muted-foreground"
+                  />
+                ) : (
+                  <span className="flex-1" />
+                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-tiny"
+                      aria-label={`Take ${song.title} out`}
+                      onClick={() =>
+                        onChange(titles.filter((t) => t !== song.title), { title: song.title, at })
+                      }
+                      className="rounded-full text-muted-foreground hover:text-foreground"
+                    >
+                      <X />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Take it out of the set</TooltipContent>
+                </Tooltip>
+              </div>
+            )
+          }}
         </SortableList>
       )}
 
