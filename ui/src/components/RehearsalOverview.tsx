@@ -10,6 +10,7 @@ import { PlayButton } from "@/components/ui/play-button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { playLook } from "@/lib/playLook"
 import { cn } from "@/lib/utils"
+import { useKeysOn } from "@/lib/keys"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { labelCounts, labelOf, useLabels } from "@/lib/labels"
 import { isFalseStart } from "@/lib/evening"
@@ -363,6 +364,8 @@ export function TakeRow({
   const played =
     here && length > 0 ? Math.min(100, Math.max(0, (here.position / length) * 100)) : null
   const playing = here?.playing ?? false
+  // Playing, its ▶ has Space while Settings › Keys has it on.
+  const spaceKeys = useKeysOn("space")
 
   return (
     <div
@@ -396,7 +399,7 @@ export function TakeRow({
           })}
           name={take.name}
           onClick={() => onPlay(take)}
-          aria-keyshortcuts={here ? "Space" : undefined}
+          aria-keyshortcuts={here && spaceKeys ? "Space" : undefined}
         />
 
         {/* Where the row has under 17rem for the bar, the length, the badge and

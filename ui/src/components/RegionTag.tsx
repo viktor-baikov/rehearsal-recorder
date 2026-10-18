@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react"
 import { Repeat, Scissors, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useKeysOn } from "@/lib/keys"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 
@@ -69,6 +70,8 @@ export function RegionTag({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
+  // R repeats, and the tip says so, while Settings › Keys has it on.
+  const rKey = useKeysOn("player") ? " (R)" : ""
   useLayoutEffect(() => {
     setWidth(ref.current?.offsetWidth ?? 0)
   }, [a, b, actions, crop?.whyOff, crop?.enabled])
@@ -111,7 +114,7 @@ export function RegionTag({
                   <Repeat className="size-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{looping ? "Stop repeating it (R)" : "Repeat it (R)"}</TooltipContent>
+              <TooltipContent>{looping ? `Stop repeating it${rKey}` : `Repeat it${rKey}`}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>

@@ -25,6 +25,7 @@ import {
 import { nameWithGo } from "@/lib/goes"
 import { takeFacts } from "@/lib/takeFacts"
 import { dismiss } from "@/lib/notices"
+import { useKeysOn } from "@/lib/keys"
 import { endedByPython, offerCropUndo } from "@/lib/trash"
 import { useRunning, watching } from "@/lib/activity"
 import { useLabels } from "@/lib/labels"
@@ -224,6 +225,8 @@ export function Review({
     onDiscarded({ take, title, kept: { name, markers, send }, undo: res.undo ?? null })
   }
   useEscape(() => void discard(), !busy)
+  // Off in Settings › Keys, Discard and Save take have no chips.
+  const spaceKeys = useKeysOn("space")
 
   // The markers here are held in memory — the take has no folder on disk yet —
   // so they move with the audio by hand rather than coming back from Python.
@@ -365,18 +368,23 @@ export function Review({
               size="footer-aside"
               onClick={discard}
               disabled={busy}
-              aria-keyshortcuts="Escape"
+              aria-keyshortcuts={spaceKeys ? "Escape" : undefined}
             >
               <Trash2 />
               Discard
-              <Kbd aria-hidden>Esc</Kbd>
+              {spaceKeys && <Kbd aria-hidden>Esc</Kbd>}
             </Button>
             {/* The evening's main button keeps its size: Start, Record, Stop
                 and Save take are all the footer's 56 px. */}
-            <Button size="footer" onClick={keep} disabled={busy} aria-keyshortcuts="Space">
+            <Button
+              size="footer"
+              onClick={keep}
+              disabled={busy}
+              aria-keyshortcuts={spaceKeys ? "Space" : undefined}
+            >
               <Check />
               Save take
-              <Kbd aria-hidden>Space</Kbd>
+              {spaceKeys && <Kbd aria-hidden>Space</Kbd>}
             </Button>
           </div>
         </FooterRow>

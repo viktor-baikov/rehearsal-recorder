@@ -4,6 +4,7 @@ import { MarkLine } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
 import { useCut, WholeTip } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
+import { useKeysOn } from "@/lib/keys"
 import type { Label, Marker, SongDetail, SongGo } from "@/lib/api"
 import { formatDayIn } from "@/lib/format"
 import { labelOf, markText, useLabels } from "@/lib/labels"
@@ -77,6 +78,8 @@ export function SongPage({
   const unnamed = page.title == null
   const plays = unnamed ? null : (page.plays ?? null)
   const here = plays ? hereFor(playback, plays.folder, plays.take) : null
+  // Playing, the head's ▶ has Space while Settings › Keys has it on.
+  const spaceKeys = useKeysOn("space")
   const longest = Math.max(1, ...goes.map((g) => g.take.duration_sec || 0))
   // Newest first: the newest rehearsal first, and in it the last take played.
   const starred = unnamed
@@ -187,7 +190,7 @@ export function SongPage({
               })}
               name={plays.take.name}
               onClick={() => onPlay(placed(plays.folder, plays.take))}
-              aria-keyshortcuts={here ? "Space" : undefined}
+              aria-keyshortcuts={here && spaceKeys ? "Space" : undefined}
             />
           )
         }

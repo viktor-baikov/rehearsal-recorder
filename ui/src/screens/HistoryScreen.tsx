@@ -57,6 +57,7 @@ import { wentTo } from "@/lib/deletion"
 import { showFolder } from "@/lib/folder"
 import { rise } from "@/lib/motion"
 import { useSystem, words } from "@/lib/platform"
+import { useKeysOn } from "@/lib/keys"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 import {
   useActivity,
@@ -692,6 +693,8 @@ export function HistoryScreen({
   }
   useKey("ArrowUp", () => step(-1), selected === null)
   useKey("ArrowDown", () => step(1), selected === null)
+  // Off in Settings › Keys, the hint under the list goes too.
+  const listKeys = useKeysOn("player")
 
   // A copy to the cloud started here runs in the background now; when one of
   // this rehearsal's finishes, its take says so without anyone reopening it —
@@ -1184,11 +1187,16 @@ export function HistoryScreen({
                 ) : (
                   <RehearsalList rehearsals={rehearsals} current={current} onChoose={choose} />
                 )}
-                <p className="mt-auto flex items-center gap-1.5 px-3 pt-2 text-xs text-muted-foreground">
-                  <Kbd>↑</Kbd>
-                  <Kbd>↓</Kbd>
-                  to go through them
-                </p>
+                {listKeys && (
+                  <p
+                    data-list-keys
+                    className="mt-auto flex items-center gap-1.5 px-3 pt-2 text-xs text-muted-foreground"
+                  >
+                    <Kbd>↑</Kbd>
+                    <Kbd>↓</Kbd>
+                    to go through them
+                  </p>
+                )}
               </div>
             </div>
           </nav>

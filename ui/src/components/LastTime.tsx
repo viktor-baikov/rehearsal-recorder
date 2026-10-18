@@ -23,6 +23,7 @@ import {
 import { labelOf, useLabels } from "@/lib/labels"
 import { playLook } from "@/lib/playLook"
 import { cn } from "@/lib/utils"
+import { useKeysOn } from "@/lib/keys"
 import type { LastTime as LastTimeData, SongPlays, Take } from "@/lib/api"
 
 /** What is playing from here, and where it has got to. */
@@ -506,12 +507,14 @@ function RowPlay({
     failed: !!here && !!problem,
     missing: false,
   })
+  // Playing, it has Space while Settings › Keys has it on.
+  const spaceKeys = useKeysOn("space")
   return (
     <PlayButton
       look={look}
       name={label}
       onClick={() => onPlay(take)}
-      aria-keyshortcuts={here ? "Space" : undefined}
+      aria-keyshortcuts={here && spaceKeys ? "Space" : undefined}
     />
   )
 }
