@@ -107,7 +107,11 @@ export function SetSongsEditor({
                       <X />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Take it out of the set</TooltipContent>
+                  {/* Near enough the button's own name: for the eyes, not
+                      read out twice. */}
+                  <TooltipContent>
+                    <span aria-hidden>Take it out of the set</span>
+                  </TooltipContent>
                 </Tooltip>
               </div>
             )

@@ -239,15 +239,24 @@ test("a long label name at 960x680 and 150 % is cut, whole in its tip", async ({
       `window.__LABELS__ = [{id:1, name:'Note', colour:'grey'}, {id:2, name:${JSON.stringify(long)}, colour:'violet'}];`
   )
   const rename = page.getByRole("button", { name: `Rename ${long}` })
-  const name = rename.locator("[data-cut]")
+  const name = rename.getByText(long, { exact: true })
   await expect(name).toHaveText(long)
   expect(await name.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
   // On one line, as tall as a short name's row.
   expect((await box(row(page, long))).height).toBeCloseTo((await box(row(page, "Note"))).height, 0)
-  // The shared tip, not the browser's own.
+  // The shared tip, not the browser's own, on hover and on keyboard focus.
+  const tip = page.locator("[data-whole][data-state$='open']")
   await expect(page.locator("[data-tab-body] [title]")).toHaveCount(0)
   await name.hover()
-  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
+  await expect(tip).toHaveText(long)
+  await page.mouse.move(0, 0, { steps: 8 })
+  await expect(tip).toHaveCount(0)
+  await page.getByRole("button", { name: `Colour of ${long}` }).focus()
+  await page.keyboard.press("Tab")
+  await expect(rename).toBeFocused()
+  await expect(tip).toHaveText(long)
+  await page.keyboard.press("Tab")
+  await expect(tip).toHaveCount(0)
   // Its count and Delete keep their room.
   await expect(row(page, long).getByText("1 mark", { exact: true })).toBeVisible()
   const tab = page.locator("[data-tab-body]")

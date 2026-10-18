@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Whole } from "@/components/ui/whole"
+import { WholeTip, useCut } from "@/components/ui/whole"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { SettingsGroup } from "@/components/SettingsGroup"
 import { SortableList } from "@/components/SortableList"
@@ -155,7 +155,7 @@ export function MarksSettings() {
  * A label's row: its grip, its dot, which opens the eight colours, and its
  * name, which turns into a field to rename it; how many marks have it, and
  * Delete, which shows on hover or focus. The name is cut at the end of its
- * room and whole in the shared tip.
+ * room, and whole in the shared tip on hover and on keyboard focus (B6).
  */
 function LabelRow({
   label,
@@ -174,6 +174,7 @@ function LabelRow({
 }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [palette, setPalette] = useState(false)
+  const [nameRef, cut] = useCut<HTMLSpanElement>()
 
   return (
     <div data-label={label.name} className="group flex items-center gap-3 py-1">
@@ -250,15 +251,19 @@ function LabelRow({
           className="h-8 max-w-64"
         />
       ) : (
-        <Button
-          variant="ghost"
-          size="row"
-          aria-label={`Rename ${label.name}`}
-          onClick={() => setEditing(label.name)}
-          className="min-w-0 shrink justify-start"
-        >
-          <Whole text={label.name} className="min-w-0 truncate" />
-        </Button>
+        <WholeTip cut={cut} text={label.name}>
+          <Button
+            variant="ghost"
+            size="row"
+            aria-label={`Rename ${label.name}`}
+            onClick={() => setEditing(label.name)}
+            className="min-w-0 shrink justify-start"
+          >
+            <span ref={nameRef} className="block min-w-0 truncate">
+              {label.name}
+            </span>
+          </Button>
+        </WholeTip>
       )}
 
       <span className="tnum ml-auto shrink-0 text-xs text-muted-foreground">

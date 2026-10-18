@@ -1001,6 +1001,8 @@ test.describe("in Settings", () => {
     const out = songRow(page, "Pałyn").getByRole("button", { name: "Take Pałyn out" })
     await out.hover()
     await expect(page.getByRole("tooltip")).toHaveText("Take it out of the set")
+    // For the eyes: the button's name says it, so it is not read out twice.
+    await expect(out).toHaveAccessibleDescription("")
     await away(page)
     await expect(page.getByRole("tooltip")).toHaveCount(0)
 
@@ -1199,6 +1201,37 @@ test.describe("in Settings", () => {
     expect(await callCount(page, "update_set")).toBe(1)
     await expect(items(page)).toHaveCount(1)
     await expect(nameField(page)).toHaveValue("New songs")
+  })
+
+  test("an Undo Python refuses says why, in the sets' one notice", async ({ page }) => {
+    await openSets(page)
+    await detail(page).getByRole("button", { name: "Take Viasna out" }).click()
+    const notice = said(page, "“Viasna” was taken out of the set.")
+    await expect(notice).toHaveCount(1)
+    // The set went from under Python between its read and its save.
+    await page.evaluate(() => {
+      const w = window as unknown as { pywebview: { api: Record<string, unknown> }; __UPDATE_SET__: unknown }
+      w.__UPDATE_SET__ = w.pywebview.api.update_set
+      w.pywebview.api.update_set = async () => ({ ok: false, error: "Set not found" })
+    })
+
+    await notice.getByRole("button", { name: "Undo" }).click()
+    const refused = said(page, "Could not put “Viasna” back: Set not found")
+    await expect(refused).toHaveAttribute("data-notice", "error")
+    await expect(notice).toHaveCount(0)
+    expect(await songsNow(page)).toEqual(["Pałyn", "Ahoń", "Sonca"])
+    await expect(item(page, "Gig on the 25th")).toContainText("3 songs")
+
+    // Said where every change to the sets says what went wrong: the next
+    // change that goes through puts it away.
+    await page.evaluate(() => {
+      const w = window as unknown as { pywebview: { api: Record<string, unknown> }; __UPDATE_SET__: unknown }
+      w.pywebview.api.update_set = w.__UPDATE_SET__
+    })
+    await detail(page).getByRole("button", { name: "Take Sonca out" }).click()
+    await expect(said(page, "“Sonca” was taken out of the set.")).toHaveCount(1)
+    await expect(refused).toHaveCount(0)
+    expect(await songsNow(page)).toEqual(["Pałyn", "Ahoń"])
   })
 
   test("no sets, or a set with no songs, says so on the shared Empty", async ({ page }) => {
