@@ -488,7 +488,9 @@ test.describe("Marks in History", () => {
     await expect(marks.locator("[data-mark]")).toHaveCount(0)
   })
 
-  test("a 960 px window with a long label name scrolls nothing sideways", async ({ page }) => {
+  test("a long label name at 960 px takes two lines in the list, then is cut, whole in its tip, and nothing scrolls sideways", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 960, height: 700 })
     const long = "Went wrong in the second verse every tim"
     expect(long).toHaveLength(40)
@@ -503,15 +505,28 @@ test.describe("Marks in History", () => {
     const grouping = (await marks.getByRole("group", { name: "Group marks" }).boundingBox())!
     const box = (await marks.boundingBox())!
     expect(grouping.x + grouping.width).toBeLessThanOrEqual(box.x + box.width)
-    // In the list the name takes a second line before anything of it is
-    // cut, and its row scrolls nothing sideways either.
+    // In the list a row's name takes two lines at most, then is cut at the
+    // end of the second, whole in its tip. 40 letters do not fit in two
+    // lines of the panel at 960 px, so this one is cut.
     const item = labelItem(page, 3)
     expect(
-      await item.locator("[data-name]").evaluate((el) => ({
-        lines: Math.round(el.clientHeight / parseFloat(getComputedStyle(el).lineHeight)),
-        cut: el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1,
-      }))
-    ).toEqual({ lines: 2, cut: false })
+      await item.locator("[data-name]").evaluate((el) => {
+        const style = getComputedStyle(el)
+        return {
+          lines: Math.round(el.clientHeight / parseFloat(style.lineHeight)),
+          clamp: style.webkitLineClamp,
+          cut: el.scrollHeight > el.clientHeight + 1,
+        }
+      })
+    ).toEqual({ lines: 2, clamp: "2", cut: true })
+    // The pointer is still on the row it chose: away first, then back.
+    await page.mouse.move(0, 0, { steps: 4 })
+    await item.hover()
+    await expect(page.locator("[data-whole][data-state$='open']")).toContainText(long)
+    // Neither the row nor the list scrolls sideways.
     expect(await item.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    const list = page.getByRole("navigation", { name: "Labels" })
+    expect(await list.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
 })
