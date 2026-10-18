@@ -228,6 +228,11 @@ test.describe("History", () => {
     await expect(rehearsals).toHaveAttribute("aria-checked", "true")
     await expect(songs).toBeFocused()
     expect(await calls(page, "save_history_view")).toEqual([])
+
+    // A view chosen from the keyboard keeps the focus on the switch.
+    await page.keyboard.press("Enter")
+    await expect(songs).toHaveAttribute("aria-checked", "true")
+    await expect(songs).toBeFocused()
   })
 
   test("left and right on the switch move along it, and leave a take playing where it is", async ({

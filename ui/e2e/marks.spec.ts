@@ -387,6 +387,13 @@ test.describe("Marks in History", () => {
     ).toHaveAttribute("aria-checked", "true")
     await expect(pane(page, "Went wrong").locator("[data-group-title]")).toHaveCount(3)
     expect(await calls(page, "save_marks_grouping")).toEqual([])
+
+    // A grouping chosen from the keyboard keeps the focus on Group by.
+    const bySongNow = pane(page, "Went wrong").getByRole("radio", { name: "By song" })
+    await bySongNow.focus()
+    await page.keyboard.press("Space")
+    await expect(bySongNow).toHaveAttribute("aria-checked", "true")
+    await expect(bySongNow).toBeFocused()
   })
 
   test("a grouping chosen with the mouse gives left, right and Space back to the mark playing", async ({

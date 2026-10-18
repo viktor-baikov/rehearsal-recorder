@@ -165,9 +165,10 @@ export async function letGo(page: Page, name: string) {
 /**
  * Holds the fake's answers to `name` for one `arg`, its first argument,
  * until `letThrough`, and answers every other call to it at once: one
- * song's or label's read left waiting while the others come back. A call
- * held is counted only once it is let through; `waitingFor` says how many
- * are held, and is back to 0 once they have been answered.
+ * song's or label's read left waiting while the others come back. The
+ * fake logs a held call only once it is let through, so `calls` and
+ * `callCount` do not see it before; `waitingFor` says how many are held,
+ * and is back to 0 once they have been answered.
  */
 export async function holdFor(page: Page, name: string, arg: unknown) {
   await page.evaluate(
