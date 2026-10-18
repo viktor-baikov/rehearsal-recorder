@@ -573,7 +573,8 @@ export function HistoryScreen({
 
   /** ▶ on a mark: its take plays here from just before the mark, or, when
    *  it is the mark playing, pauses. Its rehearsal is read for the take,
-   *  and an answer that comes back after another ▶ is dropped. */
+   *  and an answer that comes back after another ▶ is dropped. A take that
+   *  could not be opened is tried again, from this mark. */
   const cueing = useRef(0)
   const playMark = async (m: MarkHit) => {
     const ticket = ++cueing.current
@@ -581,7 +582,8 @@ export function HistoryScreen({
       playingMark &&
       markKey(playingMark) === markKey(m) &&
       cued?.folder === m.folder &&
-      cued.take_number === m.take_number
+      cued.take_number === m.take_number &&
+      !player.loadError
     ) {
       player.toggle()
       return

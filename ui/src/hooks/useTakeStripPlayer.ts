@@ -169,14 +169,18 @@ export function useTakeStripPlayer<T extends Take = Take>(
    * Play a take where it is from a spot in it, without opening it: a note
    * under one of the rehearsal screen's earlier goes plays from just before
    * it. The take already loaded is moved there, or once it is open if it
-   * is still opening; another is loaded first.
+   * is still opening, or once it opens again if it could not be opened;
+   * another is loaded first.
    */
   const cueAt = (take: T, at: number) => {
     if (sameTake(take, loaded)) {
       if (player.isOpen()) {
         seek(at)
         play()
-      } else if (!loadError) whenOpen({ at, play: true })
+      } else {
+        whenOpen({ at, play: true })
+        if (loadError) player.openAgain()
+      }
       return
     }
     whenOpen({ at, play: true })

@@ -98,9 +98,9 @@ export function useMultitrackPlayer(
   // Counts the takes opened, so a step waiting on Python's answer about one
   // take is not then sent to a take opened since.
   const opening = useRef(0)
-  // A take that could not be opened is opened again when Play is pressed
-  // on it once more, and plays as soon as it is open: each try is a new
-  // number here.
+  // A take that could not be opened is opened again when it is asked for
+  // once more: each try is a new number here. Asked for by Play, it plays
+  // as soon as it is open.
   const [attempt, setAttempt] = useState(0)
   const playOnOpen = useRef(false)
 
@@ -388,9 +388,10 @@ export function useMultitrackPlayer(
     [duration, applyLoop, setView, seek, call]
   )
 
-  /** The take could not be opened: try once more, and play it once open. */
-  const tryAgain = useCallback(() => {
-    playOnOpen.current = true
+  /** The take could not be opened: try once more, and play it once it is
+   *  open if `play`. */
+  const tryAgain = useCallback((play: boolean) => {
+    playOnOpen.current = play
     setAttempt((n) => n + 1)
   }, [])
 
@@ -420,8 +421,11 @@ export function useMultitrackPlayer(
     peaksWindow: peaksWindow.to > 0 ? peaksWindow : { from: 0, to: duration },
 
     // Pressed on a take that could not be opened, Play tries again.
-    toggle: () => (loadError ? tryAgain() : void call(() => api().player_toggle())),
+    toggle: () => (loadError ? tryAgain(true) : void call(() => api().player_toggle())),
     play: () => void call(() => api().player_play()),
+    /** Opens a take that could not be opened once more, for a caller that
+     *  says what to do once it is open. */
+    openAgain: () => tryAgain(false),
     pause: () => void call(() => api().player_pause()),
     restart: () => seek(region.a !== null && looping ? region.a : 0),
     skip: (delta: number) => seek(position + delta),

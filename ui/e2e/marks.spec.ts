@@ -1,4 +1,4 @@
-import { calls, expect, openApp, openHistory, test } from "./app.ts"
+import { callCount, calls, expect, openApp, openHistory, setFake, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // History's Marks view, against the fake's library with more marks in it:
@@ -15,6 +15,24 @@ const MORE = "window.__FULL_EVENING__ = true; window.__MORE_MARKS__ = true;"
 const VIASNA = "/rec/old#4@40"
 const DAROHA = "/rec/older#2@30"
 const GONE = "/rec/gone#1@60"
+
+/** Wednesday jam's take 1, the one with two marks, its file not found until
+ *  window.__FILES_BACK__, as Python answers a file that is not on disk.
+ *  window.__MEDIA_ANSWERS__ counts take_media's answers, so a test knows
+ *  the load has failed. */
+const QUIET_TAKE_1_GONE = `
+  const api = window.pywebview.api; const media = api.take_media;
+  window.__FILES_BACK__ = false; window.__MEDIA_ANSWERS__ = 0;
+  api.take_media = async (tracks, ...rest) => {
+    const gone = !window.__FILES_BACK__ && tracks.some((t) => t.file === '/rec/quiet/t1.wav');
+    const answer = gone
+      ? tracks.map((t) => ({ name: t.name, url: null, error: 'Track file not found', frames: 0,
+          samplerate: 0, duration_sec: 0, peaks: [] }))
+      : await media(tracks, ...rest);
+    window.__MEDIA_ANSWERS__ += 1;
+    return answer;
+  };
+`
 
 /** History, switched to its Marks view: the list of labels. */
 async function openMarks(page: Page) {
@@ -190,6 +208,34 @@ test.describe("Marks in History", () => {
     await expect(first.getByRole("button", { name: "Play Take 1 from 1:55" })).toBeVisible()
     expect((await calls(page, "player_open")).length).toBe(opened)
   })
+
+  for (const [what, again, from, at] of [
+    ["the same mark", "/rec/quiet#1@120", "1:55", 115],
+    ["another of its marks", "/rec/quiet#1@200", "3:15", 195],
+  ] as const) {
+    test(`a take that could not load opens again from ${what}, and plays from there`, async ({ page }) => {
+      await openApp(page, { before: MORE, after: QUIET_TAKE_1_GONE })
+      await openMarks(page)
+      const first = row(page, "/rec/quiet#1@120")
+      await first.getByRole("button", { name: "Play Take 1 from 1:55" }).click()
+      // Its files are not there: the load fails, and nothing opens.
+      await expect
+        .poll(() => page.evaluate(() => (window as unknown as { __MEDIA_ANSWERS__: number }).__MEDIA_ANSWERS__))
+        .toBe(1)
+      await expect(first.locator(".animate-spin")).toHaveCount(0)
+      await expect(first.getByRole("button", { name: "Play Take 1 from 1:55" })).toBeVisible()
+      expect(await callCount(page, "player_open")).toBe(0)
+
+      // The files are back: the mark's play opens the take again, and it
+      // plays from 5 s before that mark.
+      await setFake(page, "__FILES_BACK__", true)
+      const mark = row(page, again)
+      await mark.getByRole("button", { name: `Play Take 1 from ${from}` }).click()
+      await expect(mark.getByRole("button", { name: "Pause Take 1" })).toBeVisible()
+      await expect.poll(() => lastSeek(page)).toBe(at)
+      expect(await callCount(page, "player_open")).toBe(1)
+    })
+  }
 
   test("a click opens the take at the mark, and Escape comes back scrolled where it was", async ({
     page,
