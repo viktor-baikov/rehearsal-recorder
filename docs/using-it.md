@@ -1009,10 +1009,23 @@ saved every 30 seconds. If the app closes or crashes during a take, you lose
 at most the last half minute. The notes of a MIDI track are written the same
 way, and come back with the take.
 
-Next time you open the app, it offers these takes first. **Recover** adds a
-take to its rehearsal, **Discard** moves it to the Trash at once (**Undo**
-brings it back), and **Decide later** keeps it for next time. Closing the window during a take works the
-same way: the take stops and is offered the next time you open the app.
+Next time you open the app, it offers these takes first, under the title
+*Unsaved takes found*. Press **Recover** at the bottom right to add the
+take to its rehearsal. With more than one take, the button says
+**Recover all** and adds the takes one after another, and each take has its
+own **Recover** too. If one fails, **Recover all** stops there and a notice
+says why. The takes before it are in their rehearsals. The one that failed
+and the ones after it stay in the list. Takes are recovered one at a time,
+so while one is being recovered, every **Recover** is greyed. That keeps
+each take's number in its rehearsal right.
+
+**Discard** moves a take to the Trash at once (**Undo** brings it back),
+and **Decide later** keeps the takes for next time. Each take is listed
+under its rehearsal's name, with the day, the number of tracks and the
+length, so you can tell two takes of one rehearsal apart by their length. A
+long name is cut after two lines. Point at it to read it whole. Closing the
+window during a take works the same way: the take stops and is offered the
+next time you open the app.
 
 ## Where the files are
 

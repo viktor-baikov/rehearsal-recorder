@@ -19,22 +19,23 @@ shows the app as it is; the site keeps its own big headings and layout
 The foundation is in: the theme values, the shared components, Undo, the
 showcase and the check. The start screen is redone on it, and so are the
 rehearsal screen, the recording screen, Review (the screen after Stop),
-History, and the big player that Review and History open takes in: their
-pieces are the shared ones, and their files are off the check's
+History, Drafts (the unsaved takes the app offers at its start), and the
+big player that Review and History open takes in: their pieces are the
+shared ones, and their files are off the check's
 [allow-list](#the-check). The one piece the start screen still builds on
 its own is the song list in New set, which it shares with Settings' Sets
-and which is redone with Settings. The other screens follow, one pull
-request each, in this order: Drafts, then Settings. Until its turn a
-screen is on the allow-list and may still break the rules it is listed
-for. Where a rule below says "as each screen is redone", the screens' pull
-requests carry it out, and so far the start screen's, the rehearsal
-screen's, the recording screen's, Review's and History's have. On
-reha.stream the pieces of the app are the real components and follow the
-theme already, but the page itself takes only the accent from it so far
-(`--page-accent: var(--primary)` in `site/src/page/page.css`). After the
-last screen, reha.stream's own background, text colours and font
-(Instrument Sans) take the shared ones, and the release comes when the
-allow-list is empty: the new look goes out in that one release.
+and which is redone with Settings. Settings is the last screen, in a pull
+request of its own. Until its turn it is on the allow-list and may still
+break the rules it is listed for. Where a rule below says "as each screen
+is redone", the screens' pull requests carry it out, and so far the start
+screen's, the rehearsal screen's, the recording screen's, Review's,
+History's and Drafts' have. On reha.stream the pieces of the app are the
+real components and follow the theme already, but the page itself takes
+only the accent from it so far (`--page-accent: var(--primary)` in
+`site/src/page/page.css`). After the last screen, reha.stream's own
+background, text colours and font (Instrument Sans) take the shared ones,
+and the release comes when the allow-list is empty: the new look goes out
+in that one release.
 
 ## The foundation
 
@@ -200,8 +201,11 @@ piece of its own moves onto the shared one when it is redone.
   `player`. The foot of a screen is one row, `FooterRow`: what the screen
   has to say at the left, its buttons at the right, the main one rightmost,
   so that it is in the same place on every screen. The main one is `footer`
-  (56 px): Start rehearsal, Record take, Stop and Save take. The ones beside
-  it are `footer-aside`: Finish, Discard. A line between the two halves
+  (56 px): Start rehearsal, Record take, Stop, Save take and Recover, which
+  is Recover all while more than one take is listed or a run goes on. The
+  ones beside it are `footer-aside`: Finish, Discard and Decide later.
+  A take's own Recover in Drafts is `outline`, so the footer's stays the
+  screen's one blue button (F2). A line between the two halves
   (`rule`) is for a left half that is a field, as the start screen's name
   field is. Review's left half is a line of text, and it has no line.
   Every variant has the same weight and the same 1 px border, so
@@ -628,18 +632,24 @@ as the `cn` import.
   figure holds the room of "-100.0", the widest it can read. On Review the
   cloud line holds its room from the start, before the setting has
   answered, and the header is as tall with the song's columns as without
-  them: it changes only with the title's lines. A footer button's error is
-  an error notice (C4), so it moves nothing. These are the model; the rest
-  as each screen is redone.
+  them: it changes only with the title's lines. In Drafts the `air` header
+  (`Shell`) is as tall as the 36 px work button, so the button arriving in
+  it moves nothing, and a take being recovered shows its progress in the
+  place of its line, both 16 px, so the row keeps its height. The footer's
+  word and the rows' Recover stay as they were when a button was pressed
+  until the run ends. A footer button's error is an error notice (C4), so it
+  moves nothing. These are the model; the rest as each screen is redone.
 - **B5. Loading.** Under 1 s nothing shows, so a quick answer does not
   flash; from 1 s a spinner takes the place of what is loading; past 10 s it
   says what it is doing. `PlayButton` already waits its second
   (`SPINNER_AFTER_MS`), and so do the player's Play, the share dialog's
   options and its Remove, and a lane of notes being read, which says so in
-  its place if they cannot be read. While History reads its rehearsals, it
-  shows the Spinner, unseen for its first second, and from 10 s "Reading
-  the folder…" beside it (`useAfter`). The rest as each screen is redone,
-  on shadcn's Spinner.
+  its place if they cannot be read. Drafts' Recover and Recover all wait
+  their second too, then turn a Spinner in the button that is working, and
+  a take's progress comes from the journal. While History reads its
+  rehearsals, it shows the Spinner, unseen for its first second, and from
+  10 s "Reading the folder…" beside it (`useAfter`). The rest as each
+  screen is redone, on shadcn's Spinner.
 - **B6. Long names.** A name never gives way to a secondary figure: the name
   is what tells one thing from another. The figure wraps, goes first, or
   hides and shows on hover, as a recording tile's dB figure does; a cut
@@ -673,7 +683,10 @@ as the `cn` import.
   on disk has its path as plain text. A row in History's lists has its name
   on up to two lines, then cut, and the figures beside it give way first,
   as on Earlier's rows. The header's totals are `Figures` too, the size
-  dropping first and the count last.
+  dropping first and the count last. A take's row in Drafts has the
+  rehearsal's name on up to two lines, then cut, whole in the tip and a Tab
+  stop while it is cut (`Whole reach`); a name that fits on two lines is
+  whole and no stop.
 - **B7. Empty states.** An empty list that only says it is empty leaves the
   person to guess what to do next. So an empty list says, in its own place,
   what will appear there and how it gets there: an empty set under Next take
