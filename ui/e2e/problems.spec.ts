@@ -239,3 +239,32 @@ test("a card gone quiet during playback pauses the take, and play tries it again
   await expect(pause).toBeVisible()
   await expect(page.getByText("Playback stopped")).toHaveCount(0)
 })
+
+test("a screen that cannot open keeps the window, says why on the bar, and can try again", async ({
+  page,
+  pageErrors,
+}) => {
+  // A take whose length cannot be read: the screen after it cannot be
+  // drawn. Before, the whole window went blank, the bar with it.
+  await openApp(page, {
+    after:
+      "const api = window.pywebview.api; const stop = api.stop_take;" +
+      " api.stop_take = async (...a) => { const t = await stop(...a);" +
+      " Object.defineProperty(t, 'duration_sec', { get() { throw new Error('no length') } }); return t; };",
+  })
+  await startRehearsal(page)
+  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await page.getByRole("button", { name: /^Stop/ }).click()
+  const guard = page.locator("[data-crash-guard]")
+  await expect(guard).toContainText("This screen could not open.")
+  const bar = problemBar(page)
+  await expect(bar).toContainText("this screen")
+  await expect(bar).toContainText("crash.log")
+  // The details went to crash.log too.
+  expect(await callCount(page, "log_problem")).toBe(1)
+  // Try again draws the app anew.
+  await guard.getByRole("button", { name: "Try again" }).click()
+  await expect(guard).toHaveCount(0)
+  expectedError(pageErrors, /this screen failed/)
+  expectedError(pageErrors, /no length/)
+})
