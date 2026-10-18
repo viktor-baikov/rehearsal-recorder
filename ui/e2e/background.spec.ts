@@ -182,12 +182,9 @@ test.describe("the background work button, from any screen", () => {
   })
 })
 
-test("the list's headings and the header's subtitle are written as they read (F7)", async ({
-  page,
-}) => {
+test("the list's headings are written as they read (F7)", async ({ page }) => {
   await openApp(page, { before: "window.__ACTIVITY__ = [];" })
   await startRehearsal(page)
-  const subtitle = page.locator("header").getByText("Rehearsal", { exact: true })
   await activity(page, [
     entry({ id: 1 }),
     entry({ id: 2, state: "done", fraction: 1, step: null, detail: "MP3 of the mix" }),
@@ -195,7 +192,6 @@ test("the list's headings and the header's subtitle are written as they read (F7
   await workButton(page).click()
   const list = page.getByRole("dialog", { name: "Background work" })
   const headings = [
-    subtitle,
     list.getByRole("heading", { name: "Working" }),
     list.getByRole("heading", { name: "Done" }),
   ]

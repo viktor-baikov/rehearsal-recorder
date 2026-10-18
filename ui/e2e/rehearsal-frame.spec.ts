@@ -10,6 +10,7 @@ import {
   openEvening,
   recordTake,
   scaled,
+  setFake,
   settled,
   startButton,
   startRehearsal,
@@ -393,22 +394,28 @@ test.describe("the footer", () => {
     const long =
       "The interface is gone, and with it every input the rehearsal was recording from, " +
       "so nothing more can be recorded here until it is plugged back in and the app is opened again"
-    // The words go in as data, not as code.
-    await page.addInitScript((error) => {
-      ;(window as unknown as { __START_ERROR__: string }).__START_ERROR__ = error
-    }, long)
     await openApp(page, {
-      after: `window.pywebview.api.start_take = async () => ({ok: false, error: window.__START_ERROR__});`,
+      after:
+        "window.__START_ERROR__ = 'The interface is gone';" +
+        " window.pywebview.api.start_take = async () => ({ok: false, error: window.__START_ERROR__});",
     })
     await startRehearsal(page)
     await settled(page)
+    // A short error first, for the height of one line in a notice.
     await record(page).click()
     const error = notices(page, "error").filter({ hasText: "The interface is gone" })
     await expect(error).toBeVisible()
+    const oneLine = (await box(error.locator("p"))).height
+    await error.getByRole("button", { name: "Close notice" }).click()
+    await expect(error).toHaveCount(0)
+
+    // The words go in as data, not as code.
+    await setFake(page, "__START_ERROR__", long)
+    await record(page).click()
     await expect(error).toContainText(long)
     const words = error.locator("p")
     expect(await words.evaluate((p) => p.scrollWidth <= p.clientWidth)).toBe(true)
-    expect((await box(words)).height).toBeGreaterThan(40)
+    expect((await box(words)).height).toBeGreaterThan(oneLine * 1.5)
   })
 
   test("a footer button's error goes with its screen", async ({ page }) => {
@@ -423,6 +430,28 @@ test.describe("the footer", () => {
     // take that was never started.
     await finish(page).click()
     await expect(startButton(page)).toBeVisible()
+    await expect(notices(page, "error")).toHaveCount(0)
+  })
+
+  test("an error that comes after its screen has gone is not said", async ({ page }) => {
+    // The next take's name fails, but only once the rehearsal is finished.
+    await openApp(page, {
+      after:
+        "window.pywebview.api.set_next_take_name = () => new Promise((answer) => {" +
+        " window.__ANSWER__ = () => answer({ok: false, error: 'Could not name the next take'}); });",
+    })
+    await startRehearsal(page)
+    await page.getByRole("textbox", { name: "Next take" }).fill("Lost")
+    await page.keyboard.press("Enter")
+    await expect
+      .poll(() => page.evaluate(() => typeof (window as unknown as { __ANSWER__?: unknown }).__ANSWER__))
+      .toBe("function")
+    await finish(page).click()
+    await expect(startButton(page)).toBeVisible()
+    await page.evaluate(() => (window as unknown as { __ANSWER__: () => void }).__ANSWER__())
+    // The start screen does not carry on about a name for a rehearsal that
+    // is over.
+    await page.waitForTimeout(300)
     await expect(notices(page, "error")).toHaveCount(0)
   })
 })

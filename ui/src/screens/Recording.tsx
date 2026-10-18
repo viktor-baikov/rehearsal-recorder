@@ -6,6 +6,7 @@ import { StopTake } from "@/components/StopTake"
 import { GoTitle } from "@/components/TakeTitle"
 import { TrackTile } from "@/components/TrackTile"
 import { Progress } from "@/components/ui/progress"
+import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
@@ -136,7 +137,7 @@ export function Recording({
   // stands, and "Recording stopped" over a take that is recording is wrong.
   useEffect(() => dismiss(SAID), [])
   // An error Stop said is about this take, and goes with the screen.
-  useEffect(() => () => dismiss(ERROR), [])
+  const sayError = useErrorNotice(ERROR)
 
   // Nothing moves while a take is recording (spec F11): <html> says so for
   // the stylesheet and for motionOff(), and stops saying so when this screen
@@ -201,14 +202,11 @@ export function Recording({
   const stop = async () => {
     if (stopping) return
     setStopping(true)
+    dismiss(ERROR)
     const res = await watching(api().stop_take())
     if (!res.ok) {
       setStopping(false)
-      notify({
-        key: ERROR,
-        kind: "error",
-        text: ("error" in res && res.error) || "Could not stop the recording",
-      })
+      sayError(("error" in res && res.error) || "Could not stop the recording")
       return
     }
     onStopped(res as PendingTake)

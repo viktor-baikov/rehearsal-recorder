@@ -5,6 +5,7 @@ import {
   recordTake,
   startButton,
   startRehearsal,
+  style,
   test,
   themed,
 } from "./app.ts"
@@ -54,6 +55,19 @@ test("body text is 14 px at scale 1, and follows the scale", async ({ page }) =>
   // rem, not px: the Appearance scale moves it with everything else.
   await page.evaluate(() => (document.documentElement.style.fontSize = "20.8px"))
   expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe("18.2px")
+})
+
+test("the header's subtitle is written as it reads, not in capitals (F7)", async ({ page }) => {
+  await openApp(page)
+  await startRehearsal(page)
+  const subtitle = page.locator("header").getByText("Rehearsal", { exact: true })
+  await expect(subtitle).toBeVisible()
+  expect(await style(subtitle, "text-transform", "letter-spacing")).toEqual({
+    "text-transform": "none",
+    "letter-spacing": "normal",
+  })
+  // innerText is the text as drawn, capitals made by the style and all.
+  expect(await subtitle.innerText()).toBe(await subtitle.evaluate((el) => el.textContent))
 })
 
 test("a figure is in the system font, with digits of one width", async ({ page }) => {

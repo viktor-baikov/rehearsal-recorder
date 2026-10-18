@@ -14,11 +14,14 @@ import { cn } from "@/lib/utils"
  */
 export function Shell({
   title,
+  titleFits = false,
+  titleLeast,
   subtitle,
   onBack,
   backKey = false,
   headerAction,
   facts,
+  factsGone = false,
   footer,
   aside,
   children,
@@ -28,14 +31,25 @@ export function Shell({
   air = false,
 }: {
   title?: ReactNode
+  /** The title fits itself to its lines and cuts itself (Review's take,
+   *  components/TakeTitle), so it is never cut here. */
+  titleFits?: boolean
+  /** How tall the subtitle and title are at least, as a class: Review's
+   *  hold the room of the columns beside them, so a rename that brings them
+   *  or takes them away moves nothing under the header (B4). */
+  titleLeast?: string
   subtitle?: ReactNode
   onBack?: () => void
   /** Escape goes back right now, so the back button can say so. */
   backKey?: boolean
   headerAction?: ReactNode
-  /** What there is to know about the rehearsal on screen, right of its
-   *  name (components/EveningFacts). */
+  /** What there is to know about what is on screen, right of its title:
+   *  the rehearsal's figures (components/EveningFacts), or Review's columns
+   *  (components/TakeSummary). */
   facts?: ReactNode
+  /** The facts have all given way to the title just now, so they show
+   *  nothing, and the line after them goes too. */
+  factsGone?: boolean
   footer?: ReactNode
   /** A panel right of the scrollable middle, from the header down to the
    *  footer, scrolling on its own: the rehearsal screen's Next take. */
@@ -105,8 +119,15 @@ export function Shell({
               way to it (components/EveningFacts); one longer than the whole
               row wraps to a second line rather than being cut. A title that
               fits itself to its lines, as Review's take does, is never cut
-              here either. */}
-          <div className={cn("min-w-0", facts ? "flex-[0_1_auto]" : "flex-1")}>
+              here either. With a least height the words sit in its middle. */}
+          <div
+            className={cn(
+              "min-w-0",
+              facts ? "flex-[0_1_auto]" : "flex-1",
+              titleLeast && "flex flex-col justify-center",
+              titleLeast
+            )}
+          >
             {subtitle && (
               <div className="text-xs text-muted-foreground">
                 {subtitle}
@@ -116,7 +137,7 @@ export function Shell({
               <h1
                 className={cn(
                   "text-xl leading-tight font-semibold",
-                  facts || typeof title !== "string" ? "break-words" : "truncate"
+                  facts || titleFits ? "break-words" : "truncate"
                 )}
               >
                 {title}
@@ -124,7 +145,7 @@ export function Shell({
             )}
           </div>
           {facts}
-          {facts && <span aria-hidden className="ml-2 h-8 w-px shrink-0 bg-border" />}
+          {facts && !factsGone && <span aria-hidden className="ml-2 h-8 w-px shrink-0 bg-border" />}
           <ActivityButton />
           {playback && <ListeningVolume />}
           {headerAction}

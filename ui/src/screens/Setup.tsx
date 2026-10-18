@@ -41,6 +41,7 @@ import { useAfter } from "@/hooks/useAfter"
 import { useSteady } from "@/hooks/useSteady"
 import { chosenSet, useSets } from "@/hooks/useSets"
 import { useSongChoices } from "@/hooks/useSongChoices"
+import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
 import { byFiles, useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { cn } from "@/lib/utils"
@@ -417,6 +418,9 @@ export function Setup({
   // their Undo, and leaving the screen takes all of them with it.
   const saidKeys = useRef(new Set<string>())
   const saidCount = useRef(0)
+  // A button's failure, said until it is closed, tried again or the screen
+  // goes.
+  const sayError = useErrorNotice(ERROR)
   // Each track taken off, with the one that came after it then (null when
   // it was the last): an Undo follows this chain to find its place.
   const nextOf = useRef(new WeakMap<Track, Track | null>())
@@ -546,7 +550,7 @@ export function Setup({
     try {
       const res = await api().rescan_devices()
       if (!res.ok) {
-        notify({ key: ERROR, kind: "error", text: res.error ?? "Could not look for interfaces" })
+        sayError(res.error ?? "Could not look for interfaces")
         return
       }
       setStillMissing(
@@ -622,11 +626,7 @@ export function Setup({
       setOpeningCheck(false)
     })
     if (!res.ok) {
-      notify({
-        key: ERROR,
-        kind: "error",
-        text: res.error ?? "Could not open the input for checking",
-      })
+      sayError(res.error ?? "Could not open the input for checking")
       return
     }
     setSeen({})
@@ -709,15 +709,13 @@ export function Setup({
   }
 
   // Turn the check off when leaving the screen. A track taken off can be put
-  // back only here: its Undo goes with the screen, as does an error a button
-  // said.
+  // back only here: its Undo goes with the screen.
   useEffect(() => {
     const said = saidKeys.current
     return () => {
       checkingRef.current = false
       void stopMonitorQuietly()
       for (const key of said) dismiss(key)
-      dismiss(ERROR)
     }
   }, [])
 
@@ -744,7 +742,7 @@ export function Setup({
       // No rehearsal took the ports the check left open: they go, or one
       // another app could use stays held with nothing listening to it.
       await stopMonitorQuietly()
-      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not start the rehearsal" })
+      sayError(res.error ?? "Could not start the rehearsal")
       return
     }
     onStarted()

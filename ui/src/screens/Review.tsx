@@ -8,8 +8,10 @@ import { FooterRow } from "@/components/FooterRow"
 import { Shell } from "@/components/Shell"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
-import { TakeFigures, TakeName, takeFacts } from "@/components/TakeSummary"
+import { SMALL_WITH_NUMBERS } from "@/components/ui/take-columns"
+import { TakeFigures, TakeName } from "@/components/TakeSummary"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
+import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
@@ -21,7 +23,8 @@ import {
   type Take,
 } from "@/lib/api"
 import { nameWithGo } from "@/lib/goes"
-import { dismiss, notify } from "@/lib/notices"
+import { takeFacts } from "@/lib/takeFacts"
+import { dismiss } from "@/lib/notices"
 import { endedByPython, offerCropUndo } from "@/lib/trash"
 import { useRunning, watching } from "@/lib/activity"
 import { useLabels } from "@/lib/labels"
@@ -86,7 +89,7 @@ export function Review({
   const songChoices = useSongChoices(true, null, take.take_number)
   const [busy, setBusy] = useState(false)
   // An error a button said is about this take, and goes with the screen.
-  useEffect(() => () => dismiss(ERROR), [])
+  const sayError = useErrorNotice(ERROR)
   const player = useMultitrackPlayer(take.tracks, take.duration_sec)
   const cropping = useRunning("crop", (e) => e.folder === take.temp_dir)
 
@@ -135,6 +138,9 @@ export function Review({
   // The columns in the header have given way to the title, which then says
   // them in its tip.
   const [columnsGone, setColumnsGone] = useState(false)
+  // How much of the columns' box they leave empty, which the subtitle runs
+  // on into.
+  const [spare, setSpare] = useState(0)
 
   // The take as the screen calls it, with its go, for what a notice says.
   const title = nameWithGo(name, songChoices) || take.default_name || `Take ${take.take_number}`
@@ -187,7 +193,7 @@ export function Review({
     // uncut take back into is a saved take now.
     endedByPython(res.ended)
     if (!res.ok) {
-      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not save the take" })
+      sayError(res.error ?? "Could not save the take")
       return
     }
     onKept()
@@ -210,7 +216,7 @@ export function Review({
     endedByPython(res.ended)
     if (!res.ok) {
       setBusy(false)
-      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not discard the take" })
+      sayError(res.error ?? "Could not discard the take")
       return
     }
     // Still busy: the take is gone, and until App has moved on, Space or
@@ -236,7 +242,7 @@ export function Review({
     // The draft's earlier crops, Python has sent on.
     endedByPython(res.ended)
     if (!res.ok) {
-      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not crop the take" })
+      sayError(res.error ?? "Could not crop the take")
       return
     }
     setMarkers((prev) =>
@@ -315,13 +321,25 @@ export function Review({
       // The other screens' air: 32 round the screen.
       air
       className="px-8 [--screen-pad-y:2rem]"
+      // The subtitle never sizes the title's box, so only the title makes
+      // the columns give way: contained, it asks for no width of its own.
+      // It is as wide as the title, and runs on into the room the columns
+      // leave (TakeFigures' onRoom); a long rehearsal name is cut where that
+      // ends, and whole on hover.
       subtitle={
-        <Whole
-          data-subtitle
-          text={`Take ${take.take_number} · ${rehearsalName}`}
-          className="truncate"
-        />
+        <span className="block [contain:inline-size]">
+          <Whole
+            data-subtitle
+            text={`Take ${take.take_number} · ${rehearsalName}`}
+            className="truncate"
+            style={{ width: `calc(100% + ${spare}px)` }}
+          />
+        </span>
       }
+      titleFits
+      // As tall with the columns as without: a rename that brings them or
+      // takes them away moves nothing under the header (B4).
+      titleLeast={SMALL_WITH_NUMBERS}
       title={
         <TakeName
           facts={facts}
@@ -333,8 +351,11 @@ export function Review({
         />
       }
       facts={
-        facts.columns.length > 0 ? <TakeFigures facts={facts} onGone={setColumnsGone} /> : undefined
+        facts.columns.length > 0 ? (
+          <TakeFigures facts={facts} onGone={setColumnsGone} onRoom={setSpare} />
+        ) : undefined
       }
+      factsGone={columnsGone}
       footer={
         <FooterRow left={cloudLine}>
           <div className="flex items-center gap-3">

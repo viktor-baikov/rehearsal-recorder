@@ -20,6 +20,7 @@ import { PanelParts, SetCard, SongRows } from "@/components/NextTakeSongs"
 import { SHORT, otherSongs, rowsFor, shortList, songOf, useListOpen } from "@/lib/setSongs"
 import { SongKeys } from "@/components/SongKeys"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
+import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
@@ -33,7 +34,7 @@ import { cn } from "@/lib/utils"
 import { rise } from "@/lib/motion"
 import { useWide } from "@/lib/wide"
 import { useRunning, watching } from "@/lib/activity"
-import { dismiss, notify } from "@/lib/notices"
+import { dismiss } from "@/lib/notices"
 import { wentTo } from "@/lib/deletion"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 
@@ -81,7 +82,7 @@ export function Rehearsal({
   )
   const [busy, setBusy] = useState(false)
   // An error a button said is about this screen, and goes with it.
-  useEffect(() => () => dismiss(ERROR), [])
+  const sayError = useErrorNotice(ERROR)
   const [toRename, setToRename] = useState<Take | null>(null)
   const renameChoices = useSongChoices(
     toRename !== null,
@@ -165,12 +166,12 @@ export function Rehearsal({
           const settled = res.next_take_name
           if (settled) setPicked((p) => (p && p.name === shown ? { ...p, name: settled } : p))
         } else {
-          notify({ key: ERROR, kind: "error", text: res.error ?? "Could not name the next take" })
+          sayError(res.error ?? "Could not name the next take")
           // Python never took it: the field goes back to the name it has.
           setPicked(null)
         }
       } catch {
-        notify({ key: ERROR, kind: "error", text: "Could not name the next take" })
+        sayError("Could not name the next take")
         setPicked(null)
       }
       onChanged()
@@ -238,7 +239,7 @@ export function Rehearsal({
     const res = await api().start_take()
     setBusy(false)
     if (!res.ok || res.take_number == null) {
-      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not start the take" })
+      sayError(res.error ?? "Could not start the take")
       return
     }
     const name = nextNameRef.current
@@ -251,10 +252,11 @@ export function Rehearsal({
   useSpacebar(inHand ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, inHand)
   const finish = async () => {
+    dismiss(ERROR)
     player.pause()
     const res = await api().finish_rehearsal()
     if (!res.ok) {
-      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not finish the rehearsal" })
+      sayError(res.error ?? "Could not finish the rehearsal")
       return
     }
     onFinished()
@@ -285,12 +287,13 @@ export function Rehearsal({
 
   // Asks nothing: the notice's Undo brings the take back into its place.
   const deleteTake = async (take: Take) => {
+    dismiss(ERROR)
     player.pause()
     const res = await api().delete_take(session.folder, take.take_number)
     // What waited of this take, a crop of it, Python has sent on.
     endedByPython(res.ended)
     if (!res.ok) {
-      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not delete the take" })
+      sayError(res.error ?? "Could not delete the take")
       return
     }
     forget(take)
@@ -305,9 +308,10 @@ export function Rehearsal({
   }
 
   const renameTake = async (take: Take, name: string) => {
+    dismiss(ERROR)
     const res = await api().rename_take(session.folder, take.take_number, name)
     if (!res.ok) {
-      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not rename the take" })
+      sayError(res.error ?? "Could not rename the take")
       return
     }
     // The take folder moved with the name, so point the player at the fresh
@@ -333,7 +337,7 @@ export function Rehearsal({
     // The take's earlier crops, Python has sent on.
     endedByPython(res.ended)
     if (!res.ok) {
-      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not crop the take" })
+      sayError(res.error ?? "Could not crop the take")
       return
     }
     if (res.take) reselect(res.take)
@@ -350,9 +354,10 @@ export function Rehearsal({
   }
 
   const renameRehearsal = async (name: string) => {
+    dismiss(ERROR)
     const res = await api().rename_rehearsal(session.folder, name)
     if (!res.ok) {
-      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not rename the rehearsal" })
+      sayError(res.error ?? "Could not rename the rehearsal")
       return
     }
     // The whole folder moved, so every take's paths changed with it.

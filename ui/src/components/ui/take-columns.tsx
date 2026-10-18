@@ -2,9 +2,10 @@ import { drawnLength } from "@/lib/takeScale"
 import { cn } from "@/lib/utils"
 
 /*
-  A song's takes as columns (C8), each as tall as it ran, in the one scale
-  (the longest fills the height). Last time draws them small beside a song
-  (24 px); Review draws them larger, each with its number under it (36 px).
+  A song's takes as columns (C8), each as tall as it ran, in one scale: by
+  default the longest of these columns fills the height. Last time draws them
+  small beside a song (24 px); Review's header draws them as small, each with
+  its number under it.
 
   The lit column is the take the screen is about: the one Review has just
   recorded, the one Last time's play button plays. It is in the text's colour,
@@ -13,8 +14,13 @@ import { cn } from "@/lib/utils"
   8 px at 36.
 
   It is a picture of figures that the caller says in words, so a screen
-  reader skips it: the caller names it and puts the tip on it.
+  reader skips it: the caller names it, and Review also puts the tip on it.
 */
+/** How tall the 24 px columns are with their numbers: the bars, the gap
+ *  and a line of 12 px numbers. A box beside them that must not grow when
+ *  they come or go holds this as its least height (Review's header). */
+const SMALL_WITH_NUMBERS = "min-h-[calc(24px+1rem)]"
+
 type TakeColumn = {
   /** The take's number in the rehearsal, to tell the columns apart. */
   key: number
@@ -89,4 +95,4 @@ function TakeColumns({
   )
 }
 
-export { TakeColumns, type TakeColumn }
+export { SMALL_WITH_NUMBERS, TakeColumns, type TakeColumn }

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
  * review screen's footer came to about 270 px; in a row, 183.
  *
  * `rule` draws a line between the two halves, where the left one holds a
- * field or, on the screen after a take, the take itself.
+ * field: the start screen's rehearsal name.
  *
  * With a field, the buttons get the same room on every screen that has one.
  * Its songs wrap under it by the room they have, and buttons of different

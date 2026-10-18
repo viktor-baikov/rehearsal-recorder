@@ -21,7 +21,7 @@ export const WithLabel: Story = {
   render: () => (
     <div className="flex items-center gap-2">
       <Checkbox id="cloud" defaultChecked />
-      <Label htmlFor="cloud">Send to the cloud: the mix, mp3</Label>
+      <Label htmlFor="cloud">Send to the cloud: the mix, MP3</Label>
     </div>
   ),
 }
@@ -32,7 +32,7 @@ export const Disabled: Story = {
   render: () => (
     <div className="flex items-center gap-2">
       <Checkbox id="cloud-off" disabled />
-      <Label htmlFor="cloud-off">Send to the cloud: the mix, mp3</Label>
+      <Label htmlFor="cloud-off">Send to the cloud: the mix, MP3</Label>
     </div>
   ),
 }

@@ -6803,10 +6803,6 @@ def main():
     p62.update_set(gig62, name="Changed", songs=["Doroga"])
     ok("changing the set later leaves the rehearsal's copy",
        p62.session_state()["set"]["name"] == "Gig on the 25th")
-    ok("the last go at a song, asked by name",
-       p62.last_attempt("vesna") == {"song": "Vesna", "duration_sec": 1.0})
-    ok("none for a take with no song", p62.last_attempt("Take 3") is None)
-    ok("none for a song never played", p62.last_attempt("Novaja") is None)
     folder62 = p62._session["folder"]
     p62.finish_rehearsal()
 

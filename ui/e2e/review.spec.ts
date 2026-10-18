@@ -63,6 +63,20 @@ const CLOUD =
 const LONG =
   "Last song of the night that we wrote in the van on the way back from the festival, with a new bridge at the end"
 
+/** How many 1 px lines stand in the header's row: the one between the
+ *  columns and the buttons, while the columns show. */
+const rules = (page: Page) =>
+  page
+    .locator("header")
+    .evaluate((h) => [...h.children].filter((el) => el.getBoundingClientRect().width === 1).length)
+
+/** The stress take's song, take 33 being its second. */
+const KALYCHANKA =
+  "Kalychanka (slow version for the wedding, with the long intro the bride asked for)"
+/** The stress rehearsal's name, in the subtitle with take 33. */
+const STRESS_SUBTITLE =
+  "Take 33 · Tuesday jam at the old brewery, with the horn section and the choir from upstairs"
+
 /** Whether the page has scrolled sideways anywhere. */
 const sideways = (page: Page) =>
   page.evaluate(() =>
@@ -110,6 +124,8 @@ test("a second take shows columns for the takes tonight, said in words", async (
   await expect(figures(page).getByRole("img")).toHaveAccessibleName(`Takes of Viasna tonight: ${said}`)
   await expect(columns(page).nth(0)).toHaveAttribute("data-starred")
   await expect(columns(page).nth(2)).toHaveAttribute("data-lit")
+  // A line sets them apart from the buttons after them.
+  expect(await rules(page)).toBe(1)
   // Each as tall as it ran: 18, 12 and 6 s.
   const height = (i: number) =>
     columns(page)
@@ -195,25 +211,58 @@ test("a long title takes two lines, then is cut with its number, whole in the to
   await expect(tip(page)).toHaveText(LONG)
 })
 
-test("the columns give way before the title, and hovering the title says them", async ({
+// Take 33, the second of the longest song name, take 16 its first.
+for (const scale of [1, 1.5]) {
+  test(`the columns give way before the title, and hovering the title says them, at ${scale * 100} %`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openApp(page, { stress: "recording", before: scaled(scale) })
+    await page.getByRole("button", { name: /^Stop/ }).click()
+    await expect(summary(page)).toBeVisible()
+    await expect(figures(page)).toHaveAttribute("data-columns-gone")
+    await expect(columns(page)).toHaveCount(0)
+    // With the columns gone, so is the line after them.
+    expect(await rules(page)).toBe(0)
+    await expect(pencil(page)).toBeVisible()
+    expect(await sideways(page)).toBe(false)
+    // A screen reader still has them.
+    await expect(figures(page)).toContainText(/^Takes of Kalychanka .* tonight: Kalychanka /)
+    await settled(page)
+    await drawn(page).hover()
+    await expect(tip(page)).toContainText(`${KALYCHANKA} 1: `)
+    await expect(tip(page)).toContainText(`${KALYCHANKA} 2: 2:31`)
+    if (scale === 1) return
+    // At 150 % the rehearsal's name is cut too, and whole on hover.
+    await expect(subtitle(page)).toHaveAttribute("data-cut")
+    await subtitle(page).hover()
+    await expect(tip(page)).toHaveText(STRESS_SUBTITLE)
+  })
+}
+
+test("a long rehearsal name is cut before the columns, never making them give way", async ({
   page,
 }) => {
-  // Take 33, the second of the longest song name, take 16 its first.
-  await page.setViewportSize({ width: 960, height: 680 })
-  await openApp(page, { stress: "recording" })
+  // Zorka 9, a short title with nine columns, under the stress rehearsal's
+  // long name: at 150 % the name is wider than the room the columns leave.
+  await openApp(page, { stress: "recording", before: scaled(1.5) })
   await page.getByRole("button", { name: /^Stop/ }).click()
   await expect(summary(page)).toBeVisible()
-  await expect(figures(page)).toHaveAttribute("data-columns-gone")
-  await expect(columns(page)).toHaveCount(0)
-  await expect(pencil(page)).toBeVisible()
+  await nameTake(page, "Zorka")
+  await expect(title(page)).toHaveText("Zorka 9")
+  await expect(figures(page)).not.toHaveAttribute("data-columns-gone")
+  await expect(columns(page)).toHaveCount(9)
   expect(await sideways(page)).toBe(false)
-  // A screen reader still has them.
-  await expect(figures(page)).toContainText(/^Takes of Kalychanka .* tonight: Kalychanka /)
+  // Cut where the columns begin, not at the title's end.
+  await expect(subtitle(page)).toHaveAttribute("data-cut")
+  const line = (await subtitle(page).boundingBox())!
+  const first = (await columns(page).first().boundingBox())!
+  const name = (await drawn(page).boundingBox())!
+  expect(line.x + line.width).toBeLessThanOrEqual(first.x)
+  expect(line.x + line.width).toBeGreaterThan(name.x + name.width)
   await settled(page)
-  await drawn(page).hover()
-  const song = "Kalychanka (slow version for the wedding, with the long intro the bride asked for)"
-  await expect(tip(page)).toContainText(`${song} 1: `)
-  await expect(tip(page)).toContainText(`${song} 2: 2:31`)
+  await subtitle(page).hover()
+  await expect(tip(page)).toHaveText(STRESS_SUBTITLE)
 })
 
 test("Save take is the footer's 56 px button and Discard 40", async ({ page }) => {
@@ -256,6 +305,7 @@ test("the cloud line holds its room before the settings answer", async ({ page }
   const measure = () =>
     page.evaluate(() => ({
       footer: document.querySelector("footer")!.getBoundingClientRect().height,
+      line: document.querySelector("footer [data-cloud-line]")!.getBoundingClientRect().height,
       header: document.querySelector("header")!.getBoundingClientRect().height,
       player: document.querySelector("[aria-label='Transport']")!.getBoundingClientRect().top,
     }))
@@ -309,21 +359,56 @@ test("the pencil renames the take and the title and columns follow", async ({ pa
   await expect(title(page)).toHaveText("Dym 2")
   await expect(columns(page)).toHaveText(["1", "2"])
 
-  // A song's first take tonight has no columns, and the header is as tall
-  // without them: nothing under it moves.
-  await settled(page)
-  const at = () =>
-    page.evaluate(() => [
-      document.querySelector("header")!.getBoundingClientRect().height,
-      document.querySelector("[aria-label='Transport']")!.getBoundingClientRect().top,
-    ])
-  const before = await at()
+  // A song's first take tonight has no columns.
   await nameTake(page, "Ahoń")
   await expect(title(page)).toHaveText("Ahoń 1")
   await expect(figures(page)).toHaveCount(0)
-  expect(await at()).toEqual(before)
   await page.getByRole("button", { name: /Save take/ }).click()
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ahoń")
+})
+
+test("the header is as tall with the columns as without, and no taller than they need", async ({
+  page,
+}) => {
+  await openApp(page, { before: TONIGHT })
+  await startRehearsal(page, 4)
+  await recordTake(page, 4)
+  await expect(columns(page)).toHaveCount(3)
+  await expect(drawn(page)).toHaveAttribute("data-lines", "1")
+  await settled(page)
+  const header = () =>
+    page.evaluate(() => {
+      const h = document.querySelector("header")!
+      const s = getComputedStyle(h)
+      const box = h.getBoundingClientRect()
+      const words =
+        h.querySelector("h1")!.getBoundingClientRect().bottom -
+        h.querySelector("[data-subtitle]")!.getBoundingClientRect().top
+      const cols = h.querySelector("[data-take-figures] [role=img]")?.getBoundingClientRect()
+      return {
+        height: box.height,
+        // The room inside its padding, and what stands in it.
+        top: box.top + parseFloat(s.paddingTop),
+        bottom: box.bottom - parseFloat(s.paddingBottom) - parseFloat(s.borderBottomWidth),
+        words,
+        columns: cols ? { top: cols.top, bottom: cols.bottom } : null,
+        player: document.querySelector("[aria-label='Transport']")!.getBoundingClientRect().top,
+      }
+    })
+  const was = await header()
+  // The columns stand inside the header's padding, and the header is as
+  // tall as the taller of them and the two lines of words.
+  expect(was.columns!.top).toBeGreaterThanOrEqual(was.top - 0.5)
+  expect(was.columns!.bottom).toBeLessThanOrEqual(was.bottom + 0.5)
+  const columnsTall = was.columns!.bottom - was.columns!.top
+  expect(was.bottom - was.top).toBeLessThanOrEqual(Math.max(was.words, columnsTall) + 0.5)
+  // A song's first take tonight has none, and nothing under the header moves.
+  await nameTake(page, "Ahoń")
+  await expect(figures(page)).toHaveCount(0)
+  await expect(drawn(page)).toHaveAttribute("data-lines", "1")
+  const now = await header()
+  expect(now.height).toBe(was.height)
+  expect(now.player).toBe(was.player)
 })
 
 test("a take renamed and then cropped keeps its new name and columns", async ({ page }) => {

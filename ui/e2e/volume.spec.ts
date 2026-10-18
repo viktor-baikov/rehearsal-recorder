@@ -176,12 +176,28 @@ test("a fader shows keyboard focus on its thumb", async ({ page }) => {
   await settled(page)
   const fader = page.getByRole("slider", { name: "Guitar volume" })
   const box = (await fader.boundingBox())!
-  const clip = { x: box.x - 6, y: box.y - 6, width: box.width + 12, height: box.height + 12 }
+  // The thumb is a 0.875 rem square that runs from one end of the track to
+  // the other as the value goes from 0 to 1, centred on the track's height.
+  const thumb = await page.evaluate(
+    () => 0.875 * parseFloat(getComputedStyle(document.documentElement).fontSize)
+  )
+  const value = Number(await fader.inputValue())
+  const x = box.x + thumb / 2 + value * (box.width - thumb)
+  const y = box.y + box.height / 2
+  // The thumb's square with its 3 px ring and a pixel to spare, and the
+  // half of the track the thumb is not on, with the input's edges.
+  const side = thumb + 8
+  const onThumb = { x: x - side / 2, y: y - side / 2, width: side, height: side }
+  const away =
+    value > 0.5
+      ? { x: box.x - 4, y: box.y - 4, width: box.width / 2, height: box.height + 8 }
+      : { x: box.x + box.width / 2, y: box.y - 4, width: box.width / 2 + 4, height: box.height + 8 }
   await page.mouse.move(0, 0)
-  const resting = await page.screenshot({ clip })
+  const resting = [await page.screenshot({ clip: onThumb }), await page.screenshot({ clip: away })]
   await fader.focus()
   // A key down is what tells Chromium the focus is the keyboard's.
   await page.keyboard.press("Shift")
   await expect(fader).toBeFocused()
-  expect((await page.screenshot({ clip })).equals(resting)).toBe(false)
+  expect((await page.screenshot({ clip: onThumb })).equals(resting[0])).toBe(false)
+  expect((await page.screenshot({ clip: away })).equals(resting[1])).toBe(true)
 })

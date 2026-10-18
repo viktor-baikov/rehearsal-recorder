@@ -156,6 +156,35 @@ test("renaming a take on the rehearsal screen offers the songs, ✕ puts its nam
   expect((await calls(page, "rename_take")).at(-1)?.args.slice(1)).toEqual([2, "Viasna"])
 })
 
+test("a rename that fails and then works on the rehearsal screen leaves no error", async ({
+  page,
+}) => {
+  // The first rename fails; the next goes through to the fake.
+  await openApp(page, {
+    after:
+      "const rename = window.pywebview.api.rename_take; let n = 0;" +
+      " window.pywebview.api.rename_take = async (...a) =>" +
+      " (++n === 1 ? {ok: false, error: 'Could not rename the take'} : rename(...a));",
+  })
+  await startRehearsal(page)
+  await recordTake(page)
+  await saveAs(page, "Pałyn")
+  const rename = async (name: string) => {
+    await page.hover("[data-take='1']")
+    await page.getByRole("button", { name: /^Rename take / }).click()
+    const dialog = page.getByRole("dialog")
+    await dialog.getByRole("textbox", { name: "Take name" }).fill(name)
+    await page.keyboard.press("Enter")
+    await expect(dialog).toHaveCount(0)
+  }
+  await rename("Viasna")
+  await expect(notices(page, "error").filter({ hasText: "Could not rename the take" })).toBeVisible()
+  await rename("Sonca")
+  await expect.poll(() => callCount(page, "rename_take")).toBe(1)
+  await expect(page.locator("[data-take='1']")).toContainText("Sonca")
+  await expect(notices(page, "error")).toHaveCount(0)
+})
+
 test("renaming a take in history offers what that rehearsal played, as the next go", async ({
   page,
 }) => {

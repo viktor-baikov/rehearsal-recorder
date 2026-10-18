@@ -16,11 +16,22 @@ const column = (over: Partial<Column> = {}): Column => ({
 const render = (columns: Column[], props: { height?: 24 | 36; numbers?: boolean; longest?: number } = {}) =>
   renderToStaticMarkup(createElement(TakeColumns, { columns, height: 24, ...props }))
 
+/** The elements in `html` that carry the attribute `mark`, each with its
+ *  attributes by name, whatever order React writes them in, and the text
+ *  right after its tag. */
+const tagged = (html: string, mark: string) =>
+  [...html.matchAll(/<\w+([^>]*)>([^<]*)/g)]
+    .map((m) => ({
+      attrs: Object.fromEntries([...m[1].matchAll(/([\w-]+)="([^"]*)"/g)].map((a) => [a[1], a[2]])),
+      text: m[2],
+    }))
+    .filter((t) => mark in t.attrs)
+
 /** The bars in `html`, each as its class list and its height in px. */
 const barsOf = (html: string) =>
-  [...html.matchAll(/<span data-bar="true" class="([^"]*)" style="height:([\d.]+)px">/g)].map((m) => ({
-    classes: m[1].split(" "),
-    px: Number(m[2]),
+  tagged(html, "data-bar").map((t) => ({
+    classes: t.attrs.class.split(" "),
+    px: Number(/height:([\d.]+)px/.exec(t.attrs.style)![1]),
   }))
 
 describe("TakeColumns colours", () => {
@@ -74,7 +85,8 @@ describe("TakeColumns heights", () => {
 
   it("is as tall as `height` whatever the numbers add under it", () => {
     const html = render([column()], { height: 36, numbers: true })
-    expect(html).toContain('<span class="flex items-end" style="height:36px">')
+    // The box the bar stands in.
+    expect(tagged(html, "style").map((t) => t.attrs.style)).toContain("height:36px")
   })
 
   it("is a bar 6 px wide at 24 and 8 px wide at 36", () => {
@@ -88,9 +100,9 @@ describe("TakeColumns numbers", () => {
 
   it("puts a take's number under it, 12 px, the lit one bold and in the text's colour", () => {
     const html = render(taken, { height: 36, numbers: true })
-    const labels = [...html.matchAll(/<span data-label="true" class="([^"]*)">([^<]*)<\/span>/g)].map((m) => ({
-      classes: m[1].split(" "),
-      text: m[2],
+    const labels = tagged(html, "data-label").map((t) => ({
+      classes: t.attrs.class.split(" "),
+      text: t.text,
     }))
     expect(labels.map((l) => l.text)).toEqual(["3", "4"])
     expect(labels[0].classes).toContain("text-xs")
@@ -106,27 +118,27 @@ describe("TakeColumns numbers", () => {
 
   it("leaves the number empty for a take with none, so the column keeps its place", () => {
     const html = render([column({ label: null })], { numbers: true })
-    expect(html).toMatch(/<span data-label="true" [^>]*><\/span>/)
+    expect(tagged(html, "data-label").map((t) => t.text)).toEqual([""])
   })
 })
 
 describe("TakeColumns as a whole", () => {
   it("is out of the accessibility tree: the caller names it, in words", () => {
     const html = render([column()])
-    expect(html).toMatch(/^<div [^>]*aria-hidden="true"/)
+    expect(tagged(html, "data-columns")[0].attrs["aria-hidden"]).toBe("true")
     expect(html).not.toMatch(/\brole=|aria-label|title=/)
   })
 
   it("says in attributes which column is lit and which is starred, for the tests that look", () => {
-    const html = render([column({ lit: true, starred: true })])
-    expect(html).toMatch(/<span data-column="true" data-lit="true" data-starred="true"/)
-    const plain = render([column()])
-    expect(plain).not.toContain("data-lit")
-    expect(plain).not.toContain("data-starred")
+    const [marked] = tagged(render([column({ lit: true, starred: true })]), "data-column")
+    expect(marked.attrs).toMatchObject({ "data-lit": "true", "data-starred": "true" })
+    const [plain] = tagged(render([column()]), "data-column")
+    expect(plain.attrs).not.toHaveProperty("data-lit")
+    expect(plain.attrs).not.toHaveProperty("data-starred")
   })
 
-  it("takes the room of its columns, so the line it stands in can give way round it", () => {
-    expect(render([column()])).toMatch(/^<div [^>]*class="[^"]*\bshrink-0\b/)
+  it("is never squeezed in a row short of room: its box does not shrink", () => {
+    expect(tagged(render([column()]), "data-columns")[0].attrs.class.split(" ")).toContain("shrink-0")
   })
 
   it("draws nothing for no columns", () => {

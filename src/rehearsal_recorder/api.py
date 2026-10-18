@@ -2016,18 +2016,6 @@ class Api:
             return None
         return None if found is None else _plays_of(found["goes"])
 
-    def last_attempt(self, name):
-        """What the screen after a take measures it against, for the song
-        `name` resolves to, by the rule session_state's "last_attempt"
-        has; None with no rehearsal on, for no song, or a song never
-        played."""
-        if self._session is None:
-            return None
-        takes = self._session_takes()
-        song = self._lib.resolve_name(
-            self._session["folder"], name, self._session["take_counter"] + 1)["song"]
-        return _last_attempt(takes, song, lambda: self._go_before_tonight(song))
-
     def _next_take(self, take_number=None, chosen=True):
         """
         What the take being named would be, as {"song", "go", "name"}.
