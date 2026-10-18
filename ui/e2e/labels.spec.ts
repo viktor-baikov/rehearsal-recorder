@@ -232,7 +232,9 @@ test("the colour picker is a pick-one of eight, the label's colour chosen", asyn
 
 test("a long label name at 960x680 and 150 % is cut, whole in its tip", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 680 })
-  const long = "Watch the tempo in the bridge, it rushes"
+  // In capitals, so the 40 letters a name may have are too wide for the row
+  // in whichever sans-serif the machine draws with: Linux runners differ.
+  const long = "WATCH THE TEMPO IN THE BRIDGE, IT RUSHES"
   await openMarks(
     page,
     scaled(1.5) +
