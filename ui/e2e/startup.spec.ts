@@ -45,9 +45,9 @@ test("puts the chosen theme up before Python answers, and keeps it", async ({ co
   await openApp(warm)
   await warm.getByRole("button", { name: "Settings" }).click()
   await warm.getByRole("button", { name: "Appearance", exact: true }).first().click()
-  await warm.getByRole("button", { name: "Light", exact: true }).click()
-  await expect(warm.getByRole("button", { name: "Light", exact: true })).toHaveAttribute(
-    "aria-pressed",
+  await warm.getByRole("radio", { name: "Light", exact: true }).click()
+  await expect(warm.getByRole("radio", { name: "Light", exact: true })).toHaveAttribute(
+    "aria-checked",
     "true"
   )
 

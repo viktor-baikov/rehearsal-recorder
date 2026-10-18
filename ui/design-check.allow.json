@@ -1,7 +1,7 @@
 {
+  "src/components/AudioSettings.tsx": ["raw-colour"],
   "src/components/MarksSettings.tsx": ["raw-button"],
   "src/components/SetEditor.tsx": ["raw-button"],
   "src/components/SetsSettings.tsx": ["raw-button"],
-  "src/components/UnderTheHood.tsx": ["px-text"],
-  "src/screens/Settings.tsx": ["raw-colour", "raw-button"]
+  "src/components/UnderTheHood.tsx": ["px-text"]
 }

@@ -1,15 +1,19 @@
 import {
   callCount,
   calls,
+  colour,
+  EDGE,
   expect,
   keyOn,
   nameTake,
   notices,
   openApp,
   recordTake,
+  scaled,
   setFake,
   startButton,
   startRehearsal,
+  style,
   test,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
@@ -24,6 +28,18 @@ async function openSettings(page: Page, before?: string) {
 
 const group = (page: Page, name: string) =>
   page.getByRole("button", { name, exact: true }).first()
+
+/** The tabs, in the order the section list gives them. */
+const TAB_NAMES = ["Audio", "Folders", "Marks", "Sets", "Appearance", "Under the hood"]
+
+const CLOUD = "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';"
+
+const sections = (page: Page) => page.getByRole("navigation", { name: "Settings sections" })
+const tabHead = (page: Page) => page.locator("[data-tab-head]")
+const tabBody = (page: Page) => page.locator("[data-tab-body]")
+const tooltip = (page: Page) => page.getByRole("tooltip")
+const box = async (el: Locator) => (await el.boundingBox())!
+const away = (page: Page) => page.mouse.move(0, 0, { steps: 8 })
 
 test("Settings has a way back on the keyboard too", async ({ page }) => {
   await openSettings(page)
@@ -53,6 +69,243 @@ test("Settings is in groups, not one long column", async ({ page }) => {
   await expect(page.locator("#input-device")).toHaveCount(0)
   await page.getByRole("button", { name: "Choose recordings folder" }).click()
   await expect.poll(() => callCount(page, "choose_recordings_dir")).toBe(1)
+})
+
+test.describe("the frame and the section list", () => {
+  /** Until a section, with the pointer away from it, has this fill: it
+   *  eases to it over 200 ms after a click. */
+  const filled = async (page: Page, el: Locator, fill: string, what?: string) => {
+    await away(page)
+    await expect
+      .poll(async () => (await style(el, "background-color"))["background-color"], what)
+      .toBe(fill)
+  }
+  const edgeClear = async (el: Locator) => {
+    const edge = await style(el, ...EDGE)
+    return ["top", "right", "bottom", "left"].every(
+      (side) =>
+        edge[`border-${side}-width`] === "0px" || edge[`border-${side}-color`] === "rgba(0, 0, 0, 0)"
+    )
+  }
+
+  test("the section list is the shared rows, the chosen one grey with no frame", async ({ page }) => {
+    await openSettings(page)
+    const nav = sections(page)
+    await expect(nav).toHaveAttribute("data-sections", "rows")
+    const rows = nav.getByRole("button")
+    await expect(rows).toHaveText(TAB_NAMES)
+    // Each is the shared row, on a button the keys reach.
+    for (const row of await rows.all()) {
+      await expect(row).toHaveAttribute("data-slot", "item")
+      expect(await row.evaluate((e) => e.tagName)).toBe("BUTTON")
+    }
+    const selected = await colour(page, "--selected")
+    const audio = nav.locator("[data-tab='audio']")
+    await expect(audio).toHaveAttribute("aria-current", "page")
+    await filled(page, audio, selected)
+    expect(await edgeClear(audio)).toBe(true)
+    for (const name of TAB_NAMES.slice(1)) {
+      const row = rows.filter({ hasText: name })
+      await expect(row, name).not.toHaveAttribute("aria-current")
+      await filled(page, row, "rgba(0, 0, 0, 0)", name)
+    }
+
+    // Another chosen: it is the grey one now, and Audio is not.
+    await group(page, "Folders").click()
+    await expect(nav.locator("[aria-current='page']")).toHaveText("Folders")
+    await filled(page, nav.locator("[data-tab='folders']"), selected)
+    await filled(page, audio, "rgba(0, 0, 0, 0)")
+  })
+
+  test("the section list and the tab's head stay put while the tab scrolls", async ({ page }) => {
+    await openSettings(page, CLOUD)
+    await group(page, "Folders").click()
+    await expect(page.locator("#cloud-dir")).toHaveValue(/Google Drive/)
+    const body = tabBody(page)
+    // With a cloud folder, Folders is longer than the window.
+    expect(await body.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true)
+    const before = [await box(sections(page)), await box(tabHead(page))]
+    await body.hover()
+    await page.mouse.wheel(0, 600)
+    await expect.poll(() => body.evaluate((e) => e.scrollTop)).toBeGreaterThan(0)
+    expect([await box(sections(page)), await box(tabHead(page))]).toEqual(before)
+    // Only the tab's body scrolls, not the page round it.
+    expect(await page.locator("main").evaluate((e) => e.scrollTop)).toBe(0)
+    // Its end can be reached.
+    await body.evaluate((e) => (e.scrollTop = e.scrollHeight))
+    await expect(page.getByText("This is also what Send starred sends.")).toBeInViewport()
+  })
+
+  test("narrower than 900 px times the scale, the sections are icons, each named, with its tip", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openSettings(page, scaled(1.5))
+    const nav = sections(page)
+    await expect(nav).toHaveAttribute("data-sections", "icons")
+    const icons = nav.getByRole("button")
+    await expect(icons).toHaveCount(TAB_NAMES.length)
+    for (const [i, name] of TAB_NAMES.entries()) {
+      const icon = icons.nth(i)
+      await expect(icon).toHaveAccessibleName(name)
+      // An icon and nothing else, 36 px square at 100 %.
+      expect(await icon.evaluate((e) => (e as HTMLElement).innerText.trim()), name).toBe("")
+      const b = await box(icon)
+      expect(b.width, name).toBeCloseTo(54, 0)
+      expect(b.height, name).toBeCloseTo(54, 0)
+      // The name in the shared tip, at the icon's right, when pointed at.
+      await away(page)
+      await expect(tooltip(page)).toHaveCount(0)
+      await icon.hover()
+      await expect(tooltip(page), name).toHaveText(name)
+      await expect(page.locator("[data-slot='tooltip-content']")).toHaveAttribute("data-side", "right")
+    }
+    await away(page)
+    await expect(tooltip(page)).toHaveCount(0)
+
+    // Tab reaches them in their order, each saying its name in the tip.
+    await page.getByRole("button", { name: "Back" }).focus()
+    for (const [i, name] of TAB_NAMES.entries()) {
+      await page.keyboard.press("Tab")
+      await expect(icons.nth(i), name).toBeFocused()
+      await expect(tooltip(page), name).toHaveText(name)
+    }
+
+    // The chosen one grey, as a chosen row is.
+    const audio = nav.locator("[data-tab='audio']")
+    await expect(audio).toHaveAttribute("aria-current", "page")
+    await filled(page, audio, await colour(page, "--selected"))
+    expect(await edgeClear(audio)).toBe(true)
+    // The panel gets the room the names had.
+    expect((await box(tabHead(page))).width).toBeCloseTo(762, 0)
+
+    await page.setViewportSize({ width: 1180, height: 820 })
+    await expect(nav).toHaveAttribute("data-sections", "icons")
+    await page.setViewportSize({ width: 1400, height: 900 })
+    await expect(nav).toHaveAttribute("data-sections", "rows")
+    await expect(icons).toHaveText(TAB_NAMES)
+
+    // 960 px is room enough at 100 %.
+    await page.setViewportSize({ width: 960, height: 680 })
+    await expect(nav).toHaveAttribute("data-sections", "icons")
+    await nav.getByRole("button", { name: "Appearance" }).click()
+    await page.getByRole("radio", { name: "Scale 100 percent" }).click()
+    await expect(nav).toHaveAttribute("data-sections", "rows")
+    await expect(icons).toHaveText(TAB_NAMES)
+  })
+
+  test("the icons keep the new version's dot on Under the hood", async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openSettings(page, scaled(1.5) + "window.__LATEST__ = {version: '0.3.0'};")
+    const nav = sections(page)
+    await expect(nav).toHaveAttribute("data-sections", "icons")
+    const hood = nav.locator("[data-tab='about']")
+    await expect(hood).toHaveAccessibleName("Under the hood, a new version is out")
+    // The one dot, inside the icon's box.
+    await expect(nav.locator("[data-new-version]")).toHaveCount(1)
+    const dot = await box(hood.locator("[data-new-version]"))
+    const icon = await box(hood)
+    expect(dot.x).toBeGreaterThanOrEqual(icon.x)
+    expect(dot.y).toBeGreaterThanOrEqual(icon.y)
+    expect(dot.x + dot.width).toBeLessThanOrEqual(icon.x + icon.width)
+    expect(dot.y + dot.height).toBeLessThanOrEqual(icon.y + icon.height)
+    // The tip names the tab; the news is in the name.
+    await hood.hover()
+    await expect(tooltip(page)).toHaveText("Under the hood")
+  })
+
+  test("a window made narrower keeps the open tab, its scroll, its focus and what was typed", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1400, height: 900 })
+    await openSettings(page, scaled(1.5) + CLOUD)
+    const nav = sections(page)
+    await expect(nav).toHaveAttribute("data-sections", "rows")
+    await group(page, "Folders").click()
+    const field = page.locator("#false-start")
+    await expect(field).toHaveValue("30")
+    await field.fill("45")
+    const body = tabBody(page)
+    await body.evaluate((e) => (e.scrollTop = 120))
+    await expect(field).toBeFocused()
+    const header = await box(page.locator("header"))
+    const head = await box(tabHead(page))
+
+    const kept = async (look: string) => {
+      await expect(nav).toHaveAttribute("data-sections", look)
+      await expect(nav.locator("[aria-current='page']")).toHaveAttribute("data-tab", "folders")
+      await expect(tabHead(page).locator("h2")).toHaveText("Folders")
+      await expect(field, look).toBeFocused()
+      await expect(field, look).toHaveValue("45")
+      expect(await body.evaluate((e) => e.scrollTop), look).toBe(120)
+      const nowHeader = await box(page.locator("header"))
+      expect(nowHeader.height, look).toBeCloseTo(header.height, 0)
+      expect((await box(tabHead(page))).y, look).toBeCloseTo(head.y, 0)
+    }
+    await page.setViewportSize({ width: 1180, height: 820 })
+    await kept("icons")
+    await page.setViewportSize({ width: 1400, height: 900 })
+    await kept("rows")
+    // Nothing was left, so nothing was saved.
+    expect(await callCount(page, "set_false_start")).toBe(0)
+  })
+
+  test("choosing 150 % at 960x680 turns the list to icons, and the scale keeps focus", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openSettings(page)
+    const nav = sections(page)
+    await expect(nav).toHaveAttribute("data-sections", "rows")
+    await group(page, "Appearance").click()
+    const largest = page.getByRole("radio", { name: "Scale 150 percent" })
+    await largest.click()
+    await expect(nav).toHaveAttribute("data-sections", "icons")
+    await expect(largest).toHaveAttribute("aria-checked", "true")
+    await expect(largest).toBeFocused()
+    // And back from the keys: the focus goes along the switch and stays.
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft")
+    const usual = page.getByRole("radio", { name: "Scale 100 percent" })
+    await expect(usual).toBeFocused()
+    await page.keyboard.press("Space")
+    await expect(nav).toHaveAttribute("data-sections", "rows")
+    await expect(usual).toHaveAttribute("aria-checked", "true")
+    await expect(usual).toBeFocused()
+  })
+
+  test("the screen has the air of the redone screens", async ({ page }) => {
+    await openSettings(page)
+    expect(await style(page.locator("header"), "padding-left", "padding-right")).toEqual({
+      "padding-left": "32px",
+      "padding-right": "32px",
+    })
+    const header = await box(page.locator("header"))
+    const nav = await box(sections(page))
+    const head = await box(tabHead(page))
+    // The list and the tab's head 32 px under the header, side by side.
+    expect(nav.y - (header.y + header.height)).toBeCloseTo(32, 0)
+    expect(head.y - (header.y + header.height)).toBeCloseTo(32, 0)
+    // The column is 56 rem, in the middle of the 1180 px window.
+    expect(head.x + head.width - nav.x).toBeCloseTo(896, 0)
+    expect(nav.x).toBeCloseTo((1180 - 896) / 2, 0)
+  })
+
+  test("the tab's head and its group rise in, 40 ms apart", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" })
+    await openSettings(page)
+    await group(page, "Appearance").click()
+    const rise = (el: Locator) =>
+      el.evaluate((e) => {
+        const s = getComputedStyle(e.closest(".animate-rise")!)
+        return [s.animationName, s.animationDelay]
+      })
+    expect(await rise(tabHead(page))).toEqual(["rise", "0s"])
+    expect(await rise(page.locator("[data-settings-group]"))).toEqual(["rise", "0.04s"])
+    // The header and the section list are there from the first frame.
+    for (const still of [page.locator("header"), sections(page)]) {
+      expect(await still.evaluate((e) => e.closest(".animate-rise") === null)).toBe(true)
+    }
+  })
 })
 
 test("the recording card and its rates are set in Settings", async ({ page }) => {
@@ -114,71 +367,63 @@ test("what cloud copies are written as, and nothing about copies without a folde
   await expect(page.getByText("Only the copies are affected")).toHaveCount(0)
 })
 
-test("the theme and the scale apply at once, and are kept", async ({ page }) => {
+test("Appearance is one group: Theme and Scale as switches, applied at once and kept", async ({
+  page,
+}) => {
   await openSettings(page)
   await group(page, "Appearance").click()
-  await page.getByRole("button", { name: "Light", exact: true }).click()
-  await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(false)
-  await page.getByRole("button", { name: "Scale 130 percent" }).click()
-  await expect
-    .poll(() => page.evaluate(() => getComputedStyle(document.documentElement).fontSize))
-    .toBe("20.8px")
-  expect(await callCount(page, "save_appearance")).toBeGreaterThanOrEqual(2)
-})
+  const groups = tabBody(page).locator("[data-settings-group]")
+  await expect(groups).toHaveCount(1)
+  // Named once, by the tab's head: the group under it has no title.
+  await expect(tabHead(page).locator("h2")).toHaveText("Appearance")
+  await expect(tabBody(page).getByText("Appearance")).toHaveCount(0)
+  await expect(groups.locator("h3")).toHaveCount(0)
 
-// A pill that swaps between default and outline when it is chosen must not
-// change width with it: a heavier word or a frame that one look has and the
-// other has not moves every pill beside it on a click.
-test("choosing a theme or a scale leaves every pill the width it was", async ({ page }) => {
-  await openSettings(page)
+  const theme = groups.getByRole("radiogroup", { name: "Theme" })
+  const scale = groups.getByRole("radiogroup", { name: "Scale" })
+  for (const [name, row] of [["Theme", theme], ["Scale", scale]] as const) {
+    await expect(row, name).toHaveAttribute("data-variant", "switch")
+    // Its name at its left, on its line.
+    const label = await box(groups.getByText(name, { exact: true }))
+    const track = await box(row)
+    expect(label.x + label.width, name).toBeLessThan(track.x)
+    expect(label.y + label.height / 2, name).toBeCloseTo(track.y + track.height / 2, 0)
+  }
+  await expect(theme.getByRole("radio")).toHaveText(["Dark", "Light", "Match system"])
+  await expect(scale.getByRole("radio")).toHaveText(["90%", "100%", "115%", "130%", "150%"])
+  await expect(theme.getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true")
+  await expect(scale.getByRole("radio", { name: "Scale 100 percent" })).toHaveAttribute(
+    "aria-checked",
+    "true"
+  )
+
+  // Applied at once, and choosing moves nothing beside it.
+  const dark = () => page.evaluate(() => document.documentElement.classList.contains("dark"))
+  const size = () => page.evaluate(() => getComputedStyle(document.documentElement).fontSize)
+  const widths = () =>
+    theme.getByRole("radio").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width))
+  const before = await widths()
+  const light = theme.getByRole("radio", { name: "Light", exact: true })
+  await light.click()
+  await expect.poll(dark).toBe(false)
+  await expect(light).toHaveAttribute("aria-checked", "true")
+  expect(await widths()).toEqual(before)
+  await scale.getByRole("radio", { name: "Scale 130 percent" }).click()
+  await expect.poll(size).toBe("20.8px")
+  // Nothing says it waits for the next launch: it does not.
+  await expect(page.getByText("next launch")).toHaveCount(0)
+
+  // Kept by Python, so the next window opens the same.
+  await page.reload()
+  await page.getByRole("button", { name: "Settings" }).click()
   await group(page, "Appearance").click()
-  const themes = ["Dark", "Light", "Match system"].map((name) =>
-    page.getByRole("button", { name, exact: true })
+  expect(await dark()).toBe(false)
+  expect(await size()).toBe("20.8px")
+  await expect(page.getByRole("radio", { name: "Light", exact: true })).toHaveAttribute("aria-checked", "true")
+  await expect(page.getByRole("radio", { name: "Scale 130 percent" })).toHaveAttribute(
+    "aria-checked",
+    "true"
   )
-  const scales = [100, 115, 130, 150].map((n) =>
-    page.getByRole("button", { name: `Scale ${n} percent` })
-  )
-  const widths = (pills: Locator[]) =>
-    Promise.all(pills.map(async (p) => (await p.boundingBox())!.width))
-
-  // The theme: whichever is chosen, the three keep their widths.
-  const before = await widths(themes)
-  for (const pill of [themes[1]!, themes[2]!, themes[0]!]) {
-    await pill.click()
-    await expect(pill).toHaveAttribute("aria-pressed", "true")
-    expect(await widths(themes)).toEqual(before)
-  }
-
-  // The scale rescales the whole page, so the widths cannot be compared
-  // across a click, and the four say different figures: whether those are as
-  // wide as one another depends on the machine's font (on CI's Linux runner
-  // they came out at three widths). So the chosen one and the others must
-  // share what sets a width besides the words: the weight, the frame, the
-  // padding, and figures of even width wherever the font has them.
-  const looks = (pills: Locator[]) =>
-    Promise.all(
-      pills.map((p) =>
-        p.evaluate((el) => {
-          const s = getComputedStyle(el)
-          return [
-            s.fontWeight,
-            s.borderLeftWidth,
-            s.borderRightWidth,
-            s.paddingLeft,
-            s.paddingRight,
-            s.letterSpacing,
-            s.fontVariantNumeric,
-          ].join(" ")
-        })
-      )
-    )
-  for (const pill of [scales[2]!, scales[1]!]) {
-    await pill.click()
-    await expect(pill).toHaveAttribute("aria-pressed", "true")
-    // Polled: a scale change eases the padding in with the rest of the page.
-    await expect.poll(async () => new Set(await looks(scales)).size).toBe(1)
-    expect((await looks(scales))[0]).toContain("tabular-nums")
-  }
 })
 
 test.describe("Under the hood", () => {
