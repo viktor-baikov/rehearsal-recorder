@@ -366,6 +366,10 @@ export type HistoryView = "rehearsals" | "songs" | "marks"
  *  (api.save_marks_grouping). */
 export type MarksGrouping = "rehearsal" | "song" | "list"
 
+/** The keys Settings › Keys turns on and off (api.save_keys): Space and Esc,
+ *  or the player's keys, the arrows, Home, M, R and ?. */
+export type KeyKind = "space" | "player"
+
 /** One mark with a label, from any rehearsal (api.list_marks): what its row
  *  in History's Marks view shows. The take itself is read from its
  *  rehearsal when it is played or opened. `missing` is the rehearsal's
@@ -790,6 +794,9 @@ export type Settings = {
    *  play freely, and when that set is gone. */
   next_set: number | null
   ui_scale: number
+  /** Whether Space and Esc work, and the player's keys: lib/keys.ts. */
+  space_keys: boolean
+  player_keys: boolean
   output_device_index: number | null
   /** Outputs of that card the mix comes out of, from 1: [3, 4] or [5]. */
   output_channels: number[]
@@ -1124,6 +1131,7 @@ type PyApi = {
   /** The listening level, kept between takes. Not part of the cloud mix. */
   save_master_volume(volume: number): Promise<Ok>
   save_appearance(theme: string, uiScale: number): Promise<Ok>
+  save_keys(kind: KeyKind, on: boolean): Promise<Ok>
   /** `warning` when a take is open and it now plays somewhere else. */
   set_output_device(deviceIndex: number | null): Promise<Ok<{ warning?: string }>>
   set_output_channels(channels: number[]): Promise<Ok<{ warning?: string }>>

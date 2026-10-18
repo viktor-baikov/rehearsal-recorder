@@ -19,6 +19,7 @@ import { useDialogFocusKeys } from "@/hooks/useSpacebar"
 import { useUndoKey } from "@/hooks/useUndoKey"
 import { reportBridgeError } from "@/lib/bridgeErrors"
 import { loadDeletionKind, wentTo } from "@/lib/deletion"
+import { loadKeys } from "@/lib/keys"
 import { loadLabels } from "@/lib/labels"
 import { draftMovedTo, offerUndo } from "@/lib/trash"
 import {
@@ -167,15 +168,17 @@ export function App() {
       await loadLabels()
 
       // The source of truth for appearance is the Python config; localStorage
-      // was only a fast cache to avoid flashing on startup.
+      // was only a fast cache to avoid flashing on startup. Which keys work
+      // is kept there too (Settings › Keys).
       try {
         const saved = await api().get_settings()
         const theme = saved.theme ?? "dark"
         const scale = saved.ui_scale ?? 1
         setAppearance({ theme, scale })
         applyAppearance(theme, scale)
+        loadKeys(saved)
       } catch (e) {
-        console.error("Could not read appearance:", e)
+        console.error("Could not read appearance or keys:", e)
       }
 
       // The bridge may have survived a page reload mid-rehearsal — in that

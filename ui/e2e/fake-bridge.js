@@ -1990,6 +1990,8 @@ window.__MAKE_API__ = () => ({
     fallback_trash: '_deleted',
     path_warning: window.__PATH_WARNING__ || null,
     theme: readCfg().theme, ui_scale: readCfg().ui_scale,
+    // Settings › Keys, as api.get_settings: anything but false is on.
+    space_keys: readCfg().space_keys !== false, player_keys: readCfg().player_keys !== false,
     cloud_dir: cloudDir,
     server_url:'http://127.0.0.1:1234/', config_path:'/Users/alex/.rehearsal-recorder/config.json',
     version:'0.2.0'}),
@@ -2020,6 +2022,11 @@ window.__MAKE_API__ = () => ({
   }),
   save_appearance: track('save_appearance', async (theme, scale) => {
     writeCfg({...readCfg(), theme, ui_scale:scale});
+    return {ok:true};
+  }),
+  save_keys: track('save_keys', async (kind, on) => {
+    if (!['space', 'player'].includes(kind)) return {ok:false, error:'Unknown keys'};
+    writeCfg({...readCfg(), [`${kind}_keys`]: Boolean(on)});
     return {ok:true};
   }),
 });

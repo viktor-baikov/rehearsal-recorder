@@ -12260,6 +12260,37 @@ def main():
     h77.shutdown()
     apimod77.move_to_trash = real_trash71
 
+    print("\n[78] The single keys, kept as the theme is")
+    # Settings › Keys has two switches: Space and Esc, and the player's keys
+    # (the arrows, Home, M, R and ?). Both are on until one is turned off, and
+    # stay as they were left after a restart. Only false turns keys off: a
+    # config edited by hand never takes them away by accident.
+    tmp78 = Path(tempfile.mkdtemp())
+    _, s78 = fresh_api(tmp78)
+
+    def keys78(api):
+        settings = api.get_settings()
+        return settings["space_keys"], settings["player_keys"]
+
+    ok("Space and Esc, and the player's keys, are on in a fresh config",
+       keys78(s78) == (True, True))
+    ok("turning Space and Esc off is kept",
+       s78.save_keys("space", False) == {"ok": True})
+    _, again78 = fresh_api(tmp78)
+    ok("and they are still off after a restart, the player's keys still on",
+       keys78(again78) == (False, True))
+    saved78 = (tmp78 / "config.json").read_text()
+    ok("keys there are not are refused, and change nothing",
+       again78.save_keys("arrows", False) == {"ok": False, "error": "Unknown keys"}
+       and keys78(again78) == (False, True)
+       and (tmp78 / "config.json").read_text() == saved78)
+    cfg78 = json.loads(saved78)
+    cfg78["space_keys"] = "no"
+    (tmp78 / "config.json").write_text(json.dumps(cfg78))
+    _, odd78 = fresh_api(tmp78)
+    ok("and anything but false written by hand reads as on",
+       keys78(odd78) == (True, True))
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

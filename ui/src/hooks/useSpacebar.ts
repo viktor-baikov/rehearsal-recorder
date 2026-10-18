@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react"
+import { keysOn } from "@/lib/keys"
 
 /** Inputs nobody types into. A fader is an INPUT too, and the shortcuts used
  *  to go dead the moment one was touched. */
@@ -189,6 +190,10 @@ function keyIsClaimed(el: Element | null): boolean {
  * motion, a take being recorded) the list is gone, and focus with it, by the
  * time the keydown reaches the window: picking an input would start the
  * rehearsal too.
+ *
+ * With Space and Esc off in Settings › Keys (lib/keys.ts), Space does
+ * nothing here, and the browser presses a focused button with it, even one
+ * the mouse left focused.
  */
 export function useSpacebar(handler: () => void, enabled = true) {
   const handlerRef = useRef(handler)
@@ -204,6 +209,7 @@ export function useSpacebar(handler: () => void, enabled = true) {
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (!keysOn("space")) return
       if (e.code !== "Space" || e.repeat) return
       const el = document.activeElement
       if (claimed || keyIsClaimed(el)) return
@@ -229,6 +235,10 @@ export function useSpacebar(handler: () => void, enabled = true) {
  * nothing that cannot be got back. On the screen after a take it throws the
  * take away at once, as that screen's Discard does: the notice's Undo gets
  * it back, screen and all.
+ *
+ * With Space and Esc off in Settings › Keys (lib/keys.ts), Escape does
+ * nothing to the screen. It still closes a dialog, which the dialog does
+ * itself, and still leaves a text field, which the capture phase below does.
  */
 export function useEscape(handler: () => void, enabled = true) {
   const handlerRef = useRef(handler)
@@ -273,6 +283,7 @@ export function useEscape(handler: () => void, enabled = true) {
     // drags it, says so that way and stops nothing — so Escape put the label
     // back and left Settings as well.
     const onKeyDown = (e: KeyboardEvent) => {
+      if (!keysOn("space")) return
       if (e.key !== "Escape") return
       if (claimed || e.defaultPrevented) return
       handlerRef.current()
@@ -295,6 +306,9 @@ export function useEscape(handler: () => void, enabled = true) {
  * to the system — and nothing on a slider reached with the keyboard, where
  * Home already means "to the bottom of this slider". One the mouse only
  * dragged is let go, as a clicked button is for Space.
+ *
+ * Every key bound here is one of the player's keys, and does nothing while
+ * Settings › Keys has them off (lib/keys.ts).
  */
 export function useKey(key: string, handler: () => void, enabled = true) {
   const handlerRef = useRef(handler)
@@ -306,6 +320,7 @@ export function useKey(key: string, handler: () => void, enabled = true) {
     watchFocus()
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (!keysOn("player")) return
       if (e.key.toLowerCase() !== key.toLowerCase() || e.repeat) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const el = document.activeElement
@@ -325,7 +340,8 @@ const SKIP_SECONDS = 10
 /**
  * Arrow keys scrub anywhere on a player screen, not only when the seek bar
  * has focus — so you can listen and scrub without aiming the mouse. A fader
- * the mouse dragged is let go; one reached with Tab keeps its arrows.
+ * the mouse dragged is let go; one reached with Tab keeps its arrows. Off
+ * with the player's keys in Settings › Keys (lib/keys.ts).
  */
 export function usePlayerKeys(skip: (delta: number) => void, enabled = true) {
   const skipRef = useRef(skip)
@@ -336,6 +352,7 @@ export function usePlayerKeys(skip: (delta: number) => void, enabled = true) {
     watchFocus()
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (!keysOn("player")) return
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
       const el = document.activeElement
       if (keyIsClaimed(el) || inRadios(el)) return

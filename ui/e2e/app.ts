@@ -361,6 +361,18 @@ export function withSets(sets: SetSeed[] = [GIG], chosen: number | null = 1, mor
   )
 }
 
+/** A page script: Space and Esc (`space`), or the player's keys (`player`),
+ *  turned on or off in Settings › Keys. Merged into the config the fake
+ *  keeps, so it comes after withSets, scaled or themed: they write it whole. */
+export function withKeys({ space, player }: { space?: boolean; player?: boolean }) {
+  const keys = JSON.stringify({ space_keys: space, player_keys: player })
+  return (
+    `localStorage.setItem("mock-python-config", JSON.stringify({` +
+    `...(JSON.parse(localStorage.getItem("mock-python-config")) || {theme: "dark", ui_scale: 1}),` +
+    `...${keys}}));`
+  )
+}
+
 /** From now on, at every frame, which page head is drawn: its title (the
  *  h2's name), or null in a frame with none. `headsSeen` stops and says them. */
 export const watchHeads = (page: Page) =>
