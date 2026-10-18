@@ -114,7 +114,14 @@ export function Settings({
   const current = TABS.find((t) => t.id === tab) ?? TABS[0]
 
   return (
-    <Shell air title="Settings" onBack={onBack} backKey className="flex overflow-hidden p-0">
+    <Shell
+      air
+      title="Settings"
+      onBack={onBack}
+      backKey
+      backKeyRoom
+      className="flex overflow-hidden p-0"
+    >
       {/* The page does not scroll: the list and the tab's head stay where
           they are, and the tab's body scrolls under its head. 32 px round
           the column, 56 rem wide at most. */}

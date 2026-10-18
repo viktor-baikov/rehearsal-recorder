@@ -158,6 +158,10 @@ test("with the keys off, Esc still closes a dialog and leaves a field, and Ctrl+
   await page.getByRole("button", { name: "Player keys" }).click()
   const list = page.getByRole("dialog", { name: "Keys in the player" })
   await expect(list).toBeVisible()
+  // With every key off, the list's line says so, and nothing about typing.
+  await expect(list).toHaveAccessibleDescription(
+    "Space, Esc and the player's keys are off in Settings › Keys."
+  )
   await page.keyboard.press("Escape")
   await expect(list).toHaveCount(0)
   await expect(timeline(page)).toBeVisible()
@@ -207,10 +211,12 @@ const keysSwitch = (page: Page, title: string) =>
 /** Undo's button, which keeps its key with the others off. */
 const UNDO = "[aria-keyshortcuts='Control+Z'], [aria-keyshortcuts='Meta+Z']"
 
-/** No button shows a key or says one, Undo's apart: no chip on a button, no
- *  hint of the arrows by a field or a list, no aria-keyshortcuts. */
+/** No button shows a key or says one, Undo's apart: no chip seen on a button
+ *  (Settings' Back keeps its room unseen, see keyOn), no hint of the arrows
+ *  by a field or a list, no aria-keyshortcuts. */
 async function noKeysShown(page: Page, where: string) {
-  await expect(page.locator(`button:not(${UNDO}) kbd`), `${where}: a chip`).toHaveCount(0)
+  const chips = page.locator(`button:not(${UNDO}) kbd`).filter({ visible: true })
+  await expect(chips, `${where}: a chip`).toHaveCount(0)
   await expect(page.locator("[data-song-keys], [data-list-keys]"), `${where}: a hint`).toHaveCount(0)
   await expect(page.locator(`[aria-keyshortcuts]:not(${UNDO})`), `${where}: a key said`).toHaveCount(0)
 }
@@ -254,7 +260,7 @@ test("Keys is a tab between Appearance and Under the hood, two switches over the
   await expect(body.locator("[data-settings-group]")).toHaveCount(2)
   const grey = await colour(page, "--muted-foreground")
   const groups = [
-    ["Space and Esc", "Start, stop, save, discard and finish a take.", SPACE_ROWS],
+    ["Space and Esc", "Start and stop a take, save or discard it, and finish the rehearsal.", SPACE_ROWS],
     ["The player's keys", "Arrows, Home, M, R and ? in the player; ↑ and ↓ in the lists.", PLAYER_ROWS],
   ] as const
   for (const [title, hint, rows] of groups) {
@@ -283,9 +289,9 @@ test("Keys is a tab between Appearance and Under the hood, two switches over the
   }
 
   // Last, what off does, and what works either way.
-  const note = body.getByText("Off, a key's chip leaves its button too.")
+  const note = body.getByText("When a switch is off, its keys no longer show on the buttons.")
   await expect(note).toHaveText(
-    "Off, a key's chip leaves its button too. Undo (Ctrl+Z), and Esc in a window or a field, work either way."
+    "When a switch is off, its keys no longer show on the buttons. Undo (Ctrl+Z), and Esc in a window or a field, work either way."
   )
   expect((await style(note, "font-size"))["font-size"]).toBe("12px")
 })
@@ -297,9 +303,10 @@ test("Space and Esc switched off is kept after a reload, and Start loses its chi
   await expect.poll(() => keyOn(startButton(page))).toBe("Space")
   await openKeys(page)
   await settled(page)
+  // The screen's title and Back, the tab's head and its groups.
   const boxes = () =>
     page
-      .locator("[data-tab-head], [data-settings-group]")
+      .locator("header h1, header button[aria-label='Back'], [data-tab-head], [data-settings-group]")
       .evaluateAll((els) => els.map((e) => JSON.stringify(e.getBoundingClientRect())))
   const before = await boxes()
 
@@ -307,7 +314,7 @@ test("Space and Esc switched off is kept after a reload, and Start loses its chi
   await off.click()
   await expect(off).toHaveAttribute("aria-checked", "true")
   expect((await calls(page, "save_keys")).map((c) => c.args)).toEqual([["space", false]])
-  // The tab stays as it was: only the switch changed.
+  // The screen stays as it was: only the switch changed.
   expect(await boxes()).toEqual(before)
 
   // Esc no longer leaves Settings, and Back has no chip for it.
@@ -451,6 +458,20 @@ test("with the player's keys off, the player's key list keeps only what still wo
   const list = page.getByRole("dialog", { name: "Keys in the player" })
   await expect(list.locator("dt")).toHaveText(["Space", "Ctrl + wheel", "Shift + wheel"])
   await expect(list.locator("dd")).toHaveText(["Play / pause", "Zoom in / out", "Along the take"])
+
+  // Space and Esc keep their chips through a take: Stop, then Discard and
+  // Save take.
+  await page.keyboard.press("Escape")
+  await expect(list).toHaveCount(0)
+  await page.getByRole("button", { name: /Record take 11/ }).click()
+  const stop = page.getByRole("button", { name: /^Stop/ })
+  await expect(stop).toBeVisible()
+  expect(await keyOn(stop)).toBe("Space")
+  await stop.click()
+  const save = page.getByRole("button", { name: /Save take/ })
+  await expect(save).toBeVisible()
+  expect(await keyOn(save)).toBe("Space")
+  expect(await keyOn(page.getByRole("button", { name: /Discard/ }))).toBe("Esc")
 })
 
 test("the Keys tab at 960x680 and 150 % wraps its rows and scrolls nothing sideways", async ({

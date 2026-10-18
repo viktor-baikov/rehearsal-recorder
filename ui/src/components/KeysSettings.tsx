@@ -4,7 +4,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { KeyKind } from "@/lib/api"
 import { switchKeys, useKeysOn } from "@/lib/keys"
-import { rise } from "@/lib/motion"
+import { rise as riseAt } from "@/lib/motion"
 import { useSystem, words } from "@/lib/platform"
 
 /** A screen, and what each of its keys does there: the keys of a use first,
@@ -67,7 +67,7 @@ export function KeysSettings() {
       <KeysGroup
         kind="space"
         title="Space and Esc"
-        hint="Start, stop, save, discard and finish a take."
+        hint="Start and stop a take, save or discard it, and finish the rehearsal."
         rows={SPACE_ROWS}
         rise={1}
       />
@@ -78,9 +78,9 @@ export function KeysSettings() {
         rows={PLAYER_ROWS}
         rise={2}
       />
-      <p className="animate-rise text-xs text-muted-foreground" style={rise(3)}>
-        Off, a key's chip leaves its button too. Undo ({undoKey}), and Esc in a
-        window or a field, work either way.
+      <p className="animate-rise text-xs text-muted-foreground" style={riseAt(3)}>
+        When a switch is off, its keys no longer show on the buttons.
+        Undo ({undoKey}), and Esc in a window or a field, work either way.
       </p>
     </>
   )
