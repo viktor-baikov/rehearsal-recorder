@@ -93,6 +93,7 @@ export function RehearsalOverview({
   onName,
   actions,
   set,
+  rise: place = 0,
 }: {
   takes: Take[]
   songs: Song[]
@@ -119,6 +120,10 @@ export function RehearsalOverview({
   /** The set it was played by, as History has it: a card of what was
    *  played over the songs. */
   set?: RehearsalSet | null
+  /** The songs' group's place in the line the screen's groups rise in by
+   *  (lib/motion's rise): 0 where it is the first, as on the rehearsal
+   *  screen; History's list rises first. */
+  rise?: number
 }) {
   const labels = useLabels()
   const byNumber = new Map(takes.map((t) => [t.take_number, t]))
@@ -182,7 +187,7 @@ export function RehearsalOverview({
         />
       )}
 
-      <div data-songs-group className="flex animate-rise flex-col rounded-xl bg-card" style={rise(0)}>
+      <div data-songs-group className="flex animate-rise flex-col rounded-xl bg-card" style={rise(place)}>
         {head}
         {rows.map((row, i) => {
           const isUnnamed = row.name === NOT_NAMED

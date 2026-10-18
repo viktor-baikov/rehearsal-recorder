@@ -131,8 +131,8 @@ test.describe("History", () => {
     const quiet = list.getByRole("button", { name: /^Wednesday jam/ })
     await expect(quiet.locator("[data-strip] > div")).toHaveCount(1)
     await expect(quiet.locator("[data-strip] span")).toHaveCount(2)
-    // All of it, in the header.
-    await expect(page.locator("header")).toContainText("4 rehearsals · 1 h 20 min played · 1.7 GB")
+    // All of it, in the window's header.
+    await expect(page.getByRole("banner")).toContainText("4 rehearsals · 1 h 20 min played · 1.7 GB")
   })
 
   test("↑ and ↓ go through the rehearsals, and what was playing stops", async ({ page }) => {
@@ -354,10 +354,215 @@ const current = (page: Page) => page.locator("[data-tab][aria-current='true']")
 const facts = (page: Page) => page.getByRole("group", { name: "About this rehearsal" })
 const fact = (page: Page, label: string) =>
   facts(page).locator("div", { has: page.locator("dt", { hasText: label }) }).locator("dd")
-/** The rehearsal pane's head, its first part: the name, the facts and
- *  Delete in a row, and the meta line under them. */
-const paneHead = (page: Page) =>
-  page.locator("section").filter({ has: facts(page) }).locator(":scope > div").first()
+/** The rehearsal page's head: the name with its pencil, the facts and Delete
+ *  in a row, and the line of the date, the set and the path under them. */
+const paneHead = (page: Page) => page.locator("[data-pane-head]")
+/** The name as the head draws it, on up to two lines (data-lines), then cut
+ *  (data-cut). */
+const headName = (page: Page) => paneHead(page).locator("[data-go-title]")
+/** A tip open on the page, as drawn. */
+const tipShown = (page: Page) => page.locator("[data-slot='tooltip-content'][data-state$='open']")
+/** Whether anything in `it`, or the window itself, scrolls sideways. */
+const sideways = async (page: Page, ...it: Locator[]) =>
+  (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) ||
+  (await Promise.all(it.map((el) => el.evaluate((e) => e.scrollWidth > e.clientWidth)))).some(Boolean)
+
+// ---------- the screen's frame ----------
+
+/** Thirty rehearsals in July under the fake's four: a list longer than any
+ *  window. */
+const THIRTY_MORE = `
+  const api = window.pywebview.api; const list = api.list_rehearsals;
+  api.list_rehearsals = async () => [...(await list()), ...Array.from({ length: 30 }, (_, i) => ({
+    folder: '/rec/july-' + (i + 1), name: 'July jam ' + (i + 1),
+    created_at: '2026-07-' + String(31 - i).padStart(2, '0') + 'T19:00:00',
+    take_count: 2, total_duration_sec: 600, disk_bytes: 100000000, songs: [], runs: [] }))];
+`
+
+test("the list is a grey side panel, its switch in view while the list scrolls", async ({ page }) => {
+  await openApp(page, { after: THIRTY_MORE })
+  const list = await openHistory(page)
+  await settled(page)
+  // The side panels' grey with its edge, as Last time and Next take have it,
+  // and 16 px inside.
+  expect(await style(list, "background-color", "border-right-width")).toEqual({
+    "background-color": await colour(page, "--panel"),
+    "border-right-width": "1px",
+  })
+  const views = page.getByRole("radiogroup", { name: "History view" })
+  const panel = (await list.boundingBox())!
+  const before = (await views.boundingBox())!
+  expect(before.x - panel.x).toBeCloseTo(16, 0)
+  expect(before.y - panel.y).toBeCloseTo(16, 0)
+
+  // At the end of the list the switch is where it was, still in view.
+  const last = list.locator("[data-rehearsal='/rec/july-30']")
+  await last.scrollIntoViewIfNeeded()
+  await expect(last).toBeInViewport()
+  expect(await views.boundingBox()).toEqual(before)
+  await expect(views).toBeInViewport()
+})
+
+/** The fake's four rehearsals over the whole list, in the order they stand:
+ *  the size gives way first, the count last. */
+const TOTALS = ["4 rehearsals", "1 h 20 min played", "1.7 GB"]
+/** A take on its way to the cloud: "1 working · 64%" in the header. */
+const BUSY = `window.__ACTIVITY__ = [{ id: 1, kind: 'cloud', title: 'Palyn to the cloud',
+  folder: '/rec/old', take_number: 1, state: 'running', fraction: 0.64, step: 'Encoding the mix',
+  error: null, detail: null, retry: null, seen: false }];`
+
+test("the totals stay in the header at 960 px and 150 %, dropping whole, the size first", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 960, height: 680 })
+  await openApp(page)
+  // Whole figures from the front of the line: all three, the first two, the
+  // count alone, or none.
+  const fronts = [3, 2, 1, 0].map((n) => TOTALS.slice(0, n).join(" · "))
+  for (const scale of [1, 1.5]) {
+    if (scale !== 1) {
+      // At 150 % a copy to the cloud is running too, so its words take room
+      // from the header and the totals have to give some up.
+      await page.addInitScript(scaled(scale))
+      await page.addInitScript(BUSY)
+      await page.reload()
+    }
+    await openHistory(page)
+    await settled(page)
+    const header = page.getByRole("banner")
+    const totals = header.locator("[data-figures]")
+    await expect(totals).toBeVisible()
+    // Read out whole, whatever shows.
+    await expect(totals.locator(".sr-only")).toHaveText(TOTALS.join(" · "))
+    if (scale !== 1)
+      await expect(header.getByRole("button", { name: /^Background work/ })).toHaveText(
+        "1 working · 64%"
+      )
+    const shown = totals.locator("[data-shown]")
+    if (scale === 1) await expect(shown).toHaveText(TOTALS.join(" · "))
+    else await expect(shown, "the size gone first").not.toContainText(TOTALS[2])
+    expect(fronts, `at ${scale * 100} %`).toContain((await shown.textContent()) ?? "")
+    // The line after them stays drawn, whatever they drop.
+    await expect(header.locator("span.w-px")).toBeVisible()
+  }
+})
+
+/** Take 1 of every rehearsal, its tracks where no file is: the fake answers a
+ *  file under /gone/ as Python does one that is not on disk. */
+const TAKE_1_GONE = `
+  const api = window.pywebview.api; const get = api.get_rehearsal;
+  api.get_rehearsal = async (folder) => {
+    const r = await get(folder);
+    for (const t of r.takes ?? [])
+      if (t.take_number === 1)
+        t.tracks = t.tracks.map((x) => ({ ...x, file: '/gone/' + x.file.split('/').pop() }));
+    return r;
+  };
+`
+
+test("a take that cannot be loaded says so on its play button in the overview", async ({ page }) => {
+  await openApp(page, { before: "window.__FULL_EVENING__ = true;", after: TAKE_1_GONE })
+  await openHistory(page)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  const play = overview.locator("[data-take='1'] [data-look]")
+  await expect(play).toHaveAttribute("data-look", "idle")
+  await play.click()
+  await expect(play).toHaveAttribute("data-look", "failed")
+  await expect(play).toHaveAccessibleName("Could not load Pałyn 1. Try again")
+  await expect(play).toBeEnabled()
+})
+
+test("the list and the page's group rise in, 40 ms apart", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+  await openHistory(page)
+  const rise = (el: Locator) =>
+    el.evaluate((e) => {
+      const s = getComputedStyle(e.closest(".animate-rise")!)
+      return [s.animationName, s.animationDelay]
+    })
+  expect(await rise(page.getByRole("radiogroup", { name: "History view" }))).toEqual(["rise", "0s"])
+  expect(await rise(page.locator("[data-songs-group]"))).toEqual(["rise", "0.04s"])
+  // The head holds its place from the first frame: it does not rise.
+  expect(await paneHead(page).evaluate((e) => e.closest(".animate-rise") === null)).toBe(true)
+})
+
+/** The list of rehearsals, held while window.__HOLD__ holds it (`hold`). */
+const LIST_HELD = `
+  const api = window.pywebview.api; const list = api.list_rehearsals;
+  api.list_rehearsals = async () => {
+    const held = window.__HOLD__ && window.__HOLD__.list_rehearsals;
+    if (held) await held;
+    return list();
+  };
+`
+
+test("while the rehearsals are read, a spinner after a second and the words after ten", async ({
+  page,
+}) => {
+  await page.clock.install()
+  await openApp(page, { after: LIST_HELD })
+  await hold(page, "list_rehearsals")
+  // Held still from here, so each second is the one the test counts.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000)
+  await page.getByRole("button", { name: "History", exact: true }).click()
+  const spinner = page.locator("main [role='status']")
+  const words = page.getByText("Reading the folder…", { exact: true })
+  await expect(spinner).toBeAttached()
+  await expect(spinner).toBeHidden()
+  await expect(words).toHaveCount(0)
+  await page.clock.runFor(1000)
+  await expect(spinner).toBeVisible()
+  await expect(words).toHaveCount(0)
+  await page.clock.runFor(9000)
+  await expect(words).toBeVisible()
+
+  await page.clock.resume()
+  await letGo(page, "list_rehearsals")
+  await expect(page.getByRole("navigation", { name: "Rehearsals" })).toBeVisible()
+  await expect(spinner).toHaveCount(0)
+  await expect(words).toHaveCount(0)
+})
+
+test("with no rehearsal yet, History says how one gets here on the shared Empty", async ({
+  page,
+}) => {
+  await openApp(page, { after: "window.pywebview.api.list_rehearsals = async () => [];" })
+  await page.getByRole("button", { name: "History", exact: true }).click()
+  const empty = page.locator("main [data-slot='empty']")
+  await expect(empty.locator("[data-slot='empty-title']")).toHaveText("No past rehearsals yet")
+  await expect(empty.locator("[data-slot='empty-description']")).toHaveText(
+    "Every rehearsal where you saved at least one take shows up here."
+  )
+  await expect(page.getByRole("navigation")).toHaveCount(0)
+  await expect(page.getByRole("banner").locator("[data-figures]")).toHaveCount(0)
+})
+
+test("a take open keeps its header, with 48 px between the strip and the player", async ({
+  page,
+}) => {
+  const overview = await openEvening(page)
+  await overview.getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+  await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
+  await settled(page)
+  // The rehearsal's name and figures, and the button to its folder.
+  const header = page.getByRole("banner")
+  await expect(header.getByRole("heading", { level: 1 })).toHaveText("Tuesday jam")
+  await expect(header.getByRole("group", { name: "About this rehearsal" })).toBeVisible()
+  await expect(header.getByRole("button", { name: "Open folder", exact: true })).toBeVisible()
+  // 32 px round the page, the header's sides too, and 48 between the strip
+  // and the player.
+  expect(await style(header, "padding-left", "padding-right")).toEqual({
+    "padding-left": "32px",
+    "padding-right": "32px",
+  })
+  const strip = page.getByRole("group", { name: "Take strip" })
+  expect((await strip.boundingBox())!.x).toBeCloseTo(32, 0)
+  const gap = await strip.evaluate(
+    (el) => el.nextElementSibling!.getBoundingClientRect().top - el.getBoundingClientRect().bottom
+  )
+  expect(gap).toBeCloseTo(48, 0)
+})
 
 test("an open rehearsal with no take picked shows the evening", async ({ page }) => {
   // It used to be one lonely "Pick a take" under the strip. What was played,
@@ -407,9 +612,31 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
 
 // The facts in the pane's head, beside the rehearsal's name: the name has its
 // room first and they give way to it fact by fact, as in the rehearsal
-// screen's header. The stress band has a rehearsal whose name is 60 letters
-// and one of 80, which wrap, and a short one.
+// screen's header. The name takes up to two lines, and past them it is cut,
+// whole in the shared tip. The stress band has a rehearsal whose name is 60
+// letters and one of 82, which take two lines at 960 px, and a short one.
 const FACTS = ["Length", "Takes", "In the cloud", "On disk"]
+
+/** The facts that show, in the order they stand. */
+const shownFacts = (group: Locator) =>
+  group
+    .locator("dt")
+    .evaluateAll((labels) =>
+      labels
+        .filter((dt) => getComputedStyle(dt.parentElement!).display !== "none")
+        .map((dt) => dt.textContent!)
+    )
+
+/** Where the last character of the head's name ends, as drawn, and the
+ *  middle of its line: the pencil comes right after it. */
+const nameEnd = (page: Page) =>
+  headName(page).evaluate((el) => {
+    const tail = el.querySelector(":scope > .whitespace-nowrap")!
+    const range = document.createRange()
+    range.selectNodeContents(tail.firstChild!)
+    const r = range.getBoundingClientRect()
+    return { right: r.right, middle: r.top + r.height / 2 }
+  })
 
 for (const [pick, wraps] of [["New songs", false], ["Soundcheck at", true], ["Tuesday jam at", true]] as const) {
   test(`the pane head of ${pick} keeps the name's room and the facts give way at 960 px`, async ({ page }) => {
@@ -417,51 +644,129 @@ for (const [pick, wraps] of [["New songs", false], ["Soundcheck at", true], ["Tu
     await openBandApp(page, { stress: true })
     await openHistory(page, pick)
     await settled(page)
+    // There, though none may show beside a name on two lines.
     const group = facts(page)
-    await expect(group).toBeVisible()
-    const pane = page.locator("section").filter({ has: group })
-    const name = pane.getByRole("heading", { level: 2 })
+    await expect(group).toBeAttached()
+    const head = paneHead(page)
+    const name = head.getByRole("heading", { level: 2 })
 
     // Whole facts, the front of the list, never a gap in it.
-    const shown = await group
-      .locator("dt")
-      .evaluateAll((labels) =>
-        labels
-          .filter((dt) => getComputedStyle(dt.parentElement!).display !== "none")
-          .map((dt) => dt.textContent!)
-      )
+    const shown = await shownFacts(group)
     expect(shown).toEqual(FACTS.slice(0, shown.length))
     if (!wraps) expect(shown.length).toBeGreaterThanOrEqual(2)
 
     const at = async (it: Locator) => (await it.boundingBox())!
-    const [title, row, bin] = [
+    const [room, title, row, bin] = [
+      await at(head),
       await at(name),
       await at(group),
-      await at(pane.getByRole("button", { name: /^Delete rehearsal / })),
+      await at(head.getByRole("button", { name: /^Delete rehearsal / })),
     ]
-    // Side by side, the name first, then the facts and their button, then Delete.
+    // Side by side, the name first, then the facts, then Delete.
     expect(title.x + title.width).toBeLessThanOrEqual(row.x + 0.5)
     expect(row.x + row.width).toBeLessThanOrEqual(bin.x + 0.5)
-    expect(bin.x + bin.width).toBeLessThanOrEqual((await at(pane)).x + (await at(pane)).width)
-    expect(await pane.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
-    // The name is never cut: one that is longer than the room it has first
-    // wraps onto a second line, and has most of the room.
-    expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
-    expect(title.height > 40).toBe(wraps)
+    expect(bin.x + bin.width).toBeLessThanOrEqual(room.x + room.width + 0.5)
+    expect(await sideways(page, head)).toBe(false)
+    // The name has its room: one line, or two when it is longer than that,
+    // whole on them at this size, with most of the row.
+    await expect(headName(page)).toHaveAttribute("data-lines", wraps ? "2" : "1")
+    await expect(headName(page)).not.toHaveAttribute("data-cut")
     if (wraps) expect(title.width).toBeGreaterThanOrEqual(300)
   })
 }
 
-// A name longer than its row wraps and is never cut (B6): onto more lines, or
-// through a single word wider than the row. The pencil stays beside the name,
-// and the facts and Delete stay at the top of the head.
+for (const scale of [1, 1.5]) {
+  test(`a long name takes two lines in the pane head, then is cut, whole in the tooltip, at ${scale * 100} %`, async ({
+    page,
+  }) => {
+    await page.addInitScript(scaled(scale))
+    await openBandApp(page, { stress: true })
+    await openHistory(page)
+    for (const [width, height] of [[1180, 820], [960, 680]] as const) {
+      await page.setViewportSize({ width, height })
+      await settled(page)
+      const where = `${width} px at ${scale * 100} %`
+      const head = paneHead(page)
+      const name = headName(page)
+      // Whole on two lines at 100 %; at 150 % two lines hold only part of it.
+      const cut = scale === 1.5
+
+      // Two lines, then cut at their end; whole to a screen reader and in
+      // the shared tip.
+      await expect(name, where).toHaveAttribute("data-lines", "2")
+      if (cut) {
+        await expect(name, where).toHaveAttribute("data-cut")
+        await expect(head.locator("h2 .sr-only"), where).toHaveText(LONG_TUESDAY)
+        await name.hover()
+        await expect(page.locator("[data-whole][data-state$='open']"), where).toHaveText(LONG_TUESDAY)
+        await page.mouse.move(0, 0, { steps: 8 })
+      } else {
+        await expect(name, where).not.toHaveAttribute("data-cut")
+        await expect(name, where).toHaveText(LONG_TUESDAY)
+      }
+
+      // The pencil right after the last word drawn, on its line.
+      const pen = (await head.getByRole("button", { name: /^Rename rehearsal / }).boundingBox())!
+      const end = await nameEnd(page)
+      expect(pen.x - end.right, `${where}: the pencil after the last word`).toBeGreaterThanOrEqual(0)
+      expect(pen.x - end.right, `${where}: the pencil right after it`).toBeLessThan(12 * scale)
+      expect(Math.abs(pen.y + pen.height / 2 - end.middle), `${where}: on its line`).toBeLessThan(4 * scale)
+
+      // The facts have given way before the name did.
+      expect(await shownFacts(facts(page)), `${where}: the facts gone first`).toEqual([])
+      // Delete inside the head, at its right, clear of the name.
+      const room = (await head.boundingBox())!
+      const title = (await head.getByRole("heading", { level: 2 }).boundingBox())!
+      const bin = (await head.getByRole("button", { name: /^Delete rehearsal / }).boundingBox())!
+      expect(Math.abs(room.x + room.width - (bin.x + bin.width)), `${where}: Delete at the right`).toBeLessThanOrEqual(0.5)
+      expect(bin.x, `${where}: Delete after the name`).toBeGreaterThanOrEqual(title.x + title.width - 0.5)
+      expect(bin.y, `${where}: Delete inside the head`).toBeGreaterThanOrEqual(room.y - 0.5)
+      const pane = page.locator("section").filter({ has: head })
+      expect(await sideways(page, head, pane), `${where}: nothing scrolls sideways`).toBe(false)
+    }
+  })
+}
+
+test("a step from the long name to a short one moves the evening one title line at most", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 960, height: 680 })
+  await page.addInitScript(scaled(1.5))
+  await openBandApp(page, { stress: true })
+  await openHistory(page)
+  await settled(page)
+  const evening = page.locator("[aria-label='Rehearsal overview']")
+  await expect(evening).toBeVisible()
+  await expect(headName(page)).toHaveAttribute("data-cut")
+  const line = await headName(page).evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))
+  const before = (await evening.boundingBox())!.y
+
+  await page.keyboard.press("ArrowDown")
+  await expect(headName(page)).toHaveText("New songs")
+  await expect(headName(page)).toHaveAttribute("data-lines", "1")
+  await expect(evening).toContainText("Ptuška")
+  await settled(page)
+  const after = (await evening.boundingBox())!.y
+  expect(Math.abs(after - before)).toBeLessThanOrEqual(line + 0.5)
+  expect(await sideways(page, paneHead(page))).toBe(false)
+})
+
+// A name longer than two lines of its row is cut at the end of the second,
+// at a word where it has one, and is whole in the shared tip; it breaks inside
+// a word only where the word is wider than the row. The pencil comes right
+// after the last word drawn, and the facts and Delete stay at the top.
 const LONG_NAMES = [
-  ["many words", "Tuesday jam at the old brewery, with the horn section, the choir from upstairs and the kids"],
-  ["one word", "Mississippi".repeat(5) + "abcde"],
+  [
+    "many words",
+    "Tuesday jam at the old brewery, with the horn section, the choir from upstairs, the kids from next door and the man with the accordion",
+  ],
+  ["one word", "Mississippi".repeat(12) + "abcde"],
 ] as const
 
 for (const [what, long] of LONG_NAMES) {
-  test(`a rehearsal's long name of ${what} wraps in the pane head at 960 px, its pencil beside it`, async ({ page }) => {
+  test(`a rehearsal's long name of ${what} takes two lines in the pane head at 960 px, then is cut, its pencil after it`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 960, height: 680 })
     await openApp(page)
     await openHistory(page)
@@ -472,11 +777,19 @@ for (const [what, long] of LONG_NAMES) {
     await expect(page.getByRole("button", { name: `Delete rehearsal ${long}` })).toBeVisible()
     await settled(page)
 
+    // There, though none shows beside a name on two lines.
     const group = facts(page)
-    await expect(group).toBeVisible()
+    await expect(group).toBeAttached()
     const head = paneHead(page)
-    const name = head.getByRole("heading", { level: 2 })
-    await expect(name).toHaveText(long)
+    const name = headName(page)
+    // Two lines, then cut, and whole to a screen reader; broken inside a
+    // word only where it must be, not anywhere.
+    await expect(name).toHaveAttribute("data-lines", "2")
+    await expect(name).toHaveAttribute("data-cut")
+    await expect(name).toContainText("…")
+    await expect(head.locator("h2 .sr-only")).toHaveText(long)
+    expect(await style(name, "overflow-wrap")).toEqual({ "overflow-wrap": "break-word" })
+
     const pencil = head.getByRole("button", { name: /^Rename rehearsal / })
     const bin = head.getByRole("button", { name: /^Delete rehearsal / })
     const at = async (it: Locator) => (await it.boundingBox())!
@@ -488,11 +801,9 @@ for (const [what, long] of LONG_NAMES) {
       await at(bin),
       await at(head.locator("[data-rehearsal-head]")),
     ]
+    const line = await name.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))
+    expect(title.height, "two lines tall, no more").toBeLessThanOrEqual(2 * line + 1)
 
-    // Not cut: it wraps, onto a second line at least, through a word if need be.
-    expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
-    expect(await style(name, "overflow-wrap")).toEqual({ "overflow-wrap": "anywhere" })
-    expect(title.height).toBeGreaterThan(40)
     // The name, the pencil, the facts and Delete are inside the head, the
     // name before the facts, and nothing scrolls sideways.
     for (const [part, it] of [["the name", title], ["the pencil", edit], ["the facts", row], ["Delete", trash]] as const) {
@@ -502,23 +813,29 @@ for (const [what, long] of LONG_NAMES) {
       expect(it.y + it.height, `${part} inside the head, bottom`).toBeLessThanOrEqual(room.y + room.height + 0.5)
     }
     expect(title.x + title.width, "the name before the facts").toBeLessThanOrEqual(row.x + 0.5)
-    expect(await head.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
-    // The pencil is beside the name, not alone on a line of its own under it.
-    expect(edit.y, "the pencil beside the name's first line").toBeLessThan(title.y + 32)
-    expect(edit.x, "the pencil after the name").toBeGreaterThanOrEqual(title.x + title.width - 0.5)
+    expect(await sideways(page, head)).toBe(false)
+    // The pencil right after the last character drawn, on the second line.
+    const end = await nameEnd(page)
+    expect(edit.x - end.right, "the pencil after the name").toBeGreaterThanOrEqual(0)
+    expect(edit.x - end.right, "right after it").toBeLessThan(12)
+    expect(Math.abs(edit.y + edit.height / 2 - end.middle), "on the name's last line").toBeLessThan(4)
+    expect(end.middle, "which is its second").toBeGreaterThan(title.y + line)
     // The facts and Delete stay at the top while the name runs on, and the
-    // meta line is under its last line.
+    // line of the date, the set and the path is under its last line.
     expect(Math.abs(trash.y - room.y), "Delete at the top").toBeLessThan(2)
     expect(Math.abs(row.y - room.y), "the facts at the top").toBeLessThan(2)
-    expect(meta.y, "the meta line under the name").toBeGreaterThanOrEqual(title.y + title.height - 0.5)
+    expect(meta.y, "the line under the name").toBeGreaterThanOrEqual(title.y + title.height - 0.5)
+
+    await name.hover()
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
   })
 }
 
 // A folder is a path of 60 letters or so, not the fake's eight. It takes none
 // of the name's room nor the facts': the name has what it needs and the facts
-// what it leaves (B6), however long the path. The meta line is under them,
-// across the whole head, and the path has what the date and the set leave,
-// cut at the head's edge.
+// what it leaves (B6), however long the path. The line under them is across
+// the whole head, and the path has what the date and the set leave, cut at
+// the head's edge.
 const LONG_FOLDER = String.raw`C:\Users\alex\RehearsalRecordings\Tuesday jam - 2026-09-10 19-00`
 const inALongFolder = (name: string | null = null) => `
   const api = window.pywebview.api; const real = '/rec/old'; const long = ${JSON.stringify(LONG_FOLDER)};
@@ -527,16 +844,6 @@ const inALongFolder = (name: string | null = null) => `
   api.list_rehearsals = async () => (await list()).map(said);
   api.get_rehearsal = async (f) => said(await get(f === long ? real : f));
 `
-
-/** The facts that show, in the order they stand. */
-const shownFacts = (group: Locator) =>
-  group
-    .locator("dt")
-    .evaluateAll((labels) =>
-      labels
-        .filter((dt) => getComputedStyle(dt.parentElement!).display !== "none")
-        .map((dt) => dt.textContent!)
-    )
 
 for (const [width, every] of [[1180, true], [960, false]] as const) {
   test(`a short name keeps its facts beside a folder of a real length at ${width} px`, async ({ page }) => {
@@ -554,8 +861,8 @@ for (const [width, every] of [[1180, true], [960, false]] as const) {
     expect(shown).toEqual(FACTS.slice(0, shown.length))
     expect(shown.length).toBeGreaterThanOrEqual(every ? 4 : 1)
 
-    // The date is whole, and the meta line is under the facts, not beside
-    // them, so the path takes none of their room; it is inside the head.
+    // The date is whole, and the line is under the facts, not beside them,
+    // so the path takes none of their room; it is inside the head.
     const date = meta.locator("span").first()
     expect(await date.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
     const at = async (it: Locator) => (await it.boundingBox())!
@@ -565,11 +872,10 @@ for (const [width, every] of [[1180, true], [960, false]] as const) {
       await at(group),
       await at(meta.locator("span.font-mono")),
     ]
-    expect(line.y, "the meta line under the facts").toBeGreaterThanOrEqual(row.y + row.height - 0.5)
+    expect(line.y, "the line under the facts").toBeGreaterThanOrEqual(row.y + row.height - 0.5)
     expect(path.x + path.width, "the path inside the head").toBeLessThanOrEqual(room.x + room.width + 0.5)
-    expect(await meta.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
     const pane = page.locator("section").filter({ has: group })
-    expect(await pane.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    expect(await sideways(page, meta, pane)).toBe(false)
   })
 }
 
@@ -592,10 +898,9 @@ test("the folder of a real length is cut inside the head under a longer name at 
   const [room, line, cut, row] = [await at(head), await at(meta), await at(path), await at(group)]
   expect(cut.x, "the path inside the head, left").toBeGreaterThanOrEqual(room.x - 0.5)
   expect(cut.x + cut.width, "the path inside the head, right").toBeLessThanOrEqual(room.x + room.width + 0.5)
-  expect(line.y, "the meta line under the facts").toBeGreaterThanOrEqual(row.y + row.height - 0.5)
-  expect(await meta.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  expect(line.y, "the line under the facts").toBeGreaterThanOrEqual(row.y + row.height - 0.5)
   const pane = page.locator("section").filter({ has: group })
-  expect(await pane.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  expect(await sideways(page, meta, pane)).toBe(false)
   // The set shares the line with the path and keeps the room it asks for, up
   // to half of it: it is not squeezed to a letter by a path 60 letters long.
   const set = meta.locator("[data-set-name]")
@@ -603,12 +908,10 @@ test("the folder of a real length is cut inside the head under a longer name at 
   expect(await set.locator("span.truncate").evaluate((el) => el.clientWidth)).toBeGreaterThanOrEqual(60)
 })
 
-// The meta line (the date, the set, the folder) is the whole head's width,
+// The line of the date, the set and the path is the whole head's width,
 // under the name, its facts and Delete: a short name does not make it as
-// narrow as the name, which left the date alone on it, and the set and the
-// folder not drawn at all. The date is whole, the set's name too, and the
-// path has the rest: whole at 1180 px, where the head is 876 px wide and the
-// path 462, and cut at the head's edge at 960 px.
+// narrow as the name. The date is whole, the set's name too, and the path has
+// the rest: whole at 1180 px, and cut at the head's edge at 960 px.
 for (const [width, cutHere] of [[1180, false], [960, true]] as const) {
   test(`under a short name the date, the set and the folder take the whole head's width at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 760 })
@@ -617,16 +920,17 @@ for (const [width, cutHere] of [[1180, false], [960, true]] as const) {
     await settled(page)
     const group = facts(page)
     await expect(group).toBeVisible()
-    const pane = page.locator("section").filter({ has: group })
-    const name = pane.getByRole("heading", { level: 2 })
-    await expect(name).toHaveText("Tuesday jam")
     const head = paneHead(page)
+    const name = head.getByRole("heading", { level: 2 })
+    await expect(headName(page)).toHaveText("Tuesday jam")
     const meta = head.locator("[data-rehearsal-head]")
     const date = meta.locator("span").first()
     const set = meta.locator("[data-set-name]")
-    const path = meta.locator("span.font-mono")
+    const folder = meta.getByRole("button", { name: `Open folder ${LONG_FOLDER}`, exact: true })
+    const path = folder.locator("span.font-mono")
 
-    // The date, the set's name and the start of the path, all drawn.
+    // The date, the set's name and the start of the path, all drawn, the
+    // path as the folder's button.
     await expect(date).toBeVisible()
     expect(await date.evaluate((el) => el.scrollWidth <= el.clientWidth), "the date whole").toBe(true)
     await expect(set).toHaveText("Gig on the 25th")
@@ -637,11 +941,10 @@ for (const [width, cutHere] of [[1180, false], [960, true]] as const) {
     expect(await path.evaluate((el) => el.clientWidth), "the start of the path").toBeGreaterThanOrEqual(100)
     // Cut at the head's edge where it does not fit, and nothing scrolls sideways.
     expect(await path.evaluate((el) => el.scrollWidth > el.clientWidth), "the path cut").toBe(cutHere)
-    for (const it of [meta, head, pane]) {
-      expect(await it.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
-    }
+    const pane = page.locator("section").filter({ has: group })
+    expect(await sideways(page, meta, head, pane)).toBe(false)
 
-    // The meta line spans the head, under the name, the facts and Delete.
+    // The line spans the head, under the name, the facts and Delete.
     const at = async (it: Locator) => (await it.boundingBox())!
     const [room, line, cut, title, row, bin] = [
       await at(head),
@@ -649,25 +952,24 @@ for (const [width, cutHere] of [[1180, false], [960, true]] as const) {
       await at(path),
       await at(name),
       await at(group),
-      await at(pane.getByRole("button", { name: /^Delete rehearsal / })),
+      await at(head.getByRole("button", { name: /^Delete rehearsal / })),
     ]
-    expect(Math.abs(line.x - room.x), "the meta line from the head's left edge").toBeLessThanOrEqual(0.5)
-    expect(room.x + room.width - (line.x + line.width), "the meta line to the head's right edge").toBeLessThanOrEqual(4)
+    expect(Math.abs(line.x - room.x), "the line from the head's left edge").toBeLessThanOrEqual(0.5)
+    expect(room.x + room.width - (line.x + line.width), "the line to the head's right edge").toBeLessThanOrEqual(4)
     expect(cut.x + cut.width, "the path inside the head").toBeLessThanOrEqual(room.x + room.width + 0.5)
     for (const [part, it] of [["the name", title], ["the facts", row], ["Delete", bin]] as const) {
-      expect(line.y, `the meta line under ${part}`).toBeGreaterThanOrEqual(it.y + it.height - 0.5)
+      expect(line.y, `the line under ${part}`).toBeGreaterThanOrEqual(it.y + it.height - 0.5)
     }
   })
 }
 
 // The facts' place is there from the first frame, so that the name is laid
-// out once: it used to be one line until the takes were read and two after,
-// and the same at every switch from one rehearsal to another. Held between
-// the click and the takes, the head is where it will be. A name of 50 letters
-// wraps at 960 px, and the facts give way to it whole; a short one leaves them
-// room.
+// out once, and not again when the takes are read or at every switch from
+// one rehearsal to another. Held between the click and the takes, the head is
+// where it will be. A name of 73 letters takes two lines at 960 px, and the
+// facts give way to it whole; a short one leaves them room.
 const WHILE_READING = [
-  ["a name of 50 letters", "Tuesday jam at the old brewery with the horn group", false],
+  ["a name of 73 letters", "Tuesday jam at the old brewery with the horn group and the choir upstairs", false],
   ["a short name", "Tuesday jam", true],
 ] as const
 
@@ -705,14 +1007,14 @@ for (const [what, name, room] of WHILE_READING) {
     const where = async () => ({
       name: await box(pane.getByRole("heading", { level: 2 })),
       pencil: await box(pane.getByRole("button", { name: /^Rename rehearsal / })),
-      meta: await box(pane.locator("[data-rehearsal-head]")),
-      folder: await box(pane.getByRole("button", { name: "Open folder" })),
+      line: await box(pane.locator("[data-rehearsal-head]")),
+      folder: await box(pane.getByRole("button", { name: /^Open folder / })),
       bin: await box(bin),
     })
 
-    // While the takes are not read: the folder button, and no figure, no zero.
+    // While the takes are not read: no figure, and no zero.
     const held = await where()
-    await expect.soft(group).toHaveText("Open folder")
+    await expect.soft(group).toHaveText("")
     await expect.soft(group.locator("dt")).toHaveCount(0)
 
     await letGo(page, "get_rehearsal")
@@ -723,8 +1025,8 @@ for (const [what, name, room] of WHILE_READING) {
     else await expect(fact(page, "Length")).toBeHidden()
     await settled(page)
     expect(await where()).toEqual(held)
-    // The name wraps in the one and not in the other, so that a head which
-    // stayed put was not just one that never had a reason to move.
+    // The name takes two lines in the one and one in the other, so that a
+    // head which stayed put was not just one that never had a reason to move.
     expect(held.name!.height > 40).toBe(!room)
   })
 }
@@ -736,21 +1038,90 @@ test("a rehearsal that is not on disk has no facts in its pane head", async ({ p
   await expect(facts(page)).toHaveCount(0)
 })
 
-test("the pane's folder button opens the folder of the rehearsal it is in", async ({ page }) => {
+test("a rehearsal not on disk says Not found on disk in red, its path plain text", async ({ page }) => {
+  await openApp(page)
+  await openHistory(page, "Missing jam")
+  const said = page.getByText("Not found on disk.", { exact: true })
+  await expect(said).toBeVisible()
+  expect((await style(said, "color")).color).toBe(await colour(page, "--destructive"))
+  // A group on the card's fill, with no dashed frame.
+  const card = page.locator("[data-slot='card']").filter({ has: said })
+  expect(await style(card, "background-color", "border-top-width")).toEqual({
+    "background-color": await colour(page, "--card"),
+    "border-top-width": "0px",
+  })
+  // Its path is there to read, and is no button: there is no folder to open.
+  const line = paneHead(page).locator("[data-rehearsal-head]")
+  await expect(line).toContainText("/rec/gone")
+  await expect(paneHead(page).getByRole("button")).toHaveCount(0)
+})
+
+test("the path under the name opens its folder, its tip in the system's words", async ({ page }) => {
   await openApp(page)
   // Not the newest, which History opens on.
   const list = await openHistory(page, "Wednesday jam")
   await expect(page.getByRole("button", { name: "Delete rehearsal Wednesday jam" })).toBeVisible()
-  await facts(page).getByRole("button", { name: "Open folder" }).click()
+  await settled(page)
+  const line = paneHead(page).locator("[data-rehearsal-head]")
+  // The path is the button, so there is none among the facts.
+  await expect(facts(page).getByRole("button")).toHaveCount(0)
+  const quiet = line.getByRole("button", { name: "Open folder /rec/quiet", exact: true })
+  await expect(quiet.locator("span.font-mono")).toHaveText("/rec/quiet")
+  await quiet.hover()
+  await expect(tipShown(page)).toHaveText("Open folder")
+  await page.mouse.move(0, 0, { steps: 8 })
+  await quiet.click()
   await expect.poll(async () => (await calls(page, "show_rehearsal_folder")).map((c) => c.args)).toEqual([
     ["/rec/quiet"],
   ])
   await list.getByRole("button", { name: /^Tuesday jam/ }).click()
-  await expect(page.getByRole("button", { name: "Delete rehearsal Tuesday jam" })).toBeVisible()
-  await facts(page).getByRole("button", { name: "Open folder" }).click()
+  await line.getByRole("button", { name: "Open folder /rec/old", exact: true }).click()
   await expect.poll(async () => (await calls(page, "show_rehearsal_folder")).at(-1)?.args).toEqual([
     "/rec/old",
   ])
+
+  // A path of a real length at 960 px, after a set's name, is cut at its
+  // end and is still the button; the tip has it whole, under the system's
+  // words.
+  await page.setViewportSize({ width: 960, height: 680 })
+  await page.addInitScript(inALongFolder())
+  await page.addInitScript(
+    `window.__PLAYED_BY__ = {"/rec/old": {name: "Gig on the 25th", songs: ["Viasna", "Pałyn"]}};`
+  )
+  await page.reload()
+  await openHistory(page)
+  await settled(page)
+  const long = line.getByRole("button", { name: `Open folder ${LONG_FOLDER}`, exact: true })
+  const path = long.locator("span.font-mono")
+  await expect(path).toHaveText(LONG_FOLDER)
+  expect(await path.evaluate((el) => el.scrollWidth > el.clientWidth), "the path cut").toBe(true)
+  await long.hover()
+  await expect(tipShown(page)).toContainText("Open folder")
+  await expect(tipShown(page)).toContainText(LONG_FOLDER)
+  await page.mouse.move(0, 0, { steps: 8 })
+  await long.click()
+  await expect.poll(async () => (await calls(page, "show_rehearsal_folder")).at(-1)?.args).toEqual([
+    LONG_FOLDER,
+  ])
+})
+
+test("Delete is an icon at the head's right with its tip", async ({ page }) => {
+  await openApp(page)
+  await openHistory(page)
+  await settled(page)
+  const head = paneHead(page)
+  const bin = head.getByRole("button", { name: "Delete rehearsal Tuesday jam", exact: true })
+  // An icon, and no word.
+  await expect(bin).toHaveText("")
+  await expect(bin.locator("svg")).toHaveCount(1)
+  const room = (await head.boundingBox())!
+  const at = (await bin.boundingBox())!
+  expect(Math.abs(room.x + room.width - (at.x + at.width)), "at the head's right").toBeLessThanOrEqual(0.5)
+  expect(Math.abs(at.y - room.y), "at its top").toBeLessThan(2)
+  await bin.hover()
+  await expect(tipShown(page)).toHaveText("Delete rehearsal")
+  // The tip is for the eyes: the button's name says it already.
+  await expect(bin).toHaveAccessibleDescription("")
 })
 
 test("a note opens its take at the spot it was left", async ({ page }) => {
@@ -1028,7 +1399,23 @@ test("a rehearsal played by a set shows its name in the list and under its title
   await list.getByRole("button", { name: /^Tuesday jam/ }).click()
   const under = page.locator("[data-rehearsal-head] [data-set-name]")
   await expect(under).toHaveText("Gig on the 25th")
-  await expect(under).toHaveAttribute("title", "Played by the set Gig on the 25th")
+  // No native title, in the list or under the name.
+  await expect(page.locator("[data-set-name][title], [data-set-name] [title]")).toHaveCount(0)
+
+  // A set's name too long for its half of the line is cut there, and whole
+  // in the shared tip. Sets keep 40 letters at most.
+  const long = "Wedding at the old brewery, second night"
+  await page.setViewportSize({ width: 960, height: 680 })
+  await page.addInitScript(
+    scaled(1.5) + `window.__PLAYED_BY__ = {"/rec/old": {name: ${JSON.stringify(long)}, songs: ["Viasna", "Pałyn"]}};`
+  )
+  await page.reload()
+  await openHistory(page)
+  await settled(page)
+  const cut = under.locator("[data-cut]")
+  await expect(cut).toHaveText(long)
+  await cut.hover()
+  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
 })
 
 test("the set card counts what was played and says not played for the rest", async ({

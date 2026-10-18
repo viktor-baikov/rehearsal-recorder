@@ -28,6 +28,8 @@ export type PlacedPlayback = {
   take: PlacedTake
   playing: boolean
   loading: boolean
+  /** The take could not be loaded: its ▶ says so, and pressing it tries again. */
+  failed?: boolean
   position: number
   duration: number
 }
@@ -38,7 +40,14 @@ export function hereFor(
   pb: PlacedPlayback | null,
   folder: string,
   take: Take
-): { take: number; playing: boolean; loading: boolean; position: number; duration: number } | null {
+): {
+  take: number
+  playing: boolean
+  loading: boolean
+  failed?: boolean
+  position: number
+  duration: number
+} | null {
   if (!pb || !byPlace(pb.take, placed(folder, take))) return null
   return { ...pb, take: take.take_number }
 }

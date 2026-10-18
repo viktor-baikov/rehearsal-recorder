@@ -187,22 +187,3 @@ export function Shell({
     </div>
   )
 }
-
-/** Empty list state — the same everywhere. */
-export function EmptyState({
-  icon,
-  title,
-  hint,
-}: {
-  icon?: ReactNode
-  title: string
-  hint?: string
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed py-12 text-center">
-      {icon && <div className="text-muted-foreground">{icon}</div>}
-      <div className="text-sm font-medium">{title}</div>
-      {hint && <div className="max-w-xs text-xs text-muted-foreground">{hint}</div>}
-    </div>
-  )
-}

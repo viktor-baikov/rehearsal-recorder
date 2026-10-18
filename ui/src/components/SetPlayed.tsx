@@ -1,4 +1,5 @@
 import { Check, ListMusic } from "lucide-react"
+import { Whole } from "@/components/ui/whole"
 import type { RehearsalSet } from "@/lib/api"
 import { takesLabel } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -7,16 +8,26 @@ import { cn } from "@/lib/utils"
 // H1–H4). One played freely looks as it always did.
 
 /** The set's name, small, after its icon: in the list of rehearsals and
- *  beside the date under a rehearsal's title (H1). */
-export function SetName({ name, className }: { name: string; className?: string }) {
+ *  beside the date under a rehearsal's title (H1). Cut where it has no room.
+ *  With `whole`, as under the title, it is whole on hover when cut. In the
+ *  list it is plainly cut: the row is one button, and its tip is the row's
+ *  name. */
+export function SetName({
+  name,
+  whole = false,
+  className,
+}: {
+  name: string
+  whole?: boolean
+  className?: string
+}) {
   return (
     <span
       data-set-name
-      title={`Played by the set ${name}`}
       className={cn("flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground", className)}
     >
       <ListMusic aria-hidden className="size-3.5 shrink-0" />
-      <span className="truncate">{name}</span>
+      {whole ? <Whole text={name} className="truncate" /> : <span className="truncate">{name}</span>}
     </span>
   )
 }

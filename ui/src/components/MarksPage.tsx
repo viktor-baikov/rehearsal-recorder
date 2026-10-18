@@ -26,6 +26,8 @@ export type MarkPlayback = {
   key: string
   playing: boolean
   loading: boolean
+  /** The take could not be loaded: its ▶ says so, and pressing it tries again. */
+  failed?: boolean
   position: number
   duration: number
 }
