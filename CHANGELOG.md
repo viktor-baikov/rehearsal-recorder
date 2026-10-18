@@ -64,21 +64,20 @@ opening.
   header, which opens it from the left; the button shows when something from
   it is playing, and the sound carries on if the panel is closed. A song in
   *Last time* keeps its takes as columns at the end of its row, each as tall
-  as the take ran: every starred take is green, and the one its ▶ plays is
-  in the colour of the text, or full green if it is starred. A long name
-  keeps its width: the figures beside it drop, whole and the least needed
-  first, and show whole on hover, and a name longer than its whole row wraps
-  to a second line; a name that is cut shows whole on hover and when a key
-  reaches it. A track taken off can be put back: the notice that says so has
-  **Undo** for 10 seconds, which returns the track to its place with its
-  meter, and **Check signal** keeps a renamed track's meter too. Smaller
-  things: a MIDI port's note (not connected, in use by another app, or
-  shared with another track) is said in that track's own line, where nothing
-  moves; **Stereo** is a button that stays pressed; the arrow keys reach
-  **Audio**, **Both** and **MIDI**, and Space picks one; **Check signal**
-  and **Start rehearsal** show a spinner when they take more than a second;
-  an empty list of tracks says how to add one; and every screen's title is
-  20 px.
+  as the take ran: every starred take is green, and the one its ▶ plays
+  stands out from the rest. A long name keeps its width: the figures beside
+  it drop, whole and the least needed first, and show whole on hover, and a
+  name longer than its whole row wraps to a second line; a name that is cut
+  shows whole on hover and when a key reaches it. A track taken off can be
+  put back: the notice that says so has **Undo** for 10 seconds, which
+  returns the track to its place with its meter, and **Check signal** keeps
+  a renamed track's meter too. Smaller things: a MIDI port's note (not
+  connected, in use by another app, or shared with another track) is said in
+  that track's own line, where nothing moves; **Stereo** is a button that
+  stays pressed; the arrow keys reach **Audio**, **Both** and **MIDI**, and
+  Space picks one; **Check signal** and **Start rehearsal** show a spinner
+  when they take more than a second; an empty list of tracks says how to add
+  one; and every screen's title is 20 px.
 - **A song's attempts are called takes.** Where the app said *go* for each
   attempt at a song, "4 goes" or *Every go at Pałyn*, it now says *take*, as
   musicians do: "4 takes", *Every take of Pałyn*. The number beside a song's
@@ -101,26 +100,25 @@ opening.
   a take in hand and at take 10; **Mark** is as wide as **Open mark**; and
   the player keeps one line between its buttons and the map for a crop, a
   take that did not load, or a warning about the output the sound is sent
-  to. In the player
-  **M** and **S** are on the fader's row, after the fader, so a track's name
-  has its plate's whole width; a name still too long is cut, and shows whole
-  on hover and when Tab reaches it. The tracks are one group, with no lines
-  between them: each track's waveform, or its notes, sits on a darker well
-  of its own, and a track on **Both** has its audio and its notes on one
-  well, split by a thin line. **Master** is a group of its own under them,
-  held at the bottom of the window in a band as wide as the lanes, so no
-  part of a lane shows beside it. In History, with no take open, the
-  evening's figures have moved from over the songs into the rehearsal's own
-  head: they sit beside its name, give way when the name needs the room, and
-  pointing at them shows them all. The name wraps there too instead of being
-  cut, and the day, the set and the folder run across the head under them.
-  Smaller things: the player's **Play**, the share dialog and a lane of
-  notes being read show a spinner only after a second, and a lane whose
-  notes cannot be read says so; the row names in a lane of notes are 12 px,
-  up from 9, and the lane is taller to hold them; **Repeat**, **M** and
-  **S** are grey when on; the marker's labels are one switch that the arrow
-  keys move along; on the map the part on screen is grey; and an empty set
-  under **Next take** says how to fill it.
+  to. In the player **M** and **S** are on the fader's row, after the fader,
+  so a track's name has its plate's whole width; a name still too long is
+  cut, and shows whole on hover and when Tab reaches it. The tracks are one
+  group, with no lines between them: each track's waveform, or its notes,
+  sits on a darker well of its own, and a track on **Both** has its audio
+  and its notes on one well, split by a thin line. **Master** is a group of
+  its own under them, held at the bottom of the window in a band as wide as
+  the lanes, so no part of a lane shows beside it. In History, with no take
+  open, the evening's figures have moved from over the songs into the
+  rehearsal's own head: they sit beside its name, give way when the name
+  needs the room, and pointing at them shows them all. The name wraps there
+  too instead of being cut, and the day, the set and the folder run across
+  the head under them. Smaller things: the player's **Play**, the share
+  dialog and a lane of notes being read show a spinner only after a second,
+  and a lane whose notes cannot be read says so; the row names in a lane of
+  notes are 12 px, up from 9, and the lane is taller to hold them;
+  **Repeat**, **M** and **S** are grey when on; the marker's labels are one
+  switch that the arrow keys move along; on the map the part on screen is
+  grey; and an empty set under **Next take** says how to fill it.
 - **A new layout for the recording screen, with its status beside Stop.**
   At the top is the take: its name, the clock, and under them the bar that
   shows how far you are against the song's last take. Below are the
@@ -139,30 +137,31 @@ opening.
   "Room for about 3 h 20 min of recording", and when it runs low, "Low disk
   space: room for about 12 min". The warning has a yellow icon and words in
   the text's colour, which are easier to read than the yellow words were.
-- **The take's name is at the top of the screen after Stop.** The song and its
-  number, "Viasna 2", are the title, with the pencil (**Rename take**) right
-  after its last word. A long name takes a second line and is then cut with
-  its number kept; point at it to read it whole. Over it is a small line, the
-  take's place in the rehearsal and the rehearsal's name, "Take 5 ·
-  Thursday". A take nobody named says "Take 7", in grey. The song's takes
-  tonight stand at the right as columns, each as tall as the take ran, with
-  its number under it. This take's column is in the colour of the text, a
-  starred take's is pale green and the rest are grey. In a narrow window the
-  columns give way to the name, and pointing at the name then shows them as
-  times. The line that said how long the take ran against the last one is
-  gone; the player's clock, "0:00 / 2:31", has the length. At the bottom the
-  cloud line is at the left, "Send to the cloud: the mix, FLAC" with its
-  checkbox, or "Stays on this computer: no cloud folder is set". A long line
-  is cut at its end and shows whole when you point at it, and it holds its
-  place while the app reads the setting, so nothing moves when it answers.
-  **Discard** and **Save take** are at the right with no line between them,
-  and **Save take** is as big as **Start rehearsal**, **Record take** and
-  **Stop**. The two parts of the player come in one after the other, as on
-  the other screens, and a track's fader shows a ring on its knob when the
-  keyboard reaches it, in every player. In *Last time* the take that plays is
-  in the colour of the text where it was grey, so the two screens draw their
-  columns alike. The small line over a screen's title and the headings of
-  the background work list, *Working* and *Done*, are no longer in capitals.
+- **The take's name is at the top of the screen after Stop.** The song and
+  its number, "Viasna 2", are the title, with the pencil (**Rename take**)
+  right after its last word. A long name takes a second line and is then cut
+  with its number kept; point at it to read it whole. Over it is a small
+  line, the take's place in the rehearsal and the rehearsal's name,
+  "Take 5 · Thursday"; a long rehearsal name is cut, and shows whole when
+  you point at it. A take nobody named says "Take 7", in grey. The song's
+  takes tonight stand at the right as columns, each as tall as the take ran,
+  with its number under it. This take's column is in the colour of the text,
+  a starred take's is pale green and the rest are grey. In a narrow window
+  the columns give way to the name, and pointing at the name then shows them
+  as times. The line that said how long the take ran against the last one is
+  gone; the player's clock, "0:00 / 2:31", has the length. At the bottom
+  **Discard** and **Save take** are at the right, and the cloud line at the
+  left: "Send to the cloud: the mix, FLAC" with its checkbox, or "Stays on
+  this computer: no cloud folder is set". A long cloud line is cut at its end
+  and shows whole when you point at it, and it holds its place while the app
+  reads the setting, so nothing moves when it answers. **Save take** is as
+  big as **Start rehearsal**, **Record take** and **Stop**. The two parts of
+  the player come in one after the other, as on the other screens, and a
+  track's fader shows a ring on its knob when the keyboard reaches it, in
+  every player. In *Last time* the take that plays is in the colour of the
+  text where it was grey, so the two screens draw their columns alike. The
+  small line over a screen's title and the headings of the background work
+  list, *Working* and *Done*, are no longer in capitals.
 - **When a button fails, the app says so in a notice.** On the start screen,
   the rehearsal screen, the recording screen and the screen after Stop, a
   failure of **Check signal**, **Start rehearsal**, **Record take**,

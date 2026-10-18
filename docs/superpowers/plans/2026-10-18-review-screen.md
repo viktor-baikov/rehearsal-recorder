@@ -107,3 +107,13 @@ The reference is the Q1 mockup's patch, `/mnt/project-files/design-system/screen
 - [ ] `docs/using-it.md`: the paragraph on the screen after Stop says the take's name is at the top with its pencil, the song's takes tonight beside it, and **Save take** and **Discard** at the bottom with the cloud box. Written under CLAUDE.md "Writing"; British spelling; button names bold.
 - [ ] `CHANGELOG.md`, under Unreleased, one item starting bold: **The take's name is at the top of the screen after Stop.** Then what moved, in a musician's words.
 - [ ] Commit `design system: Review on reha.stream, in the rules, the guide and the news`.
+
+## Owner's changes
+
+Made while the plan ran; where they differ from the tasks above, they win.
+
+- **No length line.** The header has no `{m:ss} · …` line: the player's clock says how long the take ran. `against()` went with it, `LINE_LEAST_REM` and `LINE_GONE_REM` were never added, and `TakeFigures` is the columns alone.
+- **The subtitle stays.** `Take {N} · {rehearsal}` is over the title, as in Global Constraints. A long rehearsal name is cut where the columns' room ends and never makes them give way.
+- **Footer errors are notices** (Task 2b). A footer button's failure is said in an error notice in the corner, so `FooterRow` has no `error` and `FooterError` is gone.
+- **Call 3 is dropped.** With no error line in the footer there is nothing to reach by Tab; Review Focus 5 goes with it.
+- **The header's columns are 24 px**, Last time's height, with their numbers (`TakeColumns height={24} numbers`). The header's words hold the columns' height as their least height, so the header is as tall with them as without.

@@ -236,14 +236,18 @@ piece of its own moves onto the shared one when it is redone.
   action stays 10 s, whatever its kind, and the pointer over it pauses the
   time; `onGone` runs once, when it leaves without its action having run.
   `Notices.tsx` draws the notices above a dialog's veil, so an Undo is never
-  under one. ⌘Z or Ctrl+Z runs the newest notice's action
+  under one. Three show at most, and a fourth makes room with the oldest
+  that has no action: an Undo still in its time goes only when every other
+  notice up has one too. ⌘Z or Ctrl+Z runs the newest notice's action
   (`hooks/useUndoKey.ts`), except in a text field, which undoes its own
   typing, with a dialog, a menu or a list open, or while a take records.
   What a button could not do is said in a notice of kind `error`, the
   footer's buttons included (Start rehearsal, Record take, Stop, Save take,
   Discard), as the evening's buttons and Settings say theirs. It stays
-  until it is closed or its screen is left, and a retry puts it away. It is
-  drawn over the screen, so it moves nothing (B4).
+  until it is closed or its screen is left, and a retry puts it away; an
+  answer that comes once its screen has gone says nothing
+  (`hooks/useErrorNotice.ts`). It is drawn over the screen, so it moves
+  nothing (B4).
   A call into Python that raised is not a notice: it goes in the red bar
   across the top (`components/ErrorBar.tsx`, from `lib/bridgeErrors.ts`),
   which lists every problem said until it is put away, oldest first and the
@@ -484,7 +488,8 @@ The other shared components, each with its stories:
   ▶ plays and Review the take just recorded, so the two screens draw them
   alike. Last time draws every song to the scale of its longest take
   (`longest`). The columns are a picture, hidden from a screen reader: the
-  screen that uses them says them in words, and puts the tip on them.
+  screen that uses them says them in words; Review also puts the tip on
+  them.
 
 ## Writing components
 
@@ -614,8 +619,12 @@ as the `cn` import.
   when its room changes size, so nothing that comes during a take changes
   it. On Review the take's name is the header's title, on up to two lines
   and then cut with its number kept, whole in the tooltip, with the pencil
-  after its last word. The song's takes tonight stand beside it as columns
-  and give way to it whole; once they have, the title's tooltip says them.
+  after its last word. The song's takes tonight stand beside it as columns,
+  as small as Last time's, and give way to it whole; once they have, the
+  title's tooltip says them, and the 1 px line after them goes too. The
+  subtitle never makes them give way: a long rehearsal name runs on into the
+  room the columns leave, is cut where that ends, and is whole in the
+  tooltip.
 - **B7. Empty states.** An empty list that only says it is empty leaves the
   person to guess what to do next. So an empty list says, in its own place,
   what will appear there and how it gets there: an empty set under Next take
