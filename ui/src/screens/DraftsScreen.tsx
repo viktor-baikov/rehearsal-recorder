@@ -1,14 +1,30 @@
-import { useEffect, useRef, useState } from "react"
-import { LifeBuoy, Save, Trash2 } from "lucide-react"
+import { Fragment, useCallback, useEffect, useRef, useState } from "react"
+import { Save, Trash2 } from "lucide-react"
+import { Warning } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemSeparator,
+  ItemTitle,
+} from "@/components/ui/item"
+import { Spinner } from "@/components/ui/spinner"
+import { Whole } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
 import { Shell } from "@/components/Shell"
 import { RunningLine } from "@/components/RunningLine"
+import { useAfter } from "@/hooks/useAfter"
 import { api, type Draft } from "@/lib/api"
-import { formatDateHuman, formatMMSS } from "@/lib/format"
+import { countOf, formatMMSS, formatWhen } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
 import { useActivity, watching } from "@/lib/activity"
+import { rise } from "@/lib/motion"
 import { dismiss, notify } from "@/lib/notices"
+import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import { endedByPython, offerUndo } from "@/lib/trash"
 
 /**
@@ -22,6 +38,25 @@ import { endedByPython, offerUndo } from "@/lib/trash"
 // What an action here said — one slot, so each says over the last.
 const SAID = "drafts"
 
+/** What the screen is doing, to the take in `dir`: recovering it from its
+ *  row or the footer, discarding it, or recovering it as one of Recover all.
+ *  `many` is whether more than one take was listed when it was pressed: the
+ *  footer's word and the rows' own Recover stay as they were until it ends. */
+type Busy = { dir: string; job: "recover" | "discard" | "all"; many: boolean }
+
+/** The list on screen, for one that has closed. App shows one list at a
+ *  time, but a list that has closed can still get a recovery's answer or an
+ *  Undo: a take it recovered then leaves the list on screen, and one its
+ *  Undo brought back joins it. */
+let onScreen: { recovered: (dir: string) => void; cameBack: (dir: string) => Promise<void> } | null = null
+
+/** A take an Undo brought back: into the list on screen, or with the list
+ *  again when none is. */
+function bringBack(dir: string, reopen: () => void): Promise<void> | void {
+  if (onScreen) return onScreen.cameBack(dir)
+  reopen()
+}
+
 export function DraftsScreen({
   drafts,
   onDone,
@@ -34,9 +69,13 @@ export function DraftsScreen({
   onReopen: () => void
 }) {
   const [remaining, setRemaining] = useState(drafts)
-  const [busy, setBusy] = useState<string | null>(null)
-  // Whether this list is still the one on screen: an Undo can come after it
-  // closed, its last take discarded since.
+  // The list as it stands, for a call that answers late: Recover all, a
+  // recovery and an Undo each change it while the others wait, and each goes
+  // on from what the others left.
+  const listed = useRef(drafts)
+  const [busy, setBusy] = useState<Busy | null>(null)
+  // Whether this list is still the one on screen: an Undo or a recovery can
+  // answer after it closed, by its last take or by Decide later.
   const shown = useRef(true)
   useEffect(() => {
     shown.current = true
@@ -44,135 +83,287 @@ export function DraftsScreen({
       shown.current = false
     }
   }, [])
+  // Decide later was pressed: Recover all stops after the take in hand. The
+  // screen goes only once Python has answered, and the run does not wait
+  // for that.
+  const leaving = useRef(false)
   // Turning a long take's raw tracks into .wav takes real seconds.
   const { entries: work } = useActivity()
+  // The journal's progress for a take being recovered, by this list or by
+  // the one before it: an Undo can open the list again while a take that
+  // list was recovering still is.
+  const recovering = (dir: string) =>
+    work.find((e) => e.kind === "recover" && e.state === "running" && e.folder === dir) ?? null
 
-  const finish = (rest: Draft[]) => {
-    setRemaining(rest)
-    if (rest.length === 0) onDone()
-  }
+  // More than one take: the footer's button is Recover all and each row has
+  // its own Recover. While something is going on, as it was when pressed, so
+  // the buttons do not change under it.
+  const many = busy ? busy.many : remaining.length > 1
+  // A recovery that takes a second turns a spinner in its button (B5).
+  const slow = useAfter(busy?.job === "recover" || busy?.job === "all", SPINNER_AFTER_MS)
+  // One take is recovered at a time, whichever list started it: Python
+  // numbers a recovered take from its rehearsal as it was when the recovery
+  // began, so two at once into one rehearsal could get the same number.
+  // While any is running, every Recover waits.
+  const oneRunning = work.some((e) => e.kind === "recover" && e.state === "running")
 
-  const recover = async (draft: Draft) => {
-    setBusy(draft.dir)
+  const put = useCallback((list: Draft[]) => {
+    listed.current = list
+    setRemaining(list)
+  }, [])
+
+  // A take recovered or discarded, if it is still listed: a list's own
+  // recovery and one from the list before can both say so. With the last one
+  // the list closes, unless Decide later has closed it or is closing it: the
+  // app then stays where it is.
+  const drop = useCallback(
+    (dir: string) => {
+      if (!listed.current.some((d) => d.dir === dir)) return
+      const rest = listed.current.filter((d) => d.dir !== dir)
+      put(rest)
+      if (rest.length === 0 && shown.current && !leaving.current) onDone()
+    },
+    [put, onDone]
+  )
+
+  // An Undo brought this take back: it joins the takes listed, not a run
+  // going on. One recovered or discarded while the list was being read
+  // stays gone.
+  const cameBack = useCallback(
+    async (dir: string) => {
+      const now = await api().list_drafts()
+      if (shown.current) {
+        put(now.filter((d) => d.dir === dir || listed.current.some((l) => l.dir === d.dir)))
+      } else await bringBack(dir, onReopen)
+    },
+    [put, onReopen]
+  )
+
+  // On screen, this list hears what a closed one has to say. A take leaves
+  // on its recovery's answer, not on the journal's done: Python marks it
+  // done before it moves the take, and the move can fail.
+  useEffect(() => {
+    const me = { recovered: drop, cameBack }
+    onScreen = me
+    return () => {
+      if (onScreen === me) onScreen = null
+    }
+  }, [drop, cameBack])
+
+  // One take through Python: null once it is recovered, else the reason it
+  // was not.
+  const recoverOne = async (draft: Draft): Promise<string | null> => {
     dismiss(SAID)
     const res = await watching(api().recover_draft(draft.dir))
-    setBusy(null)
     // A crop's Undo of it that was waiting, Python has ended, however the
     // recovery went.
     endedByPython(res.ended)
-    if (!res.ok) {
-      notify({ key: SAID, kind: "error", text: res.error ?? "Could not recover the take" })
-      return
-    }
-    finish(remaining.filter((d) => d.dir !== draft.dir))
+    if (!res.ok) return res.error ?? "Could not recover the take"
+    drop(draft.dir)
+    // And from the list on screen, if this one has closed since and an Undo
+    // opened another with the take in it.
+    onScreen?.recovered(draft.dir)
+    return null
   }
 
-  // Asks nothing: Undo brings the take back, into this list while it is on
-  // screen, or with the list again once it has closed. Which, is decided
-  // when the Undo comes, not when the take went. Named as the list names
-  // it, by its rehearsal.
+  // Busy stays set once the list is empty or Decide later is pressed: the
+  // screen is going, and nothing on it comes back to work meanwhile. A press
+  // after a Decide later that did not close it works again.
+  const recover = async (draft: Draft) => {
+    leaving.current = false
+    setBusy({ dir: draft.dir, job: "recover", many })
+    const error = await recoverOne(draft)
+    if (listed.current.length && !leaving.current) setBusy(null)
+    if (error) notify({ key: SAID, kind: "error", text: error })
+  }
+
+  // The takes listed when it was pressed, one after another; one an Undo
+  // brings back meanwhile joins the list, not the run, and one the list
+  // before recovered meanwhile is passed over. It stops at a take that
+  // fails, and after the take in hand once Decide later is pressed: the rest
+  // wait for next time. Pressed again after a Decide later that did not close
+  // the list, it runs.
+  const recoverAll = async () => {
+    leaving.current = false
+    const pressed = listed.current
+    for (const draft of pressed) {
+      if (!shown.current || leaving.current) break
+      if (!listed.current.some((d) => d.dir === draft.dir)) continue
+      setBusy({ dir: draft.dir, job: "all", many: true })
+      const error = await recoverOne(draft)
+      if (error) {
+        notify({
+          key: SAID,
+          kind: "error",
+          text: `Recover all stopped at “${draft.rehearsal_name}”: ${error}`,
+        })
+        break
+      }
+    }
+    if (listed.current.length && !leaving.current) setBusy(null)
+  }
+
+  // Asks nothing: Undo brings the take back, into the list on screen, or with
+  // the list again when none is. Which, is decided when the Undo comes, not
+  // when the take went. Named as the list names it, by its rehearsal.
   const discard = async (draft: Draft) => {
-    setBusy(draft.dir)
+    setBusy({ dir: draft.dir, job: "discard", many })
     dismiss(SAID)
     const res = await api().discard_draft(draft.dir)
-    setBusy(null)
     endedByPython(res.ended)
+    if (res.ok) drop(draft.dir)
+    if (listed.current.length) setBusy(null)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not discard the take" })
       return
     }
-    finish(remaining.filter((d) => d.dir !== draft.dir))
     if (!res.undo) return
     offerUndo({
       text: wentTo(`“${draft.rehearsal_name}”`),
       token: res.undo,
-      onUndone: async () => {
-        if (!shown.current) {
-          onReopen()
-          return
-        }
-        const now = await api().list_drafts()
-        if (shown.current) setRemaining(now)
-        else onReopen()
-      },
+      // Into the list on screen: this one, or one opened since. A list open
+      // again is not opened afresh, so a run in it goes on.
+      onUndone: () => bringBack(draft.dir, onReopen),
     })
   }
 
   return (
     <Shell
+      air
+      className="px-8 [--screen-pad-y:2rem]"
       title="Unsaved takes found"
       footer={
-        <FooterRow
-          left={
-            <p className="text-xs text-muted-foreground">
-              They stay on disk and will be offered again next time.
-            </p>
-          }
-        >
-          <Button variant="outline" size="footer-aside" onClick={onDone}>
-            Decide later
-          </Button>
-        </FooterRow>
-      }
-    >
-      <div className="mx-auto flex max-w-3xl flex-col gap-4">
-        <div className="flex items-start gap-3 rounded-xl border border-warn/40 bg-warn/10 px-5 py-4 text-sm text-warn">
-          <LifeBuoy className="mt-0.5 size-4 shrink-0" />
-          <p>
-            The app closed while these takes were still recording, so they were
-            never saved. The audio is intact — recover a take to add it to its
-            rehearsal.
-          </p>
-        </div>
-
-
-        <div className="flex flex-col gap-2">
-          {remaining.map((draft) => (
-            <div
-              key={draft.dir}
-              className="flex items-center gap-4 rounded-xl border bg-card px-5 py-4"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">
-                  {draft.rehearsal_name}
-                </div>
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  {formatDateHuman(draft.created_at)} · {draft.tracks.length}{" "}
-                  {draft.tracks.length === 1 ? "track" : "tracks"} ·{" "}
-                  <span className="tnum">{formatMMSS(draft.duration_sec)}</span>
-                </div>
-                <RunningLine
-                  entry={
-                    work.find(
-                      (e) =>
-                        e.kind === "recover" && e.state === "running" && e.folder === draft.dir
-                    ) ?? null
-                  }
-                  label="Recovering"
-                />
-              </div>
-
+        <div className="animate-rise" style={rise(1)}>
+          <FooterRow
+            left={
+              <p className="text-xs text-muted-foreground">
+                They stay on disk and will be offered again next time.
+              </p>
+            }
+          >
+            <div className="flex items-center gap-3">
+              {/* Works while a take recovers, to leave the rest for next
+                  time. */}
               <Button
-                variant="ghost"
-                size="row"
-                onClick={() => void discard(draft)}
-                disabled={busy !== null}
-                className="text-muted-foreground hover:text-destructive"
+                variant="outline"
+                size="footer-aside"
+                onClick={() => {
+                  leaving.current = true
+                  onDone()
+                }}
               >
-                <Trash2 />
-                Discard
+                Decide later
               </Button>
+              {/* The screen's main button, rightmost: the one take, or all
+                  of them one after another. With none left it waits for the
+                  screen to go. */}
               <Button
-                size="row"
-                onClick={() => recover(draft)}
-                disabled={busy !== null}
+                size="footer"
+                onClick={() => void (many ? recoverAll() : recover(remaining[0]))}
+                disabled={busy !== null || remaining.length === 0 || oneRunning}
               >
-                <Save />
-                Recover
+                {slow && busy?.job === (many ? "all" : "recover") ? (
+                  <Spinner after={0} className="size-5" />
+                ) : (
+                  <Save />
+                )}
+                {many ? "Recover all" : "Recover"}
               </Button>
             </div>
-          ))}
+          </FooterRow>
         </div>
+      }
+    >
+      <div className="mx-auto max-w-3xl">
+        {/* The takes are one group, the warning at its head and a row to a
+            take under it, split by 1 px lines. */}
+        <Card data-drafts className="animate-rise gap-0 p-0" style={rise(0)}>
+          <div className="p-6">
+            <Warning>
+              Recover a take to add it to its rehearsal. The app closed while these takes were
+              recording, so they were never saved. The audio is intact.
+            </Warning>
+          </div>
+          <ItemGroup>
+            {remaining.map((draft) => {
+              // The journal's progress for this take, if it is being
+              // recovered; while it is, its Discard waits too.
+              const running = recovering(draft.dir)
+              const length = formatMMSS(draft.duration_sec)
+              return (
+                <Fragment key={draft.dir}>
+                  <ItemSeparator />
+                  {/* A row goes nowhere, so it is a plain box. No border: Item's
+                      transparent one would put the title 25 px in, not the 24 of
+                      the warning's box. */}
+                  <Item
+                    size="sm"
+                    role="listitem"
+                    data-draft={draft.dir}
+                    className="flex-nowrap gap-4 border-0 px-6 py-4"
+                  >
+                    <ItemContent className="min-w-0 gap-0.5">
+                      {/* Two lines, then cut and whole in the tip; a Tab stop
+                          while it is cut, since nothing else here says it. */}
+                      <ItemTitle className="w-full">
+                        <Whole
+                          text={draft.rehearsal_name}
+                          reach
+                          className="line-clamp-2 min-w-0 break-words"
+                        />
+                      </ItemTitle>
+                      {/* While it recovers, the progress takes the line's
+                          place. Both are 16 px tall, so the row keeps its
+                          height (B4). */}
+                      {running ? (
+                        <RunningLine entry={running} label="Recovering" />
+                      ) : (
+                        <ItemDescription className="text-xs leading-4">
+                          {formatWhen(draft.created_at)} · {countOf(draft.tracks.length, "track")} ·{" "}
+                          <span className="tnum">{length}</span>
+                        </ItemDescription>
+                      )}
+                    </ItemContent>
+                    <ItemActions>
+                      {/* Named by their take, and by its length: two takes of
+                          one rehearsal differ only by that. */}
+                      <Button
+                        variant="ghost"
+                        size="row"
+                        aria-label={`Discard ${draft.rehearsal_name}, ${length}`}
+                        onClick={() => void discard(draft)}
+                        disabled={busy !== null || running !== null}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 />
+                        Discard
+                      </Button>
+                      {/* With more than one take a row has its own Recover,
+                          for this take alone; in outline, since the
+                          footer's is the main one. */}
+                      {many && (
+                        <Button
+                          variant="outline"
+                          size="row"
+                          aria-label={`Recover ${draft.rehearsal_name}, ${length}`}
+                          onClick={() => void recover(draft)}
+                          disabled={busy !== null || oneRunning}
+                        >
+                          {slow && busy?.job === "recover" && busy.dir === draft.dir ? (
+                            <Spinner after={0} />
+                          ) : (
+                            <Save />
+                          )}
+                          Recover
+                        </Button>
+                      )}
+                    </ItemActions>
+                  </Item>
+                </Fragment>
+              )
+            })}
+          </ItemGroup>
+        </Card>
       </div>
     </Shell>
   )

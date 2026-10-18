@@ -1,5 +1,6 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
+import { TriangleAlert } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -77,4 +78,21 @@ function AlertDescription({ className, ...props }: React.ComponentProps<"div">) 
   )
 }
 
-export { Alert, AlertDescription, AlertTitle }
+/**
+ * A warning over a list that stays where it is for as long as it holds, and
+ * is not a notice (C8): the `warning` alert with its triangle and one
+ * paragraph of words, announced as a status. The start screen's tracks and
+ * the unsaved takes both say theirs with it.
+ */
+function Warning({ children }: { children: React.ReactNode }) {
+  return (
+    <Alert variant="warning" role="status">
+      <TriangleAlert />
+      <AlertDescription>
+        <p>{children}</p>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+export { Alert, AlertDescription, AlertTitle, Warning }

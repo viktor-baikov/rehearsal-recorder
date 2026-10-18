@@ -272,8 +272,10 @@ test.describe("long work shows its progress where it runs", () => {
     })
     await expect(page.getByText("Unsaved takes found")).toBeVisible()
     await hold(page, "recover_draft")
-    await running(page, "recover", 0.3, { folder: "/rec/old/_drafts/take 1" })
+    // After the press, as Python's entry comes: one running already would
+    // keep Recover waiting.
     await page.getByRole("button", { name: "Recover" }).click()
+    await running(page, "recover", 0.3, { folder: "/rec/old/_drafts/take 1" })
     await expect(page.getByText("Recovering… 30%")).toBeVisible()
     await letGo(page, "recover_draft")
   })

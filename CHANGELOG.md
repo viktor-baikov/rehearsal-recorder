@@ -207,6 +207,28 @@ opening.
   that song again. If the name has become another song's in the meantime,
   the notice says why it cannot come back. "Make Palyn a new song" under a
   name field forgets the name at once, as before, with no **Undo**.
+- **Unsaved takes have one main button, Recover, at the bottom right.** With
+  more than one take it says **Recover all** and adds the takes to their
+  rehearsals one after another. If one fails, it stops there and a notice
+  names that take's rehearsal and says why. The takes before it are
+  recovered, and the rest stay in the list. Each row keeps **Discard**, and
+  with more than one take has its own **Recover**, in a thin frame so the
+  blue button stays the only one. Only one take is recovered at a time, so
+  each take gets the right number in its rehearsal. While one is being
+  recovered, every **Recover** is greyed. **Decide later** is beside the main
+  button and works then too: it stops **Recover all** after the take in hand.
+  The takes are one card, with the warning at its head and a thin line
+  between the rows. The warning starts with what to do, "Recover a take to
+  add it to its rehearsal." A row is titled with its rehearsal's name. A long
+  name takes two lines, is then cut, and shows whole when you point at it or
+  a key reaches it. Under the name are the day and time the rehearsal began,
+  as History writes them ("Thu 10 Sep, 19:00"), the number of tracks and the
+  length, so two takes of one rehearsal are told apart by their length.
+  **Discard** and **Recover** name their take and its length, so a screen
+  reader can tell those takes apart too. A recovery that takes more than a
+  second shows a spinner in its button. The take's progress shows in place
+  of the line under the name, and the buttons keep their words until the
+  recovery ends, so nothing moves.
 
 ## 0.11.1
 
