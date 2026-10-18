@@ -392,6 +392,30 @@ test.describe("Marks in History", () => {
     expect(heads.filter((h, i) => h !== heads[i - 1])).toEqual(["Note", "Keep this"])
   })
 
+  test("Marks entered again draws no page from before until its marks are read", async ({ page }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    await chooseLabel(page, 3, "Went wrong")
+    await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
+    await expect(page.getByRole("navigation", { name: "Rehearsals" })).toBeVisible()
+
+    // Back in Marks, its marks held: Went wrong's page from the visit
+    // before is not drawn, and the pane stays empty until they are read.
+    await watchHeads(page)
+    await hold(page, "list_marks")
+    await page.getByRole("radio", { name: "Marks", exact: true }).click()
+    await expect(labelItem(page, 3)).toHaveAttribute("aria-current", "true")
+    await page.waitForTimeout(300)
+    await expect(page.locator("[data-marks-group]")).toHaveCount(0)
+    await expect(pane(page, "Marks")).toBeVisible()
+    await letGo(page)
+    await expect(pane(page, "Went wrong").getByRole("heading", { name: "Went wrong", level: 2 })).toBeVisible()
+    const heads = await headsSeen(page)
+    const seen = heads.filter((h, i) => h !== heads[i - 1])
+    expect(seen.slice(0, -1)).not.toContain("Went wrong")
+    expect(seen.slice(-2)).toEqual([null, "Went wrong"])
+  })
+
   test("play starts 5 s before the mark, and again pauses", async ({ page }) => {
     await openApp(page, { before: MORE })
     await openMarks(page)
