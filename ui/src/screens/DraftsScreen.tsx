@@ -1,13 +1,26 @@
-import { useEffect, useRef, useState } from "react"
-import { LifeBuoy, Save, Trash2 } from "lucide-react"
+import { Fragment, useEffect, useRef, useState } from "react"
+import { Save, Trash2, TriangleAlert } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemSeparator,
+  ItemTitle,
+} from "@/components/ui/item"
+import { Whole } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
 import { Shell } from "@/components/Shell"
 import { RunningLine } from "@/components/RunningLine"
 import { api, type Draft } from "@/lib/api"
-import { formatDateHuman, formatMMSS } from "@/lib/format"
+import { countOf, formatMMSS, formatWhen } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
 import { useActivity, watching } from "@/lib/activity"
+import { rise } from "@/lib/motion"
 import { dismiss, notify } from "@/lib/notices"
 import { endedByPython, offerUndo } from "@/lib/trash"
 
@@ -100,79 +113,111 @@ export function DraftsScreen({
 
   return (
     <Shell
+      air
+      className="px-8 [--screen-pad-y:2rem]"
       title="Unsaved takes found"
       footer={
-        <FooterRow
-          left={
-            <p className="text-xs text-muted-foreground">
-              They stay on disk and will be offered again next time.
-            </p>
-          }
-        >
-          <Button variant="outline" size="footer-aside" onClick={onDone}>
-            Decide later
-          </Button>
-        </FooterRow>
+        <div className="animate-rise" style={rise(1)}>
+          <FooterRow
+            left={
+              <p className="text-xs text-muted-foreground">
+                They stay on disk and will be offered again next time.
+              </p>
+            }
+          >
+            <Button variant="outline" size="footer-aside" onClick={onDone}>
+              Decide later
+            </Button>
+          </FooterRow>
+        </div>
       }
     >
-      <div className="mx-auto flex max-w-3xl flex-col gap-4">
-        <div className="flex items-start gap-3 rounded-xl border border-warn/40 bg-warn/10 px-5 py-4 text-sm text-warn">
-          <LifeBuoy className="mt-0.5 size-4 shrink-0" />
-          <p>
-            The app closed while these takes were still recording, so they were
-            never saved. The audio is intact — recover a take to add it to its
-            rehearsal.
-          </p>
-        </div>
-
-
-        <div className="flex flex-col gap-2">
-          {remaining.map((draft) => (
-            <div
-              key={draft.dir}
-              className="flex items-center gap-4 rounded-xl border bg-card px-5 py-4"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">
-                  {draft.rehearsal_name}
-                </div>
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  {formatDateHuman(draft.created_at)} · {draft.tracks.length}{" "}
-                  {draft.tracks.length === 1 ? "track" : "tracks"} ·{" "}
-                  <span className="tnum">{formatMMSS(draft.duration_sec)}</span>
-                </div>
-                <RunningLine
-                  entry={
-                    work.find(
-                      (e) =>
-                        e.kind === "recover" && e.state === "running" && e.folder === draft.dir
-                    ) ?? null
-                  }
-                  label="Recovering"
-                />
-              </div>
-
-              <Button
-                variant="ghost"
-                size="row"
-                onClick={() => void discard(draft)}
-                disabled={busy !== null}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 />
-                Discard
-              </Button>
-              <Button
-                size="row"
-                onClick={() => recover(draft)}
-                disabled={busy !== null}
-              >
-                <Save />
-                Recover
-              </Button>
-            </div>
-          ))}
-        </div>
+      <div className="mx-auto max-w-3xl">
+        {/* The takes are one group, the warning at its head and a row to a
+            take under it, split by 1 px lines. */}
+        <Card data-drafts className="animate-rise gap-0 p-0" style={rise(0)}>
+          <div className="p-6">
+            <Alert variant="warning" role="status">
+              <TriangleAlert />
+              <AlertDescription>
+                <p>
+                  Recover a take to add it to its rehearsal. The app closed while these
+                  takes were recording, so they were never saved. The audio is intact.
+                </p>
+              </AlertDescription>
+            </Alert>
+          </div>
+          <ItemGroup>
+            {remaining.map((draft) => {
+              // The journal's progress for this take, if it is being recovered.
+              const running =
+                work.find(
+                  (e) => e.kind === "recover" && e.state === "running" && e.folder === draft.dir
+                ) ?? null
+              const length = formatMMSS(draft.duration_sec)
+              return (
+                <Fragment key={draft.dir}>
+                  <ItemSeparator />
+                  {/* A row goes nowhere, so it is a plain box with no edge: its
+                      words stand 24 px in, as the warning's box does. */}
+                  <Item
+                    size="sm"
+                    role="listitem"
+                    data-draft={draft.dir}
+                    className="flex-nowrap gap-4 rounded-none border-0 px-6 py-4"
+                  >
+                    <ItemContent className="min-w-0 gap-0.5">
+                      {/* Two lines, then cut and whole in the tip; a Tab stop
+                          while it is cut, since nothing else here says it. */}
+                      <ItemTitle className="w-full">
+                        <Whole
+                          text={draft.rehearsal_name}
+                          reach
+                          className="line-clamp-2 min-w-0 break-words"
+                        />
+                      </ItemTitle>
+                      {/* While it recovers, the progress takes the line's
+                          place. Both are 16 px tall, so the row keeps its
+                          height (B4). */}
+                      {running ? (
+                        <RunningLine entry={running} label="Recovering" />
+                      ) : (
+                        <ItemDescription className="text-xs leading-4">
+                          {formatWhen(draft.created_at)} · {countOf(draft.tracks.length, "track")} ·{" "}
+                          <span className="tnum">{length}</span>
+                        </ItemDescription>
+                      )}
+                    </ItemContent>
+                    <ItemActions>
+                      {/* Named by their take, and by its length: two takes of
+                          one rehearsal differ only by that. */}
+                      <Button
+                        variant="ghost"
+                        size="row"
+                        aria-label={`Discard ${draft.rehearsal_name}, ${length}`}
+                        onClick={() => void discard(draft)}
+                        disabled={busy !== null}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 />
+                        Discard
+                      </Button>
+                      <Button
+                        size="row"
+                        aria-label={`Recover ${draft.rehearsal_name}, ${length}`}
+                        onClick={() => recover(draft)}
+                        disabled={busy !== null}
+                      >
+                        <Save />
+                        Recover
+                      </Button>
+                    </ItemActions>
+                  </Item>
+                </Fragment>
+              )
+            })}
+          </ItemGroup>
+        </Card>
       </div>
     </Shell>
   )

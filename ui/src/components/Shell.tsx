@@ -64,7 +64,9 @@ export function Shell({
    *  that sets how loud (components/ListeningVolume). */
   playback?: boolean
   /** The room a redone screen gives itself (F8): 32 px at the header's and
-   *  the footer's sides, so they line up with a middle padded by as much. */
+   *  the footer's sides, so they line up with a middle padded by as much; and
+   *  a header as tall as the 36 px work button, so the button coming into it
+   *  moves nothing. */
   air?: boolean
 }) {
   // Notices stack above the footer, never on it: the footer holds Start, Stop
@@ -124,6 +126,10 @@ export function Shell({
             className={cn(
               "min-w-0",
               facts ? "flex-[0_1_auto]" : "flex-1",
+              // On a redone screen the header is as tall as a 36 px button,
+              // so the work button coming into it moves nothing (B4).
+              // Before titleLeast, so Review's taller box wins.
+              air && "flex min-h-9 flex-col justify-center",
               titleLeast && "flex flex-col justify-center",
               titleLeast
             )}
