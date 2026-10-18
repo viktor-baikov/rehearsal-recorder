@@ -889,6 +889,8 @@ test.describe("the track rows on the shared pieces", () => {
 // tonight's name in the footer beside the set and Start.
 test.describe("the start screen's groups", () => {
   test("the start screen is three groups: past, tracks, tonight", async ({ page }) => {
+    // How the groups rise is checked below.
+    await page.emulateMedia({ reducedMotion: "no-preference" })
     await openApp(page)
     await expect(page.locator("footer #rehearsal-name")).toHaveCount(1)
     const group = page.locator("[data-part='setup'] section[data-tracks]")

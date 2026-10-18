@@ -33,6 +33,12 @@ export default defineConfig({
     // picture of where it stopped.
     trace: { mode: "retain-on-failure", screenshots: false },
     screenshot: "only-on-failure",
+    // The browser asks for less motion, so the app leaves its animations out
+    // (index.css). Nearly every test waits for the screen to rise into place
+    // before it clicks anything (settled, in e2e/app.ts), so the animations
+    // only cost waiting: without them the whole suite took a fifth less time.
+    // A test of the motion itself says reducedMotion: "no-preference".
+    reducedMotion: "reduce",
   },
   projects: [
     {

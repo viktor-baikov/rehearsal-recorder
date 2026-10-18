@@ -135,6 +135,7 @@ test.describe("the evening's songs", () => {
   })
 
   test("the songs group rises first", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" })
     const overview = await openEvening(page)
     const it = await style(overview.locator("[data-songs-group]"), "--i", "animation-name")
     expect(it["--i"].trim()).toBe("0")
@@ -383,6 +384,11 @@ test.describe("the bar of a short take", () => {
 
   test("a short take bar is opaque in every state", async ({ page }) => {
     const overview = await openEvening(page)
+    // The bars' colours fade in together as the takes arrive (200 ms): read
+    // them once the false start's has.
+    const card = await colour(page, "--card")
+    const fill = async () => (await style(bar(overview, 4), "background-color"))["background-color"]
+    await expect.poll(fill).toBe(card)
     const rest = await style(bar(overview, 3), "background-color", "background-image")
     const starred = await style(bar(overview, 2), "background-color", "background-image")
     const falseStart = await style(bar(overview, 4), "background-color", "background-image")

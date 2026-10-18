@@ -448,6 +448,7 @@ test.describe("the screen", () => {
   })
 
   test("the Next take panel rises 40 ms after the takes", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" })
     await openApp(page)
     await startRehearsal(page)
     // The panel's inner box, the one that rises: the second in the line (the

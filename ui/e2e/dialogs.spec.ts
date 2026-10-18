@@ -177,6 +177,7 @@ test("a dialog opened with its Enter button disabled still has the keyboard insi
 })
 
 test("the title and the text stay while the dialog closes", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" })
   await openApp(page, { before: "window.__CANCEL_LOCATE__ = true;" })
   await openHistory(page, "Missing jam")
   await page.getByRole("button", { name: "Remove from history" }).click()
