@@ -94,7 +94,7 @@ test("drafts: the note on the left, Decide later with an edge, Recover rightmost
   })
   await expect(page.getByRole("button", { name: "Decide later" })).toBeVisible()
   const f = await footer(page)
-  expect(f.main).toMatch(/^Recover/)
+  expect(f.main).toBe("Recover")
   expect(f.variants).toEqual(["outline", "default"])
   expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
   const note = page.locator("footer").getByText("They stay on disk")
