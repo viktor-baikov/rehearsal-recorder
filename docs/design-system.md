@@ -18,16 +18,17 @@ shows the app as it is; the site keeps its own big headings and layout
 
 The foundation is in: the theme values, the shared components, Undo, the
 showcase and the check. The start screen is redone on it, and so are the
-rehearsal screen, the recording screen and the big player, which Review and
-History open takes in too: their pieces are the shared ones, and their
-files are off the check's [allow-list](#the-check). The one piece the start
-screen still builds on its own is the song list in New set, which it
-shares with Settings' Sets and which is redone with Settings. The other
-screens follow, one pull request each, in this order: Review, History,
-Drafts, and Settings. Until its turn a screen is on the allow-list and may
-still break the rules it is listed for. Where a rule below says "as each
-screen is redone", the screens' pull requests carry it out, and so far the
-start screen's, the rehearsal screen's and the recording screen's have. On
+rehearsal screen, the recording screen, Review (the screen after Stop) and
+the big player, which History opens takes in too: their pieces are the
+shared ones, and their files are off the check's
+[allow-list](#the-check). The one piece the start screen still builds on
+its own is the song list in New set, which it shares with Settings' Sets
+and which is redone with Settings. The other screens follow, one pull
+request each, in this order: History, Drafts, and Settings. Until its turn
+a screen is on the allow-list and may still break the rules it is listed
+for. Where a rule below says "as each screen is redone", the screens' pull
+requests carry it out, and so far the start screen's, the rehearsal
+screen's, the recording screen's and Review's have. On
 reha.stream the pieces of the app are the real components and follow the
 theme already, but the page itself takes only the accent from it so far
 (`--page-accent: var(--primary)` in `site/src/page/page.css`). After the
@@ -196,7 +197,14 @@ piece of its own moves onto the shared one when it is redone.
   switched off), `outline`, `ghost`, and `link` (the text's colour with a
   thin underline). Sizes say where it goes: `default`,
   `row`, `footer`, `footer-aside`, `icon`, `icon-row`, `icon-tiny` and
-  `player`. Every variant has the same weight and the same 1 px border, so
+  `player`. The foot of a screen is one row, `FooterRow`: what the screen
+  has to say at the left, its buttons at the right, the main one rightmost,
+  so that it is in the same place on every screen. The main one is `footer`
+  (56 px): Start rehearsal, Record take, Stop and Save take. The ones beside
+  it are `footer-aside`: Finish, Discard. A line between the two halves
+  (`rule`) is for a left half that is a field, as the start screen's name
+  field is. Review's left half is a line of text, and it has no line.
+  Every variant has the same weight and the same 1 px border, so
   a toggle that swaps variants never changes width and never moves what is
   beside it; all but `link`, which has no frame: it is bare words, never
   swapped with a filled button, and a clear frame set them 1 px in from what
@@ -231,6 +239,11 @@ piece of its own moves onto the shared one when it is redone.
   under one. ⌘Z or Ctrl+Z runs the newest notice's action
   (`hooks/useUndoKey.ts`), except in a text field, which undoes its own
   typing, with a dialog, a menu or a list open, or while a take records.
+  What a button could not do is said in a notice of kind `error`, the
+  footer's buttons included (Start rehearsal, Record take, Stop, Save take,
+  Discard), as the evening's buttons and Settings say theirs. It stays
+  until it is closed or its screen is left, and a retry puts it away. It is
+  drawn over the screen, so it moves nothing (B4).
   A call into Python that raised is not a notice: it goes in the red bar
   across the top (`components/ErrorBar.tsx`, from `lib/bridgeErrors.ts`),
   which lists every problem said until it is put away, oldest first and the
@@ -257,6 +270,9 @@ piece of its own moves onto the shared one when it is redone.
   Under it is the fader, with M and S after it. M and S are
   `Toggle size="lane"`: 20 px, 12 px text and 4 px corners, 6 px apart,
   which keeps their 24 px touch areas apart (WCAG 2.5.8), and grey when on.
+  The fader shows keyboard focus on its thumb, in the shared ring, wherever
+  a player stands (Review, the rehearsal screen, History): the browser's own
+  outline would go round the whole track.
   The lanes are one group on the card's fill, with no lines between tracks:
   each lane's picture, a waveform or a lane of notes, sits on a well of its
   own (C7), with 3 px of the group's fill above and below it, and a Both
@@ -290,11 +306,12 @@ piece of its own moves onto the shared one when it is redone.
   buttons (`Toggle` and `ToggleGroup`, with arrow keys inside a group), one
   list row (`Item`, every row reachable by keyboard), warnings (`Alert`),
   loading (`Spinner`), empty states (`Empty`), tooltips (`Tooltip`) and
-  meters (`Meter`). The rest are added by the first screen's pull request
-  that needs them: one ✕, one link, one size of icon button, expanding
-  (Collapsible), checkboxes (Checkbox or Switch), a field with a button
-  (InputGroup), and our own set list for both screens, screen header, side
-  panel and pane head. A take's name is written by `TakeTitle`
+  meters (`Meter`); added with Review, checkboxes (`Checkbox`) and a song's
+  takes as columns (`TakeColumns`), which Last time and Review share. The
+  rest are added by the first screen's pull request that needs them: one ✕,
+  one link, one size of icon button, expanding (Collapsible), a field with a
+  button (InputGroup), and our own set list for both screens, screen
+  header, side panel and pane head. A take's name is written by `TakeTitle`
   (`components/TakeTitle.tsx`) everywhere, where today one list uses it and
   the rest write the name their own way. A track that records is one tile,
   `TrackTile` (`components/TrackTile.tsx`), where the MIDI tile was a copy
@@ -451,6 +468,23 @@ The other shared components, each with its stories:
   and name. Last time, the rehearsal screen and the player use them; the
   other dots, note lines and ticks move onto them as their screens are
   redone.
+- **Checkbox**, `checkbox.tsx`: shadcn's, in the theme. A 16 px square with
+  the 4 px corner of a small thing (F9). Ticked, it is filled in the text's
+  colour, never the accent (F2), with the shared focus ring. It is Radix's
+  checkbox, a button, so Space on it ticks it; on a screen where Space does
+  the main thing, as Review's does, the box gives up its focus after a
+  change, so the next Space is the screen's. Review's cloud line is its one
+  use so far.
+- **TakeColumns**, `take-columns.tsx`: a song's takes as columns, C8's
+  columns, each as tall as the take ran (`drawnLength`, so none is under a
+  few pixels), the longest filling `height`. `numbers` puts each take's
+  number under its column. The take the screen is about is lit: in the
+  text's colour, or full green if it is starred. A starred take that is not
+  lit is a paler green, and the rest are grey. Last time lights the take its
+  ▶ plays and Review the take just recorded, so the two screens draw them
+  alike. Last time draws every song to the scale of its longest take
+  (`longest`). The columns are a picture, hidden from a screen reader: the
+  screen that uses them says them in words, and puts the tip on them.
 
 ## Writing components
 
@@ -546,14 +580,17 @@ as the `cn` import.
   a track's port line and Start's unseen Space chip hold their room, as the
   song rows do. On the rehearsal screen Finish and Record keep their key
   chips, unseen, while a take is in hand, and Record keeps room for a number
-  of two digits; an error in the footer is said over its buttons, in room
-  the footer has already; Mark is as wide as Open mark; and the player keeps
+  of two digits; Mark is as wide as Open mark; and the player keeps
   one line between the transport and the map for what it has to say, one
   thing at a time (a load error, then Cropping, then the output's warning),
   so the timeline never moves when it fills. On the recording screen the
   disk line holds the room of the longest thing it can say, and a tile's dB
-  figure holds the room of "-100.0", the widest it can read. These are the
-  model; the rest as each screen is redone.
+  figure holds the room of "-100.0", the widest it can read. On Review the
+  cloud line holds its room from the start, before the setting has
+  answered, and the header is as tall with the song's columns as without
+  them: it changes only with the title's lines. A footer button's error is
+  an error notice (C4), so it moves nothing. These are the model; the rest
+  as each screen is redone.
 - **B5. Loading.** Under 1 s nothing shows, so a quick answer does not
   flash; from 1 s a spinner takes the place of what is loading; past 10 s it
   says what it is doing. `PlayButton` already waits its second
@@ -575,7 +612,10 @@ as the `cn` import.
   and past that it is cut and whole in the tile's tooltip on hover. Short
   names keep 2.25 rem. `TileName` fits it on an unseen copy, and again only
   when its room changes size, so nothing that comes during a take changes
-  it.
+  it. On Review the take's name is the header's title, on up to two lines
+  and then cut with its number kept, whole in the tooltip, with the pencil
+  after its last word. The song's takes tonight stand beside it as columns
+  and give way to it whole; once they have, the title's tooltip says them.
 - **B7. Empty states.** An empty list that only says it is empty leaves the
   person to guess what to do next. So an empty list says, in its own place,
   what will appear there and how it gets there: an empty set under Next take

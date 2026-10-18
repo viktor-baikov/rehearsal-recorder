@@ -105,7 +105,7 @@ export function Story() {
           tracks={now.tracks}
           lastAttempt={now.lastAttempt}
           onStopped={async (take) => {
-            // The screen after a take shows the song's goes before it.
+            // The screen after a take draws the song's takes tonight as columns.
             const session = await api().session_state()
             show({ step: "review", take, rehearsalName, takes: session.active ? session.takes : [] })
           }}

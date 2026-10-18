@@ -65,19 +65,20 @@ opening.
   it is playing, and the sound carries on if the panel is closed. A song in
   *Last time* keeps its takes as columns at the end of its row, each as tall
   as the take ran: every starred take is green, and the one its ▶ plays is
-  at full strength. A long name keeps its width: the figures beside it drop,
-  whole and the least needed first, and show whole on hover, and a name
-  longer than its whole row wraps to a second line; a name that is cut shows
-  whole on hover and when a key reaches it. A track taken off can be put
-  back: the notice that says so has **Undo** for 10 seconds, which returns
-  the track to its place with its meter, and **Check signal** keeps a
-  renamed track's meter too. Smaller things: a MIDI port's note (not
-  connected, in use by another app, or shared with another track) is said in
-  that track's own line, where nothing moves; **Stereo** is a button that
-  stays pressed; the arrow keys reach **Audio**, **Both** and **MIDI**, and
-  Space picks one; **Check signal** and **Start rehearsal** show a spinner
-  when they take more than a second; an empty list of tracks says how to add
-  one; and every screen's title is 20 px.
+  in the colour of the text, or full green if it is starred. A long name
+  keeps its width: the figures beside it drop, whole and the least needed
+  first, and show whole on hover, and a name longer than its whole row wraps
+  to a second line; a name that is cut shows whole on hover and when a key
+  reaches it. A track taken off can be put back: the notice that says so has
+  **Undo** for 10 seconds, which returns the track to its place with its
+  meter, and **Check signal** keeps a renamed track's meter too. Smaller
+  things: a MIDI port's note (not connected, in use by another app, or
+  shared with another track) is said in that track's own line, where nothing
+  moves; **Stereo** is a button that stays pressed; the arrow keys reach
+  **Audio**, **Both** and **MIDI**, and Space picks one; **Check signal**
+  and **Start rehearsal** show a spinner when they take more than a second;
+  an empty list of tracks says how to add one; and every screen's title is
+  20 px.
 - **A song's attempts are called takes.** Where the app said *go* for each
   attempt at a song, "4 goes" or *Every go at Pałyn*, it now says *take*, as
   musicians do: "4 takes", *Every take of Pałyn*. The number beside a song's
@@ -97,10 +98,10 @@ opening.
   all. Nothing moves as a take plays, a mark nears, a crop runs or an error
   shows: a take's length keeps room for the time played beside it, so its
   bar keeps its width; **Finish** and **Record take** keep their width with
-  a take in hand and at take 10; **Mark** is as wide as **Open mark**; an
-  error in the footer is said over its buttons; and the player keeps one
-  line between its buttons and the map for a crop, a take that did not
-  load, or a warning about the output the sound is sent to. In the player
+  a take in hand and at take 10; **Mark** is as wide as **Open mark**; and
+  the player keeps one line between its buttons and the map for a crop, a
+  take that did not load, or a warning about the output the sound is sent
+  to. In the player
   **M** and **S** are on the fader's row, after the fader, so a track's name
   has its plate's whole width; a name still too long is cut, and shows whole
   on hover and when Tab reaches it. The tracks are one group, with no lines
@@ -138,6 +139,39 @@ opening.
   "Room for about 3 h 20 min of recording", and when it runs low, "Low disk
   space: room for about 12 min". The warning has a yellow icon and words in
   the text's colour, which are easier to read than the yellow words were.
+- **The take's name is at the top of the screen after Stop.** The song and its
+  number, "Viasna 2", are the title, with the pencil (**Rename take**) right
+  after its last word. A long name takes a second line and is then cut with
+  its number kept; point at it to read it whole. Over it is a small line, the
+  take's place in the rehearsal and the rehearsal's name, "Take 5 ·
+  Thursday". A take nobody named says "Take 7", in grey. The song's takes
+  tonight stand at the right as columns, each as tall as the take ran, with
+  its number under it. This take's column is in the colour of the text, a
+  starred take's is pale green and the rest are grey. In a narrow window the
+  columns give way to the name, and pointing at the name then shows them as
+  times. The line that said how long the take ran against the last one is
+  gone; the player's clock, "0:00 / 2:31", has the length. At the bottom the
+  cloud line is at the left, "Send to the cloud: the mix, FLAC" with its
+  checkbox, or "Stays on this computer: no cloud folder is set". A long line
+  is cut at its end and shows whole when you point at it, and it holds its
+  place while the app reads the setting, so nothing moves when it answers.
+  **Discard** and **Save take** are at the right with no line between them,
+  and **Save take** is as big as **Start rehearsal**, **Record take** and
+  **Stop**. The two parts of the player come in one after the other, as on
+  the other screens, and a track's fader shows a ring on its knob when the
+  keyboard reaches it, in every player. In *Last time* the take that plays is
+  in the colour of the text where it was grey, so the two screens draw their
+  columns alike. The small line over a screen's title and the headings of
+  the background work list, *Working* and *Done*, are no longer in capitals.
+- **When a button fails, the app says so in a notice.** On the start screen,
+  the rehearsal screen, the recording screen and the screen after Stop, a
+  failure of **Check signal**, **Start rehearsal**, **Record take**,
+  **Stop**, **Save take**, **Discard**, a rename or a crop used to show as a
+  small red line over the buttons at the bottom. It is now a red notice in
+  the corner of the window, as it already was in Settings and for the
+  evening's buttons. It stays until you close it or leave the screen, and
+  trying again puts it away. A notice is drawn over the screen, so nothing
+  under it moves.
 
 ## 0.11.1
 
