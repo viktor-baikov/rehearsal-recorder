@@ -286,10 +286,12 @@ async function recoveringKeepsTheBoxes(page: Page, draft: ReturnType<typeof take
   expect(before.line.height).toBeCloseTo(16 * scale, 0)
   await expect(workButton(page)).toHaveCount(0)
 
-  // Python is slow to recover; the journal says how far it has come.
+  // Python is slow to recover; the journal says how far it has come. The
+  // entry comes after the press, as Python's does: a recovery running
+  // already would keep Recover waiting.
   await hold(page, "recover_draft")
-  await setFake(page, "__ACTIVITY__", [recovering(draft.dir, 0.42)])
   await page.getByRole("button", { name: /^Recover/ }).click()
+  await setFake(page, "__ACTIVITY__", [recovering(draft.dir, 0.42)])
   await expect(row).toContainText("Recovering… 42%")
   // In its line's place: the line is gone, and the progress is as tall.
   await expect(line).toHaveCount(0)
@@ -425,8 +427,8 @@ test("Recover all recovers the takes one after another, each showing its progres
   // The first take held where it is, and the last one held on its own after.
   await holdFor(page, "recover_draft", EIGHT.dir)
   await hold(page, "recover_draft")
-  await setFake(page, "__ACTIVITY__", [recovering(SEVEN.dir, 0.3)])
   await mainButton(page).click()
+  await setFake(page, "__ACTIVITY__", [recovering(SEVEN.dir, 0.3)])
   await expect(rowOf(page, SEVEN)).toContainText("Recovering… 30%")
   expect(await callCount(page, "recover_draft")).toBe(1)
   // Of the screen's buttons only Decide later works while it runs, and the
@@ -608,13 +610,15 @@ test("an Undo after Recover closed the list opens it again, Recover in the foote
   await expect(rows(page).getByRole("button")).toHaveText(["Discard"])
 })
 
-test("a take still recovering when an Undo opens the list again is busy until it is done", async ({ page }) => {
+test("a take still recovering when an Undo opens the list again is busy, and no Recover works until it is done", async ({
+  page,
+}) => {
   await openDrafts(page)
   await page.getByRole("button", { name: "Discard Tuesday jam, 0:41", exact: true }).click()
   await expect(rows(page)).toHaveCount(2)
   await hold(page, "recover_draft")
-  await setFake(page, "__ACTIVITY__", [recovering(SEVEN.dir, 0.3)])
   await mainButton(page).click()
+  await setFake(page, "__ACTIVITY__", [recovering(SEVEN.dir, 0.3)])
   await expect.poll(() => callCount(page, "recover_draft")).toBe(1)
   await page.getByRole("button", { name: "Decide later" }).click()
   await expect(startButton(page)).toBeVisible()
@@ -635,6 +639,12 @@ test("a take still recovering when an Undo opens the list again is busy until it
   for (const button of await inHand.getByRole("button").all()) await expect(button).toBeDisabled()
   await expect(mainButton(page)).toBeDisabled()
   await expect(page.getByRole("button", { name: "Decide later" })).toBeEnabled()
+  // One take is recovered at a time: the other takes' Recover waits too,
+  // their Discard does not.
+  for (const other of [TWELVE, EIGHT]) {
+    await expect(rowOf(page, other).getByRole("button", { name: /^Recover/ })).toBeDisabled()
+    await expect(rowOf(page, other).getByRole("button", { name: /^Discard/ })).toBeEnabled()
+  }
 
   // Once it is done it leaves this list too, and the rest works.
   await setFake(page, "__ACTIVITY__", [{ ...recovering(SEVEN.dir, 1), state: "done" }])

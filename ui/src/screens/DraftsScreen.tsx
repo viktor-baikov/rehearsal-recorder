@@ -88,9 +88,11 @@ export function DraftsScreen({
   const many = busy ? busy.many : remaining.length > 1
   // A recovery that takes a second turns a spinner in its button (B5).
   const slow = useAfter(busy?.job === "recover" || busy?.job === "all", SPINNER_AFTER_MS)
-  // A take still recovering for the list before this one: until it is done,
-  // nothing here recovers them all.
-  const elsewhere = remaining.some((d) => recovering(d.dir) !== null)
+  // One take is recovered at a time, whichever list started it: Python
+  // numbers a recovered take from its rehearsal as it was when the recovery
+  // began, so two at once into one rehearsal could get the same number.
+  // While any is running, every Recover waits.
+  const oneRunning = work.some((e) => e.kind === "recover" && e.state === "running")
 
   const put = useCallback((list: Draft[]) => {
     listed.current = list
@@ -233,7 +235,7 @@ export function DraftsScreen({
               <Button
                 size="footer"
                 onClick={() => void (many ? recoverAll() : recover(remaining[0]))}
-                disabled={busy !== null || remaining.length === 0 || elsewhere}
+                disabled={busy !== null || remaining.length === 0 || oneRunning}
               >
                 {slow && busy?.job === (many ? "all" : "recover") ? (
                   <Spinner after={0} className="size-5" />
@@ -260,7 +262,7 @@ export function DraftsScreen({
           <ItemGroup>
             {remaining.map((draft) => {
               // The journal's progress for this take, if it is being
-              // recovered; while it is, its buttons wait.
+              // recovered; while it is, its Discard waits too.
               const running = recovering(draft.dir)
               const length = formatMMSS(draft.duration_sec)
               return (
@@ -320,7 +322,7 @@ export function DraftsScreen({
                           size="row"
                           aria-label={`Recover ${draft.rehearsal_name}, ${length}`}
                           onClick={() => void recover(draft)}
-                          disabled={busy !== null || running !== null}
+                          disabled={busy !== null || oneRunning}
                         >
                           {slow && busy?.job === "recover" && busy.dir === draft.dir ? (
                             <Spinner after={0} />
