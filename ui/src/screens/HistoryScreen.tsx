@@ -111,11 +111,13 @@ function FolderPath({ folder }: { folder: string }) {
       <TooltipTrigger asChild>
         {/* A link's words in the line: no padding beside the icon. It has
             what the date and the set leave, and no more than its path, so the
-            set keeps its room and the path is cut at the line's end. */}
+            set keeps its room and the path is cut at the line's end. Its
+            icon and the gap after it stay: on a line too short for them, the
+            set gives way first. */}
         <Button
           variant="link"
           onClick={() => void showFolder(folder)}
-          className="h-auto max-w-fit min-w-0 flex-1 gap-1.5 rounded-sm p-0 text-xs has-[>svg]:p-0"
+          className="h-auto max-w-fit min-w-5 flex-1 gap-1.5 rounded-sm p-0 text-xs has-[>svg]:p-0"
         >
           <FolderOpen className="size-3.5" />
           <span className="sr-only">{folderButton} </span>

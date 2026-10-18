@@ -98,6 +98,11 @@ export function useMultitrackPlayer(
   // Counts the takes opened, so a step waiting on Python's answer about one
   // take is not then sent to a take opened since.
   const opening = useRef(0)
+  // A take that could not be opened is opened again when Play is pressed
+  // on it once more, and plays as soon as it is open: each try is a new
+  // number here.
+  const [attempt, setAttempt] = useState(0)
+  const playOnOpen = useRef(false)
 
   const applyState = useCallback(
     (s: {
@@ -139,6 +144,8 @@ export function useMultitrackPlayer(
   // Opening a take
   useEffect(() => {
     let cancelled = false
+    const playNow = playOnOpen.current
+    playOnOpen.current = false
     openedRef.current = false
     opening.current += 1
     setMedia([])
@@ -187,6 +194,10 @@ export function useMultitrackPlayer(
         applyState(opened)
         setLoading(false)
         settle()
+        if (playNow) {
+          const s = await api().player_play()
+          if (!cancelled) applyState(s)
+        }
       } catch (e) {
         if (cancelled) return
         setLoadError(e instanceof Error ? e.message : String(e))
@@ -203,7 +214,8 @@ export function useMultitrackPlayer(
       heard({ level: 0 })
       void api().player_close()
     }
-  }, [tracks, fallbackDuration, applyState])
+    // A new `attempt` opens the same take again.
+  }, [tracks, fallbackDuration, applyState, attempt])
 
   // Poll the state while playing
   useEffect(() => {
@@ -376,6 +388,12 @@ export function useMultitrackPlayer(
     [duration, applyLoop, setView, seek, call]
   )
 
+  /** The take could not be opened: try once more, and play it once open. */
+  const tryAgain = useCallback(() => {
+    playOnOpen.current = true
+    setAttempt((n) => n + 1)
+  }, [])
+
   /** Whether the take is open in Python now, not as of the last render. */
   const isOpen = useCallback(() => openedRef.current, [])
   /** The latest open to have settled, now, not as of the last render. */
@@ -401,7 +419,8 @@ export function useMultitrackPlayer(
     // peaks in hand are the whole take's.
     peaksWindow: peaksWindow.to > 0 ? peaksWindow : { from: 0, to: duration },
 
-    toggle: () => void call(() => api().player_toggle()),
+    // Pressed on a take that could not be opened, Play tries again.
+    toggle: () => (loadError ? tryAgain() : void call(() => api().player_toggle())),
     play: () => void call(() => api().player_play()),
     pause: () => void call(() => api().player_pause()),
     restart: () => seek(region.a !== null && looping ? region.a : 0),

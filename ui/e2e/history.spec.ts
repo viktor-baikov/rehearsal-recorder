@@ -470,6 +470,24 @@ test("a take that cannot be loaded says so on its play button in the overview", 
   await expect(play).toHaveAttribute("data-look", "failed")
   await expect(play).toHaveAccessibleName("Could not load Pałyn 1. Try again")
   await expect(play).toBeEnabled()
+
+  // The files are back where they were: pressing it again opens the take
+  // once more, and it plays.
+  await page.evaluate(() => {
+    const bridge = (
+      window as unknown as { pywebview: { api: Record<string, (...a: unknown[]) => Promise<unknown>> } }
+    ).pywebview.api
+    const media = bridge.take_media
+    bridge.take_media = (tracks, ...rest) =>
+      media(
+        (tracks as { file: string }[]).map((t) => ({ ...t, file: t.file.replace("/gone/", "/rec/back/") })),
+        ...rest
+      )
+  })
+  const opens = await callCount(page, "player_open")
+  await play.click()
+  await expect(play).toHaveAttribute("data-look", "playing")
+  expect(await callCount(page, "player_open")).toBe(opens + 1)
 })
 
 test("the list and the page's group rise in, 40 ms apart", async ({ page }) => {
@@ -681,6 +699,9 @@ for (const scale of [1, 1.5]) {
   }) => {
     await page.addInitScript(scaled(scale))
     await openBandApp(page, { stress: true })
+    // In a folder of a real length, not the fake's few letters.
+    await page.addInitScript(inALongFolder(null, "/rec/tue"))
+    await page.reload()
     await openHistory(page)
     for (const [width, height] of [[1180, 820], [960, 680]] as const) {
       await page.setViewportSize({ width, height })
@@ -723,6 +744,16 @@ for (const scale of [1, 1.5]) {
       expect(bin.y, `${where}: Delete inside the head`).toBeGreaterThanOrEqual(room.y - 0.5)
       const pane = page.locator("section").filter({ has: head })
       expect(await sideways(page, head, pane), `${where}: nothing scrolls sideways`).toBe(false)
+
+      // Where the line is narrowest, the path is cut at its end and is
+      // still the button to the folder.
+      if (width === 960 && scale === 1.5) {
+        const folder = head.getByRole("button", { name: `Open folder ${LONG_FOLDER}`, exact: true })
+        await expect(folder).toBeVisible()
+        const path = folder.locator("span.font-mono")
+        await expect(path).toHaveAttribute("data-cut")
+        expect(await path.evaluate((el) => el.scrollWidth > el.clientWidth), `${where}: the path cut`).toBe(true)
+      }
     }
   })
 }
@@ -837,8 +868,8 @@ for (const [what, long] of LONG_NAMES) {
 // the whole head, and the path has what the date and the set leave, cut at
 // the head's edge.
 const LONG_FOLDER = String.raw`C:\Users\alex\RehearsalRecordings\Tuesday jam - 2026-09-10 19-00`
-const inALongFolder = (name: string | null = null) => `
-  const api = window.pywebview.api; const real = '/rec/old'; const long = ${JSON.stringify(LONG_FOLDER)};
+const inALongFolder = (name: string | null = null, real = "/rec/old") => `
+  const api = window.pywebview.api; const real = ${JSON.stringify(real)}; const long = ${JSON.stringify(LONG_FOLDER)};
   const list = api.list_rehearsals; const get = api.get_rehearsal; const named = ${JSON.stringify(name)};
   const said = (r) => r.folder === real ? { ...r, folder: long, ...(named ? { name: named } : {}) } : r;
   api.list_rehearsals = async () => (await list()).map(said);
@@ -1416,6 +1447,25 @@ test("a rehearsal played by a set shows its name in the list and under its title
   await expect(cut).toHaveText(long)
   await cut.hover()
   await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
+  await page.mouse.move(0, 0, { steps: 8 })
+
+  // The set gives way before the folder does: its button keeps its icon
+  // whole, and opens the folder.
+  const folder = page
+    .locator("[data-rehearsal-head]")
+    .getByRole("button", { name: "Open folder /rec/old", exact: true })
+  await expect(folder).toBeVisible()
+  const button = (await folder.boundingBox())!
+  const icon = (await folder.locator("svg").boundingBox())!
+  expect(icon.x, "the icon inside the button, left").toBeGreaterThanOrEqual(button.x - 0.5)
+  expect(icon.x + icon.width, "the icon inside the button, right").toBeLessThanOrEqual(
+    button.x + button.width + 0.5
+  )
+  const before = await callCount(page, "show_rehearsal_folder")
+  await folder.click()
+  await expect.poll(async () => (await calls(page, "show_rehearsal_folder")).slice(before)).toEqual([
+    { name: "show_rehearsal_folder", args: ["/rec/old"] },
+  ])
 })
 
 test("the set card counts what was played and says not played for the rest", async ({

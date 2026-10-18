@@ -40,14 +40,7 @@ export function hereFor(
   pb: PlacedPlayback | null,
   folder: string,
   take: Take
-): {
-  take: number
-  playing: boolean
-  loading: boolean
-  failed?: boolean
-  position: number
-  duration: number
-} | null {
+): (Omit<PlacedPlayback, "take"> & { take: number }) | null {
   if (!pb || !byPlace(pb.take, placed(folder, take))) return null
   return { ...pb, take: take.take_number }
 }
