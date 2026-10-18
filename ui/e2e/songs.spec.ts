@@ -5,7 +5,9 @@ import {
   expect,
   headsSeen,
   hold,
+  holdFor,
   letGo,
+  letThrough,
   notices,
   openApp,
   openBandApp,
@@ -18,6 +20,7 @@ import {
   startRehearsal,
   style,
   test,
+  waitingFor,
   watchHeads,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
@@ -57,6 +60,17 @@ async function chooseSong(page: Page, title: string) {
   await rows(page).and(page.locator(`[data-song='${title}']`)).click()
   await expect(head(page).getByRole("heading", { name: title })).toBeVisible()
 }
+
+/** The id the fake's library gives the song of that title. */
+const songId = (page: Page, title: string) =>
+  page.evaluate(async (t) => {
+    const api = (
+      window as unknown as {
+        pywebview: { api: { list_songs: () => Promise<{ songs: { id: number; title: string }[] }> } }
+      }
+    ).pywebview.api
+    return (await api.list_songs()).songs.find((s) => s.title === t)!.id
+  }, title)
 
 // Pałyn has two goes in First rehearsal too, after its Daroha 1 and 2.
 const EVERY_PALYN = `window.__FULL_EVENING__ = true; window.__EXTRA_SONGS__ = ["Pałyn", "Pałyn"];`
@@ -221,6 +235,40 @@ test.describe("Songs in History", () => {
     const seen = heads.filter((h, i) => h !== heads[i - 1])
     expect(seen).not.toContain("Daroha")
     expect(seen.slice(-2)).toEqual([null, "Pałyn"])
+  })
+
+  test("a song's page read late, after Songs was left, is not put back for another song", async ({
+    page,
+  }) => {
+    await openApp(page)
+    await openSongs(page)
+    await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
+
+    // Down to Pałyn, its page held; then out of Songs, and back in on
+    // Daroha, from First rehearsal's overview.
+    await holdFor(page, "get_song", await songId(page, "Pałyn"))
+    await page.keyboard.press("ArrowDown")
+    await expect(rows(page).and(page.locator("[aria-current='true']"))).toHaveAttribute(
+      "data-song",
+      "Pałyn"
+    )
+    await expect.poll(() => waitingFor(page)).toBe(1)
+    await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
+    await page
+      .getByRole("navigation", { name: "Rehearsals" })
+      .getByRole("button", { name: /^First rehearsal/ })
+      .click()
+    const overview = page.getByRole("region", { name: "Rehearsal overview" })
+    await overview.getByRole("button", { name: "Open the song Daroha" }).click()
+    await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
+
+    // Pałyn's page comes only now, and is not put back.
+    await watchHeads(page)
+    await letThrough(page)
+    await expect.poll(() => waitingFor(page)).toBe(0)
+    await page.waitForTimeout(300)
+    await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
+    expect(await headsSeen(page)).not.toContain("Pałyn")
   })
 
   test("Songs entered again on the same song shows its page at once, until the new read", async ({
@@ -1034,6 +1082,35 @@ test("the song page is one group: Starred, From last time and Every take split b
   await expect(parts(page)).toHaveCount(1)
   await expect(parts(page).first()).toHaveAttribute("aria-label", "Every take")
   expect((await style(parts(page).first(), "border-top-width"))["border-top-width"]).toBe("0px")
+})
+
+/** Pałyn 2's mark in Tuesday jam, with a note too long for its line. */
+const LONG_NOTE =
+  "this one is the take, though the second verse drags a little, the bridge comes in late " +
+  "and the ending needs work before the gig on Saturday"
+const PALYN_2_LONG_NOTE = `
+  const api = window.pywebview.api; const get = api.get_song;
+  api.get_song = async (id) => {
+    const r = await get(id);
+    r.goes = (r.goes || []).map((g) => ({...g, take: {...g.take,
+      markers: (g.take.markers || []).map((m) => ({...m, note: ${JSON.stringify(LONG_NOTE)}}))}}));
+    return r;
+  };
+`
+
+test("a note under From last time cut at the end of its line is whole in the tip", async ({ page }) => {
+  await openApp(page, { before: "window.__FULL_EVENING__ = true;", after: PALYN_2_LONG_NOTE })
+  await openSongs(page)
+  await chooseSong(page, "Pałyn")
+  await settled(page)
+  const note = page.getByRole("region", { name: "From last time" }).locator("button[data-note]")
+  await expect(note).toHaveCount(1)
+  const words = note.locator("span[data-note] > .truncate")
+  expect(await words.evaluate((el) => el.scrollWidth > el.clientWidth), "the note cut").toBe(true)
+  await note.hover()
+  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(
+    `Pałyn 2 · Keep this · ${LONG_NOTE}`
+  )
 })
 
 /** Daroha 2 of First rehearsal, its tracks where no file is: the fake

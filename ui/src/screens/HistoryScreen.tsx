@@ -11,7 +11,7 @@ import { Shell } from "@/components/Shell"
 import { PaneHead } from "@/components/PaneHead"
 import { RehearsalList } from "@/components/RehearsalList"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
-import { EveningFacts, showFolder } from "@/components/EveningFacts"
+import { EveningFacts } from "@/components/EveningFacts"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { SetName } from "@/components/SetPlayed"
 import { EveningActions } from "@/components/EveningActions"
@@ -54,6 +54,7 @@ import {
   rehearsalsLabel,
 } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
+import { showFolder } from "@/lib/folder"
 import { rise } from "@/lib/motion"
 import { useSystem, words } from "@/lib/platform"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
@@ -650,6 +651,9 @@ export function HistoryScreen({
     const index = await loadSongs()
     const ref = songRefFor(index, title)
     if (ref !== null) setSong(ref)
+    // enterView goes by the view at the click, from before the await. That
+    // is safe: whatever the view is by now, all it does is let go of another
+    // song's page or keep this song's own, which is right either way.
     enterView("songs", ref)
     void api().save_history_view("songs")
   }
@@ -1338,11 +1342,10 @@ export function HistoryScreen({
                         </>
                       )}
                       {summary.missing ? (
-                        // Where it was, to read: there is no folder to open.
-                        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                          <FolderOpen className="size-3.5 shrink-0" />
-                          <Whole text={summary.folder} className="min-w-0 truncate font-mono" />
-                        </span>
+                        // Where it was, to read: there is no folder to open,
+                        // so no folder icon either, which would make it look
+                        // like the button it is not.
+                        <Whole text={summary.folder} className="min-w-0 flex-1 truncate font-mono" />
                       ) : (
                         <FolderPath folder={summary.folder} />
                       )}

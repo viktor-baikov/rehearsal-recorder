@@ -194,16 +194,20 @@ export function useMultitrackPlayer(
         applyState(opened)
         setLoading(false)
         settle()
-        if (playNow) {
-          const s = await api().player_play()
-          if (!cancelled) applyState(s)
-        }
       } catch (e) {
         if (cancelled) return
         setLoadError(e instanceof Error ? e.message : String(e))
         setLoading(false)
         settle()
+        return
       }
+      // Outside the open's try: a take that opened and then would not start
+      // was loaded all the same. A start that fails is said as any other
+      // player call's failure is, by api() in the problem bar, and the take
+      // stays open, paused.
+      if (!playNow || cancelled) return
+      const s = await api().player_play()
+      if (!cancelled) applyState(s)
     })()
 
     return () => {

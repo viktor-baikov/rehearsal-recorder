@@ -1769,17 +1769,19 @@ window.__MAKE_API__ = () => ({
     return {ok:true, song_id:knownIds.get(old.song), name:old.name};
   }),
   // An old name put back (api.remember_song_name), refused as Python refuses
-  // it: its song gone, or the name another song's title or old name now.
+  // it: its song gone, the name empty, or another song's title or old name now.
   remember_song_name: track('remember_song_name', async (songId, name) => {
     songIds(await libraryNow());
     const song = titleOfId(songId);
     if (song === undefined) return {ok:false, error:'Its song is gone'};
-    const key = String(name || '').toLowerCase();
+    const spelt = String(name || '').trim();
+    if (!spelt) return {ok:false, error:'A song needs a title'};
+    const key = spelt.toLowerCase();
     const other = [...knownIds.keys()].find(s => s !== song && s.toLowerCase() === key);
     if (other) return {ok:false, error:`There is already a song called ${other}`};
     const old = oldNames.get(key);
-    if (old && old.song !== song) return {ok:false, error:`${name} is ${old.song} now`};
-    if (!old && key !== song.toLowerCase()) oldNames.set(key, {name, song});
+    if (old && old.song !== song) return {ok:false, error:`${spelt} is ${old.song} now`};
+    if (!old && key !== song.toLowerCase()) oldNames.set(key, {name:spelt, song});
     return {ok:true};
   }),
   save_history_view: track('save_history_view', async (view) => {

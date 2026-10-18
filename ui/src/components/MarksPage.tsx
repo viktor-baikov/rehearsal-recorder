@@ -122,7 +122,16 @@ export function MarksPage({
             }}
           >
             {GROUPINGS.map((g) => (
-              <ToggleGroupItem key={g.grouping} value={g.grouping}>
+              <ToggleGroupItem
+                key={g.grouping}
+                value={g.grouping}
+                // As on History's switch: a click lets go of the focus, so
+                // ←, → and Space are the mark playing's again; a choice
+                // made from the keys keeps it.
+                onClick={(e) => {
+                  if (e.detail > 0) e.currentTarget.blur()
+                }}
+              >
                 {g.label}
               </ToggleGroupItem>
             ))}
@@ -232,7 +241,9 @@ function MarkRow({
       className={cn(
         "-mx-2 grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-2 py-1.5",
         NARROW.columns,
-        m.missing ? "opacity-55" : "cursor-pointer hover:bg-accent/60",
+        // Lit under the pointer, and while the focus is on one of its
+        // controls, as a take's row is.
+        m.missing ? "opacity-55" : "cursor-pointer hover:bg-accent/60 focus-within:bg-accent/60",
         here && "bg-accent/60"
       )}
     >

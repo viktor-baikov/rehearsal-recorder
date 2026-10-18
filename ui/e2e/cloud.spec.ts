@@ -101,8 +101,10 @@ test("a share option is named by its title and described by its hint", async ({ 
   await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
   await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
 
-  // The name is the title alone; the hint is what a screen reader says after it.
-  const mix = page.getByRole("button", { name: "The mix", exact: true })
+  // The name is the title alone; the hint is what a screen reader says after
+  // it. The option is found by its hint, so the name is what is checked.
+  const mix = page.getByRole("dialog").getByRole("button").filter({ hasText: MIX_HINT })
+  await expect(mix).toHaveCount(1)
   await expect(mix).toHaveAccessibleName("The mix")
   await expect(mix).toHaveAccessibleDescription(MIX_HINT)
   await expect(page.getByRole("button", { name: "The original tracks", exact: true })).toHaveAccessibleDescription(

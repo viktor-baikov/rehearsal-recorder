@@ -260,6 +260,33 @@ test.describe("History", () => {
     await expect.poll(() => callCount(page, "player_seek")).toBe(seeks + 1)
   })
 
+  test("a view chosen with the mouse gives left, right and Space back to the take playing", async ({
+    page,
+  }) => {
+    // The switch keeps no focus after a click: the next arrow skips through
+    // the take, and Space pauses it, rather than choosing another view.
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    await openHistory(page)
+    const overview = page.locator("[aria-label='Rehearsal overview']")
+    await overview.getByRole("button", { name: "Play Pałyn 1" }).click()
+    await expect(overview.getByRole("button", { name: "Pause Pałyn 1" })).toBeVisible()
+    const seeks = await callCount(page, "player_seek")
+    const toggles = await callCount(page, "player_toggle")
+
+    const views = page.getByRole("radiogroup", { name: "History view" })
+    const songs = views.getByRole("radio", { name: "Songs", exact: true })
+    await songs.click()
+    await expect(songs).toHaveAttribute("aria-checked", "true")
+    await page.keyboard.press("ArrowRight")
+    await expect.poll(() => callCount(page, "player_seek")).toBe(seeks + 1)
+    await expect(songs).toHaveAttribute("aria-checked", "true")
+
+    await page.keyboard.press("Space")
+    await expect.poll(() => callCount(page, "player_toggle")).toBe(toggles + 1)
+    await expect(songs).toHaveAttribute("aria-checked", "true")
+    expect((await calls(page, "save_history_view")).map((c) => c.args)).toEqual([["songs"]])
+  })
+
   test("a chosen row is grey with no frame", async ({ page }) => {
     await openApp(page)
     await openHistory(page)
@@ -1081,10 +1108,12 @@ test("a rehearsal not on disk says Not found on disk in red, its path plain text
     "background-color": await colour(page, "--card"),
     "border-top-width": "0px",
   })
-  // Its path is there to read, and is no button: there is no folder to open.
+  // Its path is there to read, and is no button: there is no folder to open,
+  // so it has no folder icon either, which would make it look like the button.
   const line = paneHead(page).locator("[data-rehearsal-head]")
   await expect(line).toContainText("/rec/gone")
   await expect(paneHead(page).getByRole("button")).toHaveCount(0)
+  await expect(line.locator("svg.lucide-folder-open")).toHaveCount(0)
 })
 
 test("the path under the name opens its folder, its tip in the system's words", async ({ page }) => {
@@ -1140,12 +1169,14 @@ test("a pane head's heading is named by its title alone, on a rehearsal's page a
   page,
 }) => {
   await openApp(page)
-  await openHistory(page)
+  const list = await openHistory(page)
   const head = paneHead(page)
   await expect(head.getByRole("heading", { name: "Tuesday jam", exact: true })).toBeVisible()
-  // The pencil after the last word keeps its own name, and the keys reach it.
+  // The pencil after the last word keeps its own name, and the keys reach
+  // it: Tab from the last rehearsal in the list, the stop before the head.
   const pencil = head.getByRole("button", { name: "Rename rehearsal Tuesday jam", exact: true })
-  await pencil.focus()
+  await list.getByRole("button", { name: /^Missing jam/ }).focus()
+  await page.keyboard.press("Tab")
   await expect(pencil).toBeFocused()
 
   await page.getByRole("radio", { name: "Songs", exact: true }).click()

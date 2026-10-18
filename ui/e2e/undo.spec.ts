@@ -896,6 +896,9 @@ test("forgetting an old name on a song's page says so, and Undo brings it back",
 }) => {
   await openApp(page, { before: OLD_PALYN })
   await openSong(page, "Pałyn")
+  // The song whose page it is: the last one read.
+  const palyn = (await calls(page, "get_song")).at(-1)?.args[0]
+  expect(typeof palyn).toBe("number")
   await forgetPalyn(page).click()
   await expect(forgetPalyn(page)).toHaveCount(0)
 
@@ -905,7 +908,39 @@ test("forgetting an old name on a song's page says so, and Undo brings it back",
 
   await expect(forgetPalyn(page)).toBeVisible()
   await expect(notice).toHaveCount(0)
-  expect((await calls(page, "remember_song_name")).map((c) => c.args[1])).toEqual(["Palyn"])
+  // Back to that song, spelt as it was.
+  expect((await calls(page, "remember_song_name")).map((c) => c.args)).toEqual([[palyn, "Palyn"]])
+})
+
+test("Undo of a forgotten name that another song has taken since says why", async ({ page }) => {
+  // Nothing stubbed: the fake refuses it as Python does, Daroha being
+  // called Palyn by the time Undo is pressed.
+  await openApp(page, { before: OLD_PALYN })
+  await openSong(page, "Pałyn")
+  await forgetPalyn(page).click()
+  const notice = said(page, "“Palyn” was forgotten.")
+  await expect(notice).toHaveCount(1)
+  const renamed = await page.evaluate(async () => {
+    const api = (
+      window as unknown as {
+        pywebview: {
+          api: {
+            list_songs: () => Promise<{ songs: { id: number; title: string }[] }>
+            rename_song: (id: number, title: string) => Promise<{ ok: boolean }>
+          }
+        }
+      }
+    ).pywebview.api
+    const daroha = (await api.list_songs()).songs.find((s) => s.title === "Daroha")!
+    return api.rename_song(daroha.id, "Palyn")
+  })
+  expect(renamed.ok).toBe(true)
+  await notice.getByRole("button", { name: "Undo" }).click()
+
+  const refused = notices(page, "error")
+  await expect(refused).toHaveCount(1)
+  await expect(refused).toContainText("Could not bring back Palyn: There is already a song called Palyn")
+  await expect(forgetPalyn(page)).toHaveCount(0)
 })
 
 test("Undo of a forgotten name that has become another song's says why", async ({ page }) => {

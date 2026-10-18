@@ -1,11 +1,12 @@
-import type { ReactNode } from "react"
+import { useCallback, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { MarkLine } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
+import { useCut, WholeTip } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
-import type { SongDetail } from "@/lib/api"
+import type { Label, Marker, SongDetail, SongGo } from "@/lib/api"
 import { formatDayIn } from "@/lib/format"
-import { labelOf, useLabels } from "@/lib/labels"
+import { labelOf, markText, useLabels } from "@/lib/labels"
 import { rise } from "@/lib/motion"
 import { playLook } from "@/lib/playLook"
 import {
@@ -133,20 +134,13 @@ export function SongPage({
       body: (
         <div className="-mx-2 flex flex-col">
           {marks.map(({ go, marker }) => (
-            <Button
+            <Note
               key={`${go.take.take_number}-${marker.at}`}
-              variant="ghost"
-              data-note
-              onClick={() => onOpenAt(placed(go.folder, go.take), marker.at)}
-              className="h-auto w-full justify-start px-2 py-1 text-sm font-normal"
-            >
-              <MarkLine
-                label={labelOf(labels, marker.label_id)}
-                at={marker.at}
-                note={marker.note}
-                take={<TakeTitle take={go.take} />}
-              />
-            </Button>
+              go={go}
+              marker={marker}
+              label={labelOf(labels, marker.label_id)}
+              onOpen={() => onOpenAt(placed(go.folder, go.take), marker.at)}
+            />
           ))}
         </div>
       ),
@@ -245,5 +239,52 @@ export function SongPage({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * A mark from last time, as the shared button that opens its take at the
+ * mark. MarkLine cuts the take's name and the words at the end of the line;
+ * cut, they show whole in the shared tip, on hover and from the keys, as a
+ * comment in Marks does.
+ */
+function Note({
+  go,
+  marker,
+  label,
+  onOpen,
+}: {
+  go: SongGo
+  marker: Marker
+  label: Label
+  onOpen: () => void
+}) {
+  const [cutRef, cut] = useCut<HTMLElement>()
+  // MarkLine, in components/ui, takes no ref, so the part of it that is
+  // cut is found in the button and measured there.
+  const measure = useCallback(
+    (button: HTMLButtonElement | null) =>
+      cutRef(button?.querySelector<HTMLElement>("span[data-note] > .truncate") ?? null),
+    [cutRef]
+  )
+  return (
+    <WholeTip
+      cut={cut}
+      text={
+        <>
+          <TakeTitle take={go.take} /> · {markText(label, marker.note)}
+        </>
+      }
+    >
+      <Button
+        ref={measure}
+        variant="ghost"
+        data-note
+        onClick={onOpen}
+        className="h-auto w-full justify-start px-2 py-1 text-sm font-normal"
+      >
+        <MarkLine label={label} at={marker.at} note={marker.note} take={<TakeTitle take={go.take} />} />
+      </Button>
+    </WholeTip>
   )
 }

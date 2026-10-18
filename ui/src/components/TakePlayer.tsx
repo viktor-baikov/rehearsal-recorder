@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import { rise } from "@/lib/motion"
-import { SPINNER_AFTER_MS } from "@/lib/playLook"
+import { playLabel, SPINNER_AFTER_MS } from "@/lib/playLook"
 import { api, type Marker, type MissingNotes, type NotesFile, type TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 
@@ -422,12 +422,22 @@ function Transport({
         <Undo2 />
       </Button>
 
+      {/* Play stays on for a take that could not be loaded: pressed, as
+          Space is, it loads the take again and plays it. Its name then is
+          the one a take's ▶ has on the other pages, with "the take" for
+          the take's own name, which this button does not carry. */}
       <Button
         size="player"
         className="rounded-full"
         onClick={player.toggle}
-        disabled={player.loading || !!player.loadError}
-        aria-label={player.playing ? "Pause" : "Play"}
+        disabled={player.loading}
+        aria-label={
+          player.loadError
+            ? playLabel("failed", "the take")
+            : player.playing
+              ? "Pause"
+              : "Play"
+        }
         aria-keyshortcuts={spaceKey ? "Space" : undefined}
       >
         {slow ? <Spinner after={0} /> : player.playing ? <Pause /> : <Play />}

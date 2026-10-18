@@ -15,6 +15,16 @@ const listeners = new Set<() => void>()
 /** The slot of the notices about an old name. */
 const SAID = "song-names"
 
+/** What Python refused to do with an old name, and why when it said:
+ *  "Could not forget Palyn: …", "Could not bring back Palyn: …". */
+function refused(what: string, name: string, error?: string) {
+  notify({
+    key: SAID,
+    kind: "error",
+    text: error ? `Could not ${what} ${name}: ${error}` : `Could not ${what} ${name}`,
+  })
+}
+
 function subscribe(listener: () => void) {
   listeners.add(listener)
   return () => {
@@ -45,11 +55,7 @@ export async function forgetSongName(name: string, onUndone?: () => unknown): Pr
   dismiss(SAID)
   const res = await api().forget_song_name(name)
   if (!res.ok) {
-    notify({
-      key: SAID,
-      kind: "error",
-      text: res.error ? `Could not forget ${name}: ${res.error}` : `Could not forget ${name}`,
-    })
+    refused("forget", name, res.error)
     return false
   }
   changed()
@@ -70,16 +76,13 @@ export async function forgetSongName(name: string, onUndone?: () => unknown): Pr
   return true
 }
 
+/** The notice's Undo: puts the name back on the song that had it, spelt as
+ *  it was, and has the screen read the song again. Refused, it says why and
+ *  nothing changes. */
 async function bringBack(songId: number, name: string, onUndone: () => unknown) {
   const res = await api().remember_song_name(songId, name)
   if (!res.ok) {
-    notify({
-      key: SAID,
-      kind: "error",
-      text: res.error
-        ? `Could not bring back ${name}: ${res.error}`
-        : `Could not bring back ${name}`,
-    })
+    refused("bring back", name, res.error)
     return
   }
   changed()

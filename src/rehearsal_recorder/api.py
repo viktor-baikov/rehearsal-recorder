@@ -3219,8 +3219,8 @@ class Api:
     def remember_song_name(self, song_id, name):
         """Puts back an old name that forget_song_name took, for the Undo of
         its notice (Library.remember_song_name): {"ok": True}, or {"ok":
-        False, "error"} when its song is gone or the name is another
-        song's now."""
+        False, "error"} when its song is gone, the name is empty or the name
+        is another song's now."""
         try:
             self._lib.remember_song_name(song_id, name)
         except SongRefused as e:

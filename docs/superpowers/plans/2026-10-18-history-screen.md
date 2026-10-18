@@ -24,7 +24,7 @@ The reference for the rehearsal's head is the owner's mockup patch, `/mnt/projec
 - **Motion in tests:** since PR #54 (on main after 0d18b89) browser tests run with reduced motion. A test that checks an animation opts back in with `test.use({ reducedMotion: "no-preference" })` or `await page.emulateMedia({ reducedMotion: "no-preference" })`, as main's `review.spec.ts` rise test does.
 - **Running:** in `ui/`, `npx tsc -b`, `npm run lint`, `npm run design-check`, the touched Vitest files, one `npm run build`, then only the touched specs, each once: `npx playwright test -c playwright.local.config.ts <specs>` (that config is git-ignored and is in the main checkout; a worktree copies it). Python: each touched test file once (`python tests/test_store.py`). No repeats and no full suite: CI runs it.
 - **Order:** Tasks 1, 2 and 3 run in parallel worktrees; they have no file in common. Tasks 4 to 8 run after them, one at a time, in order: Task 1 changes one line of `HistoryScreen.tsx`, then Task 4 owns it and no later task touches it; 4 and 5 share `history.spec.ts` and `RehearsalOverview.tsx`; 5, 6 and 7 each edit `design-check.allow.json`.
-- No model names in code, docs or commits. Commits end with `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>` and no other trailer.
+- No model names in code, docs or commits. Commits end with the session's Co-Authored-By trailer and no other trailer.
 
 ## Review Focus
 

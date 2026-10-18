@@ -3,11 +3,11 @@ import { FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FigureLine, WholeTip, useFitted } from "@/components/ui/whole"
-import { api, type Take } from "@/lib/api"
+import type { Take } from "@/lib/api"
 import { eveningOf, lengthLabel, takesLine } from "@/lib/evening"
 import { fitFigures, joinFigures } from "@/lib/figures"
+import { showFolder } from "@/lib/folder"
 import { formatBytes } from "@/lib/format"
-import { notify } from "@/lib/notices"
 import { useSystem, words } from "@/lib/platform"
 import { cn } from "@/lib/utils"
 
@@ -21,14 +21,6 @@ function Fact({ label, value, hidden }: { label: string; value: string; hidden?:
       <dd className={VALUE}>{value}</dd>
     </div>
   )
-}
-
-/** The rehearsal's folder, opened in the system's file manager; what went
- *  wrong is said in a notice. */
-// oxlint-disable-next-line react/only-export-components -- the folder button here and History's path line under a rehearsal's name both open the folder this way
-export async function showFolder(folder: string) {
-  const res = await api().show_rehearsal_folder(folder)
-  if (!res.ok) notify({ key: "folder", kind: "error", text: res.error ?? "Could not open the folder" })
 }
 
 /**

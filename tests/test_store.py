@@ -1014,6 +1014,12 @@ def main():
     lib.remember_song_name(target13, "PALYN")
     ok("the song's own title is not one of its old names",
        lib.song_names() == {"Palyn": ["Pałyn", "polin", "Polyn"]})
+    ok("an empty name is refused as an empty title is, and nothing is added",
+       refused13(lib.remember_song_name, target13, "   ") == ("A song needs a title", None)
+       and lib.song_names() == {"Palyn": ["Pałyn", "polin", "Polyn"]})
+    lib.remember_song_name(target13, "  polin  ")
+    ok("a name is put back without the spaces round it",
+       lib.song_names() == {"Palyn": ["Pałyn", "polin", "Polyn"]})
 
     lib.forget_song_name("Polyn")
     lib.rename_song(viasna13, "Polyn")

@@ -4,6 +4,8 @@ import {
   colour,
   expect,
   headsSeen,
+  holdFor,
+  letThrough,
   openApp,
   openHistory,
   scaled,
@@ -11,6 +13,7 @@ import {
   settled,
   style,
   test,
+  waitingFor,
   watchHeads,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
@@ -117,6 +120,40 @@ const letGo = (page: Page) =>
     const w = window as unknown as { __HOLD__?: object; __LET_GO__: () => void }
     w.__HOLD__ = {}
     w.__LET_GO__()
+  })
+
+/** A frame's Marks page: its head's title and the marks under it. */
+type Drawn = { head: string | null; marks: string[] }
+
+/** From now on, at every frame, the Marks page drawn, or null in a frame
+ *  with none. `pagesSeen` stops and says them. */
+const watchPages = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __PAGES__: (Drawn | null)[]; __WATCHING_PAGES__: boolean }
+    w.__PAGES__ = []
+    w.__WATCHING_PAGES__ = true
+    const look = () => {
+      if (!w.__WATCHING_PAGES__) return
+      const group = document.querySelector("[data-marks-group]")
+      w.__PAGES__.push(
+        group
+          ? {
+              head:
+                group.parentElement?.querySelector("[data-pane-head] h2")?.getAttribute("aria-label") ??
+                null,
+              marks: Array.from(group.querySelectorAll("[data-mark]"), (m) => m.getAttribute("data-mark")!),
+            }
+          : null
+      )
+      requestAnimationFrame(look)
+    }
+    requestAnimationFrame(look)
+  })
+const pagesSeen = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __PAGES__: (Drawn | null)[]; __WATCHING_PAGES__: boolean }
+    w.__WATCHING_PAGES__ = false
+    return w.__PAGES__
   })
 
 test.describe("Marks in History", () => {
@@ -352,6 +389,35 @@ test.describe("Marks in History", () => {
     expect(await calls(page, "save_marks_grouping")).toEqual([])
   })
 
+  test("a grouping chosen with the mouse gives left, right and Space back to the mark playing", async ({
+    page,
+  }) => {
+    // Group by keeps no focus after a click: the next arrow skips through
+    // the take, and Space pauses it, rather than choosing another grouping.
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    await chooseLabel(page, 3, "Went wrong")
+    const marks = pane(page, "Went wrong")
+    const viasna = row(page, VIASNA)
+    await viasna.getByRole("button", { name: "Play Viasna 1 from 0:35" }).click()
+    await expect(viasna.getByRole("button", { name: "Pause Viasna 1 from 0:35" })).toBeVisible()
+    await expect.poll(() => lastSeek(page)).toBe(35)
+    const seeks = await callCount(page, "player_seek")
+    const toggles = await callCount(page, "player_toggle")
+
+    const bySong = marks.getByRole("radio", { name: "By song" })
+    await bySong.click()
+    await expect(bySong).toHaveAttribute("aria-checked", "true")
+    await page.keyboard.press("ArrowRight")
+    await expect.poll(() => callCount(page, "player_seek")).toBe(seeks + 1)
+    await expect(bySong).toHaveAttribute("aria-checked", "true")
+
+    await page.keyboard.press("Space")
+    await expect.poll(() => callCount(page, "player_toggle")).toBe(toggles + 1)
+    await expect(bySong).toHaveAttribute("aria-checked", "true")
+    expect((await calls(page, "save_marks_grouping")).map((c) => c.args)).toEqual([["song"]])
+  })
+
   test("the page stays until the next label's marks are read, then starts at its top, the focus on Group by", async ({
     page,
   }) => {
@@ -419,6 +485,74 @@ test.describe("Marks in History", () => {
     const seen = heads.filter((h, i) => h !== heads[i - 1])
     expect(seen).not.toContain(null)
     expect(seen.at(-1)).toBe("Went wrong")
+  })
+
+  test("a label chosen while its marks are read, then Marks left and entered again, shows no other label's marks", async ({
+    page,
+  }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    const note = pane(page, "Note")
+    await expect(note.getByRole("heading", { name: "Note", level: 2 })).toBeVisible()
+    const noteMarks = await marksOn(page)
+    expect(noteMarks.length).toBeGreaterThan(0)
+
+    // Down to Keep this, its marks held: Note's page stays. Then out of
+    // Marks, and back in, Keep this's marks read again and held.
+    await hold(page, "list_marks")
+    await page.keyboard.press("ArrowDown")
+    await expect(labelItem(page, 2)).toHaveAttribute("aria-current", "true")
+    await expect(note.getByRole("heading", { name: "Note", level: 2 })).toBeVisible()
+    await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
+    await expect(page.locator("[data-pane-head] h2")).toHaveAttribute("aria-label", "Tuesday jam")
+    await watchPages(page)
+    await page.getByRole("radio", { name: "Marks", exact: true }).click()
+    await expect(labelItem(page, 2)).toHaveAttribute("aria-current", "true")
+
+    // Note's page is not drawn under Keep this: the pane is empty until
+    // Keep this's marks are read.
+    await page.waitForTimeout(300)
+    await expect(page.locator("[data-marks-group]")).toHaveCount(0)
+    await letGo(page)
+    const keep = pane(page, "Keep this")
+    await expect(keep.getByRole("heading", { name: "Keep this", level: 2 })).toBeVisible()
+    await expect(keep.locator("[data-mark]")).toHaveCount(1)
+    const pages = (await pagesSeen(page)).filter((p) => p !== null)
+    expect(pages.length).toBeGreaterThan(0)
+    expect(pages.filter((p) => p.head !== "Keep this")).toEqual([])
+    expect(pages.filter((p) => p.marks.some((m) => noteMarks.includes(m)))).toEqual([])
+  })
+
+  test("a label's marks read late, after Marks was left, put no page back on another label", async ({
+    page,
+  }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    const note = pane(page, "Note")
+    await expect(note.getByRole("heading", { name: "Note", level: 2 })).toBeVisible()
+    const noteMarks = await marksOn(page)
+
+    // Keep this's marks held, and Note chosen again before they come; then
+    // out of Marks and back in, on Note.
+    await holdFor(page, "list_marks", 2)
+    await page.keyboard.press("ArrowDown")
+    await expect(labelItem(page, 2)).toHaveAttribute("aria-current", "true")
+    await expect.poll(() => waitingFor(page)).toBe(1)
+    await page.keyboard.press("ArrowUp")
+    await expect(labelItem(page, 1)).toHaveAttribute("aria-current", "true")
+    await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
+    await expect(page.locator("[data-pane-head] h2")).toHaveAttribute("aria-label", "Tuesday jam")
+    await page.getByRole("radio", { name: "Marks", exact: true }).click()
+    await expect(note.getByRole("heading", { name: "Note", level: 2 })).toBeVisible()
+
+    // Keep this's answer comes only now, and puts no page of it back.
+    await watchHeads(page)
+    await letThrough(page)
+    await expect.poll(() => waitingFor(page)).toBe(0)
+    await page.waitForTimeout(300)
+    await expect(note.getByRole("heading", { name: "Note", level: 2 })).toBeVisible()
+    expect(await headsSeen(page)).not.toContain("Keep this")
+    expect(await marksOn(page)).toEqual(noteMarks)
   })
 
   test("play starts 5 s before the mark, and again pauses", async ({ page }) => {
@@ -521,6 +655,10 @@ test.describe("Marks in History", () => {
       ...resting,
       "background-color": "rgba(0, 0, 0, 0)",
     })
+    // The row's fill under the pointer, once its fade has run.
+    await viasna.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
+    const lit = (await style(viasna, "background-color"))["background-color"]
+    expect(lit).not.toBe("rgba(0, 0, 0, 0)")
     const unsaid = row(page, DAROHA).locator("[data-line='comment']")
     await unsaid.hover()
     expect((await style(unsaid, "color")).color).toBe(
@@ -530,8 +668,12 @@ test.describe("Marks in History", () => {
     await viasna.locator("[data-look]").focus()
     await page.keyboard.press("Tab")
     await expect(comment).toBeFocused()
-    // With the shared focus ring.
+    // With the shared focus ring, and the row lit as it is under the
+    // pointer, so the keys show which mark's row they are on.
     expect((await style(comment, "box-shadow"))["box-shadow"]).not.toBe("none")
+    await expect
+      .poll(async () => (await style(viasna, "background-color"))["background-color"])
+      .toBe(lit)
     await page.keyboard.press("Enter")
     await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
     await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
