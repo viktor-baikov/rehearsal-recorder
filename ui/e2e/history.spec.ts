@@ -1474,19 +1474,108 @@ test("the set card counts what was played and says not played for the rest", asy
   await openApp(page, { before: PLAYED_BY_SET })
   await openHistory(page, "Tuesday jam")
   const card = page.getByRole("region", { name: "Set Gig on the 25th" })
-  await expect(card).toContainText("Gig on the 25th — 2 of 4 played")
-  const songs = card.locator("[data-set-played]")
+  await expect(card).toHaveAttribute("data-set-card")
+  await expect(card.getByRole("heading")).toHaveText("Gig on the 25th · 2 of 4 played")
+  const songs = card.locator("[data-set-song]")
   await expect(songs).toHaveText([/1\s*Viasna\s*1 take/, /2\s*Pałyn\s*2 takes/, /3\s*Ahoń\s*not played/, /4\s*Kupalle\s*not played/])
-  // Two columns read down: Ahoń heads the second.
-  const first = (await songs.nth(0).boundingBox())!
-  const third = (await songs.nth(2).boundingBox())!
+  // Two columns read down: Pałyn under Viasna, Ahoń heads the second.
+  const [first, second, third, fourth] = await Promise.all(
+    [0, 1, 2, 3].map(async (i) => (await songs.nth(i).boundingBox())!)
+  )
+  expect(second.x).toBeCloseTo(first.x, 0)
+  expect(second.y).toBeGreaterThan(first.y + first.height - 1)
   expect(third.x).toBeGreaterThan(first.x + first.width - 1)
   expect(third.y).toBeCloseTo(first.y, 0)
+  expect(fourth.x).toBeCloseTo(third.x, 0)
+  // History looks back: nothing is next, lit or under the arrow keys.
+  await expect(card.getByText("next", { exact: true })).toHaveCount(0)
+  await expect(card.locator("[aria-current], [data-highlighted]")).toHaveCount(0)
   // Over the songs, under the figures.
-  const pałyn = (await page.getByRole("group", { name: "Pałyn" }).boundingBox())!
-  expect((await card.boundingBox())!.y).toBeLessThan(pałyn.y)
+  const palyn = (await page.getByRole("group", { name: "Pałyn" }).boundingBox())!
+  expect((await card.boundingBox())!.y).toBeLessThan(palyn.y)
   // The take nobody named is where it was.
   await expect(page.getByRole("group", { name: "Not named" })).toBeVisible()
+})
+
+test("the set card is the first part of the evening's group, in two columns when wide", async ({
+  page,
+}) => {
+  await openApp(page, { before: PLAYED_BY_SET })
+  await openHistory(page, "Tuesday jam")
+  await settled(page)
+  const group = page.locator("[data-songs-group]")
+  const head = group.locator("[data-overview-head]")
+  const part = group.locator("[data-set-part]")
+  const firstSong = group.locator("[data-song-group]").first()
+  // One part of the one group, with the set card in it and nowhere else.
+  await expect(part).toHaveCount(1)
+  await expect(part.locator("[data-set-card]")).toHaveCount(1)
+  await expect(page.locator("[data-set-card]")).toHaveCount(1)
+  // After the head, before the first song, a 1 px line over each of them
+  // and 24 px of air in the part.
+  const [h, p, s] = await Promise.all(
+    [head, part, firstSong].map(async (l) => (await l.boundingBox())!)
+  )
+  expect(p.y, "the part starts under the head").toBeGreaterThanOrEqual(h.y + h.height - 0.5)
+  expect(s.y, "the first song starts under the part").toBeGreaterThanOrEqual(p.y + p.height - 0.5)
+  expect(p.x).toBeCloseTo(h.x, 0)
+  expect(p.width).toBeCloseTo(h.width, 0)
+  expect(await style(part, "border-top-width", "padding-top", "padding-bottom", "padding-left")).toEqual({
+    "border-top-width": "1px",
+    "padding-top": "24px",
+    "padding-bottom": "24px",
+    "padding-left": "24px",
+  })
+  expect((await style(firstSong, "border-top-width"))["border-top-width"]).toBe("1px")
+
+  // Wide, the songs are two columns read down; one column under 32rem. At
+  // 960 x 680 and 150 % the card is far under it.
+  const columns = async () => {
+    const rows = page.locator("[data-set-card] [data-set-song]")
+    const boxes = await Promise.all([0, 1, 2, 3].map(async (i) => (await rows.nth(i).boundingBox())!))
+    return new Set(boxes.map((b) => Math.round(b.x))).size
+  }
+  expect(await columns()).toBe(2)
+  await page.setViewportSize({ width: 960, height: 680 })
+  await page.addInitScript(scaled(1.5))
+  await page.reload()
+  await openHistory(page, "Tuesday jam")
+  await settled(page)
+  expect(await columns()).toBe(1)
+  const rows = page.locator("[data-set-card] [data-set-song]")
+  const ys = await Promise.all([0, 1, 2, 3].map(async (i) => (await rows.nth(i).boundingBox())!.y))
+  expect(ys).toEqual([...ys].sort((a, b) => a - b))
+  expect(new Set(ys).size).toBe(4)
+  // Nothing scrolls sideways.
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
+  ).toBe(true)
+})
+
+test("the set card's ticks are in the text's colour", async ({ page }) => {
+  await openApp(page, { before: PLAYED_BY_SET })
+  await openHistory(page, "Tuesday jam")
+  // Viasna and Pałyn were played; the other two have none.
+  const ticks = page.locator("[data-set-card] [data-played-check]")
+  await expect(ticks).toHaveCount(2)
+  const text = await colour(page, "--foreground")
+  expect(await ticks.evaluateAll((els) => els.map((e) => getComputedStyle(e).color))).toEqual([text, text])
+})
+
+test("a song of the set card cut short is whole on hover, though it was not played", async ({
+  page,
+}) => {
+  // A disabled button gets no pointer events, so the item round it carries the tip.
+  const long = "A song whose name is far too long for its half of the set card, however it is read"
+  await page.setViewportSize({ width: 960, height: 680 })
+  await openApp(page, { before: PLAYED_BY_SET.replace('"Kupalle"', JSON.stringify(long)) })
+  await openHistory(page, "Tuesday jam")
+  await settled(page)
+  const song = page.locator(`[data-set-song=${JSON.stringify(long)}]`)
+  await expect(song).toBeDisabled()
+  expect(await song.locator("[data-row-title]").evaluate((e) => e.scrollWidth > e.clientWidth)).toBe(true)
+  await song.locator("xpath=..").hover()
+  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
 })
 
 test("a click on a played song in the set card scrolls to it", async ({ page }) => {
@@ -1496,16 +1585,16 @@ test("a click on a played song in the set card scrolls to it", async ({ page }) 
   const viasna = page.getByRole("group", { name: "Viasna" })
   await expect(viasna).not.toBeInViewport()
   const card = page.getByRole("region", { name: "Set Gig on the 25th" })
-  await card.locator("[data-set-played='Viasna']").click()
+  await card.locator("[data-set-song='Viasna']").click()
   await expect(viasna).toBeInViewport()
   // A song not played has nowhere to go.
-  await expect(card.locator("[data-set-played='Ahoń']")).toBeDisabled()
+  await expect(card.locator("[data-set-song='Ahoń']")).toBeDisabled()
 })
 
 test("a rehearsal played freely has no set card", async ({ page }) => {
   await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
   await openHistory(page, "Tuesday jam")
   await expect(page.getByRole("group", { name: "Pałyn" })).toBeVisible()
-  await expect(page.locator("[data-set-played-card]")).toHaveCount(0)
+  await expect(page.locator("[data-set-card]")).toHaveCount(0)
   await expect(page.locator("[data-set-name]")).toHaveCount(0)
 })

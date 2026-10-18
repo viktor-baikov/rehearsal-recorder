@@ -17,7 +17,7 @@ import { TAKE_FILLS } from "@/lib/takeScale"
 import { rise, scrollBehavior } from "@/lib/motion"
 import { TakeTitle } from "@/components/TakeTitle"
 import { SongName } from "@/components/SongName"
-import { SetPlayedCard } from "@/components/SetPlayed"
+import { SetCard } from "@/components/NextTakeSongs"
 import type { RehearsalSet, Song, SongChoices, Take } from "@/lib/api"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
@@ -48,10 +48,10 @@ function inCloud(take: Take): boolean {
  * of it, and every note left while listening.
  *
  * The songs are one group: the label legend at its head on the left, the
- * screen's `actions` (Send starred, Clear false starts) on the right, then
- * each song under a 1 px line, a take nobody named last of them. The evening's
- * figures are not here: the header says them, and it is in view with a take
- * open too.
+ * screen's `actions` (Send starred, Clear false starts) on the right, then,
+ * for an evening played by a set (`set`), the set's card, then each song, all
+ * under 1 px lines, a take nobody named last of them. The evening's figures
+ * are not here: the header says them, and it is in view with a take open too.
  *
  * Each take is a row: a bar drawn to scale — so the take that ran long or
  * stopped short is plain before anything is read — with its marks where
@@ -117,8 +117,8 @@ export function RehearsalOverview({
   onName?: (take: Take, title: string) => void
   /** Drawn on the right of the group's head. */
   actions?: ReactNode
-  /** The set it was played by, as History has it: a card of what was
-   *  played over the songs. */
+  /** The set it was played by, as History has it: the group's first part,
+   *  a card of what was played of it, over the songs. */
   set?: RehearsalSet | null
   /** The songs' group's place in the line the screen's groups rise in by
    *  (lib/motion's rise): 0 where it is the first, as on the rehearsal
@@ -174,21 +174,27 @@ export function RehearsalOverview({
   )
 
   return (
-    <section aria-label="Rehearsal overview" className="flex flex-col gap-12">
-      {set && (
-        <SetPlayedCard
-          set={set}
-          goes={new Map(rows.map((r) => [r.name, r.takes.length]))}
-          onGoTo={(title) =>
-            groups.current
-              .get(title)
-              ?.scrollIntoView({ behavior: scrollBehavior(), block: "start" })
-          }
-        />
-      )}
-
+    <section aria-label="Rehearsal overview" className="flex flex-col">
       <div data-songs-group className="flex animate-rise flex-col rounded-xl bg-card" style={rise(place)}>
         {head}
+        {/* The set the evening was played by is the group's first part: what
+            was played of it, each song played going to its own below. The
+            card's rows line up with the songs' names, as a take's row does. */}
+        {set && (
+          <div data-set-part className={cn("px-6 py-6", head && "border-t")}>
+            <div className="-mx-2">
+              <SetCard
+                set={set}
+                goes={new Map(rows.map((r) => [r.name, r.takes.length]))}
+                onGoTo={(title) =>
+                  groups.current
+                    .get(title)
+                    ?.scrollIntoView({ behavior: scrollBehavior(), block: "start" })
+                }
+              />
+            </div>
+          </div>
+        )}
         {rows.map((row, i) => {
           const isUnnamed = row.name === NOT_NAMED
           return (
@@ -204,9 +210,9 @@ export function RehearsalOverview({
               // A line above each song, under the head or the song before.
               className={cn(
                 "flex flex-col gap-3 px-6 py-4",
-                (i > 0 || head) && "border-t",
+                (i > 0 || head || set) && "border-t",
                 i === rows.length - 1 && "pb-6",
-                i === 0 && !head && "pt-6"
+                i === 0 && !head && !set && "pt-6"
               )}
             >
               <div className="flex items-baseline gap-2">

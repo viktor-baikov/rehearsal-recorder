@@ -21,7 +21,9 @@ import { cn } from "@/lib/utils"
 const ROW = "h-9 w-full justify-start gap-3 px-2 text-left text-sm font-normal"
 
 /** One song: its number in the set (none in the other songs, whose names
- *  still line up with the set's), the title, and its goes tonight. */
+ *  still line up with the set's), the title, and its goes tonight. With
+ *  `recap` (History's card) a song with no goes is disabled and says *not
+ *  played*, and a click on one played goes to it. */
 function SongRow({
   title,
   number,
@@ -31,6 +33,7 @@ function SongRow({
   highlighted,
   onPick,
   data,
+  recap = false,
 }: {
   title: string
   number: number | null
@@ -38,47 +41,73 @@ function SongRow({
   lit: boolean
   next?: boolean
   highlighted: boolean
-  onPick: (title: string) => void
+  onPick?: (title: string) => void
   data: Record<string, string>
+  recap?: boolean
 }) {
   const [titleRef, cut] = useCut<HTMLSpanElement>()
-  return (
+  const unplayed = recap && goes === 0
+  const row = (
+    <Button
+      type="button"
+      variant="ghost"
+      {...data}
+      disabled={unplayed}
+      aria-current={lit ? "true" : undefined}
+      data-highlighted={highlighted ? "" : undefined}
+      // The field keeps focus until the row says what it names: what was
+      // half typed in it is dropped, not sent (TakeNameField's `put`).
+      // History has no field to keep it for.
+      onMouseDown={recap ? undefined : (e) => e.preventDefault()}
+      onClick={() => onPick?.(title)}
+      className={cn(
+        ROW,
+        // A row that is not played is not dimmed as a disabled button is:
+        // its title and *not played* are grey already.
+        "disabled:opacity-100",
+        lit && "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected",
+        highlighted && "border-ring ring-[3px] ring-ring/50"
+      )}
+    >
+      <span className="tnum w-4 shrink-0 text-right text-xs text-muted-foreground">
+        {number}
+      </span>
+      <span
+        ref={titleRef}
+        data-row-title
+        className={cn(
+          "min-w-0 flex-1 truncate",
+          lit && "font-semibold",
+          unplayed && "text-muted-foreground"
+        )}
+      >
+        {title}
+      </span>
+      {next && <span className="shrink-0 text-xs text-foreground">next</span>}
+      {unplayed ? (
+        <span className="shrink-0 text-xs text-muted-foreground">not played</span>
+      ) : (
+        goes > 0 && (
+          <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+            {!lit && (
+              <Check data-played-check aria-hidden className="size-3.5 text-foreground" />
+            )}
+            {takesLabel(goes)}
+          </span>
+        )
+      )}
+    </Button>
+  )
+  // A disabled button gets no pointer events, so the tip of a song not played
+  // is on the item round it. No key reaches that row, so it needs no more.
+  return unplayed ? (
+    <WholeTip cut={cut} text={title}>
+      <li>{row}</li>
+    </WholeTip>
+  ) : (
     <li>
       <WholeTip cut={cut} text={title}>
-        <Button
-          type="button"
-          variant="ghost"
-          {...data}
-          aria-current={lit ? "true" : undefined}
-          data-highlighted={highlighted ? "" : undefined}
-          // The field keeps focus until the row says what it names: what was
-          // half typed in it is dropped, not sent (TakeNameField's `put`).
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => onPick(title)}
-          className={cn(
-            ROW,
-            lit && "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected",
-            highlighted && "border-ring ring-[3px] ring-ring/50"
-          )}
-        >
-          <span className="tnum w-4 shrink-0 text-right text-xs text-muted-foreground">
-            {number}
-          </span>
-          <span
-            ref={titleRef}
-            data-row-title
-            className={cn("min-w-0 flex-1 truncate", lit && "font-semibold")}
-          >
-            {title}
-          </span>
-          {next && <span className="shrink-0 text-xs text-foreground">next</span>}
-          {goes > 0 && (
-            <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-              {!lit && <Check data-played-check aria-hidden className="size-3.5 text-foreground" />}
-              {takesLabel(goes)}
-            </span>
-          )}
-        </Button>
+        {row}
       </WholeTip>
     </li>
   )
@@ -111,41 +140,58 @@ export function PanelParts({ children, bleed = 0 }: { children: ReactNode; bleed
 }
 
 /**
- * The set (R1): "Gig on the 25th — 2 of 6 played", then its songs in
+ * The set (R1): "Gig on the 25th · 2 of 6 played", then its songs in
  * order, numbered. The song the field names is lit and the row after it
  * says *next*; with the field naming a song outside the set, *next* is on
  * the first one not played yet. Rows never move: the set is as tall all
  * evening as it is long.
+ *
+ * It is the same card in History (`onGoTo`), where the evening is over: a
+ * song played goes to its own takes, one not played is disabled and says so,
+ * and nothing is next, lit or under the arrow keys. A card 32rem wide or
+ * more reads the songs down two columns, as a numbered list is read, and
+ * under that in one.
  */
 export function SetCard({
   set,
   goes,
-  current,
+  current = null,
   onPick,
-  highlighted,
+  highlighted = null,
+  onGoTo,
 }: {
   set: RehearsalSet
   /** Goes tonight by song. */
   goes: Map<string, number>
   /** The song the field names. */
-  current: string | null
-  onPick: (title: string) => void
+  current?: string | null
+  onPick?: (title: string) => void
   /** The row the arrow keys are on while the field is typed in. */
-  highlighted: string | null
+  highlighted?: string | null
+  /** History's card: a click on a song played goes to its takes. */
+  onGoTo?: (title: string) => void
 }) {
+  const recap = onGoTo !== undefined
   const titles = set.songs.map((s) => s.title)
   const played = titles.filter((t) => (goes.get(t) ?? 0) > 0).length
   const at = current === null ? -1 : titles.indexOf(current)
-  const next =
-    at >= 0 ? (titles[at + 1] ?? null) : (titles.find((t) => (goes.get(t) ?? 0) === 0) ?? null)
+  const next = recap
+    ? null
+    : at >= 0
+      ? (titles[at + 1] ?? null)
+      : (titles.find((t) => (goes.get(t) ?? 0) === 0) ?? null)
   return (
-    <section aria-label={`Set ${set.name}`} data-set-card className="flex flex-col gap-2">
+    <section
+      aria-label={`Set ${set.name}`}
+      data-set-card
+      className="@container flex flex-col gap-2"
+    >
       {/* The set's name keeps its width before its figure (B6): a long one
           wraps, and "N of M played" goes under it when there is no room. */}
       <h2 className="flex min-h-8 min-w-0 flex-wrap items-baseline gap-x-1.5 px-2 pt-1.5 text-sm font-semibold">
         <span className="min-w-0 break-words">{set.name}</span>{" "}
         <span className="shrink-0 text-sm font-normal text-muted-foreground">
-          — {played} of {titles.length} played
+          · {played} of {titles.length} played
         </span>
       </h2>
       {/* Tonight's copy of the set: songs added in Settings › Sets now are
@@ -159,7 +205,11 @@ export function SetCard({
           </EmptyHeader>
         </Empty>
       ) : (
-        <ol className="flex flex-col">
+        // Two columns read down, 1 to 3 then 4 to 6, once the card has room.
+        <ol
+          className="flex flex-col @min-[32rem]:grid @min-[32rem]:grid-flow-col @min-[32rem]:grid-cols-2 @min-[32rem]:gap-x-6"
+          style={{ gridTemplateRows: `repeat(${Math.ceil(titles.length / 2)}, auto)` }}
+        >
           {titles.map((title, i) => (
             <SongRow
               key={title}
@@ -169,7 +219,8 @@ export function SetCard({
               lit={i === at}
               next={i !== at && title === next}
               highlighted={highlighted === title}
-              onPick={onPick}
+              onPick={onGoTo ?? onPick}
+              recap={recap}
               data={{ "data-set-song": title }}
             />
           ))}
