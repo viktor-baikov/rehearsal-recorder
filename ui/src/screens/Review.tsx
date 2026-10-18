@@ -21,7 +21,7 @@ import {
   type Take,
 } from "@/lib/api"
 import { nameWithGo } from "@/lib/goes"
-import { dismiss } from "@/lib/notices"
+import { dismiss, notify } from "@/lib/notices"
 import { endedByPython, offerCropUndo } from "@/lib/trash"
 import { useRunning, watching } from "@/lib/activity"
 import { useLabels } from "@/lib/labels"
@@ -36,6 +36,11 @@ const WHAT_GOES: Record<ShareWhat, string> = {
   tracks: "the original tracks",
   both: "the mix and the tracks",
 }
+
+/** The notice a button's failure is said in. Its own slot: "review" holds the
+ *  warning of a crop whose original could not be moved, and an error in that
+ *  slot would take its place. */
+const ERROR = "review-error"
 
 /** What was made of a take on this screen, which only this screen holds
  *  until it is saved: its name, its marks, and whether it goes to the
@@ -80,7 +85,8 @@ export function Review({
   // Rename take.
   const songChoices = useSongChoices(true, null, take.take_number)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // An error a button said is about this take, and goes with the screen.
+  useEffect(() => () => dismiss(ERROR), [])
   const player = useMultitrackPlayer(take.tracks, take.duration_sec)
   const cropping = useRunning("crop", (e) => e.folder === take.temp_dir)
 
@@ -161,7 +167,7 @@ export function Review({
   const keep = async () => {
     if (busy) return
     setBusy(true)
-    setError(null)
+    dismiss(ERROR)
     player.pause()
     const res = await api().keep_take(
       take.take_number,
@@ -181,7 +187,7 @@ export function Review({
     // uncut take back into is a saved take now.
     endedByPython(res.ended)
     if (!res.ok) {
-      setError(res.error ?? "Could not save the take")
+      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not save the take" })
       return
     }
     onKept()
@@ -197,14 +203,14 @@ export function Review({
   const discard = async () => {
     if (busy) return
     setBusy(true)
-    setError(null)
+    dismiss(ERROR)
     player.pause()
     const res = await api().discard_take(take.temp_dir)
     // A crop's Undo goes with it, as Python ended it.
     endedByPython(res.ended)
     if (!res.ok) {
       setBusy(false)
-      setError(res.error ?? "Could not discard the take")
+      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not discard the take" })
       return
     }
     // Still busy: the take is gone, and until App has moved on, Space or
@@ -218,7 +224,7 @@ export function Review({
   const cropDraft = async (from: number, to: number) => {
     if (busy) return
     setBusy(true)
-    setError(null)
+    dismiss(ERROR)
     dismiss("review")
     player.pause()
     // What the crop's Undo puts back: the take, and its marks, as they are.
@@ -230,7 +236,7 @@ export function Review({
     // The draft's earlier crops, Python has sent on.
     endedByPython(res.ended)
     if (!res.ok) {
-      setError(res.error ?? "Could not crop the take")
+      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not crop the take" })
       return
     }
     setMarkers((prev) =>
@@ -330,7 +336,7 @@ export function Review({
         facts.columns.length > 0 ? <TakeFigures facts={facts} onGone={setColumnsGone} /> : undefined
       }
       footer={
-        <FooterRow error={error} left={cloudLine}>
+        <FooterRow left={cloudLine}>
           <div className="flex items-center gap-3">
             {/* Escape discards, as the button does; Undo brings it back. */}
             <Button

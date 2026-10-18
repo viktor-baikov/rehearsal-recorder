@@ -4,6 +4,7 @@ import {
   calls,
   expect,
   literally,
+  notices,
   openApp,
   openBandApp,
   openEvening,
@@ -359,7 +360,7 @@ test.describe("the footer", () => {
     expectSame(await box(finish(page)), was.finish, "Finish at take 10")
   })
 
-  test("an error in the footer moves nothing", async ({ page }) => {
+  test("a footer button's error is an error notice, and moves nothing", async ({ page }) => {
     await openApp(page, {
       after: `window.pywebview.api.start_take = async () => ({ok: false, error: 'The interface is gone'});`,
     })
@@ -373,21 +374,22 @@ test.describe("the footer", () => {
     }
 
     await record(page).click()
-    const error = page.getByRole("alert").filter({ hasText: "The interface is gone" })
+    const error = notices(page, "error").filter({ hasText: "The interface is gone" })
     await expect(error).toBeVisible()
     expectSame(await box(footer), was.footer, "the footer")
     expectSame(await box(finish(page)), was.finish, "Finish")
     expectSame(await box(record(page)), was.record, "Record")
 
-    // It is over the buttons it is about, at their right edge, in the room
-    // the footer's own padding has.
+    // Nothing is said over the buttons any more: the corner has it, above
+    // the footer, and it stays until it is closed.
+    await expect(footer.getByRole("alert")).toHaveCount(0)
     const at = await box(error)
-    expect(at.y + at.height).toBeLessThanOrEqual(was.record.y)
-    expect(at.y).toBeGreaterThanOrEqual(was.footer.y)
-    expect(at.x + at.width).toBeCloseTo(was.record.x + was.record.width, 0)
+    expect(at.y + at.height).toBeLessThanOrEqual(was.footer.y)
+    await error.getByRole("button", { name: "Close notice" }).click()
+    await expect(error).toHaveCount(0)
   })
 
-  test("a long error in the footer is cut and shows whole on hover", async ({ page }) => {
+  test("a long error is whole in its notice, in more than one line", async ({ page }) => {
     const long =
       "The interface is gone, and with it every input the rehearsal was recording from, " +
       "so nothing more can be recorded here until it is plugged back in and the app is opened again"
@@ -401,11 +403,27 @@ test.describe("the footer", () => {
     await startRehearsal(page)
     await settled(page)
     await record(page).click()
-    const error = page.getByRole("alert").filter({ hasText: "The interface is gone" })
+    const error = notices(page, "error").filter({ hasText: "The interface is gone" })
     await expect(error).toBeVisible()
-    expect(await error.evaluate((p) => p.scrollWidth > p.clientWidth)).toBe(true)
-    await error.hover()
-    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(long)
+    await expect(error).toContainText(long)
+    const words = error.locator("p")
+    expect(await words.evaluate((p) => p.scrollWidth <= p.clientWidth)).toBe(true)
+    expect((await box(words)).height).toBeGreaterThan(40)
+  })
+
+  test("a footer button's error goes with its screen", async ({ page }) => {
+    await openApp(page, {
+      after: `window.pywebview.api.start_take = async () => ({ok: false, error: 'The interface is gone'});`,
+    })
+    await startRehearsal(page)
+    await settled(page)
+    await record(page).click()
+    await expect(notices(page, "error").filter({ hasText: "The interface is gone" })).toBeVisible()
+    // The rehearsal is finished: the start screen does not carry on about a
+    // take that was never started.
+    await finish(page).click()
+    await expect(startButton(page)).toBeVisible()
+    await expect(notices(page, "error")).toHaveCount(0)
   })
 })
 

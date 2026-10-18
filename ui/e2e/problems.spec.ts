@@ -153,6 +153,26 @@ test("a card that goes away mid-take stops it, and says why", async ({ page }) =
   await expect(said).toHaveCount(0)
 })
 
+test("a card that goes away and a Stop that fails are both said", async ({ page }) => {
+  await openApp(page)
+  await startRehearsal(page)
+  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
+  await page.evaluate(() => {
+    const w = window as unknown as { pywebview: { api: Record<string, unknown> } }
+    w.pywebview.api.stop_take = async () => ({ ok: false, error: "The disk is full" })
+  })
+  await setFake(
+    page,
+    "__IFACE_GONE__",
+    "Recording stopped: no sound has come from the audio interface for 3 seconds."
+  )
+  // Why the take ended, and why it could not be saved, are two things: the
+  // second must not take the first one's place in the corner.
+  await expect(notices(page, "error").filter({ hasText: "The disk is full" })).toHaveCount(1)
+  await expect(notices(page, "warning").filter({ hasText: "no sound has come" })).toHaveCount(1)
+})
+
 test("a laptop that went to sleep ends the take, and says when", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)

@@ -415,7 +415,7 @@ test.describe("on the screen after a take", () => {
       w.pywebview.api.keep_take = async () => ({ ok: false, error: "The disk is full" })
     })
     await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(page.getByText("The disk is full")).toBeVisible()
+    await expect(notices(page, "error").filter({ hasText: "The disk is full" })).toBeVisible()
     await expect(cropped.getByRole("button", { name: "Undo" })).toHaveCount(1)
     expect(await callCount(page, "end_trash")).toBe(0)
   })

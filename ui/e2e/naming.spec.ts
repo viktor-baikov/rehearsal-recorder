@@ -384,7 +384,7 @@ test.describe("the next take", () => {
     await field(page).fill("Lost")
     await page.keyboard.press("Enter")
     await expect(field(page)).toHaveValue("Take 1")
-    await expect(page.getByText("Could not name it")).toBeVisible()
+    await expect(notices(page, "error").filter({ hasText: "Could not name it" })).toBeVisible()
 
     await page.getByRole("button", { name: /Record take 1/ }).click()
     await expect(page.getByRole("heading", { level: 1, name: "Take 1" })).toBeVisible()
@@ -399,11 +399,11 @@ test.describe("the next take", () => {
     await startRehearsal(page)
     await field(page).fill("Lost")
     await page.keyboard.press("Enter")
-    await expect(page.getByText("Could not name it")).toBeVisible()
+    await expect(notices(page, "error").filter({ hasText: "Could not name it" })).toBeVisible()
 
     await field(page).fill("Found")
     await page.keyboard.press("Enter")
-    await expect(page.getByText("Could not name it")).toHaveCount(0)
+    await expect(notices(page, "error")).toHaveCount(0)
     await expect(field(page)).toHaveValue("Found")
   })
 

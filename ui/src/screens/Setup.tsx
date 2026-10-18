@@ -79,6 +79,9 @@ const MIDI_PORTS_POLL_MS = 1000
  *  one of its own per track, so each keeps its Undo (`setup-track:{n}`). */
 const SAID = "setup-track"
 
+/** The notice a button's failure is said in: Look again, Check signal, Start. */
+const ERROR = "setup"
+
 /** What a track's band entry keeps across interfaces: what is on screen when
  *  a card found by looking again is laid out. */
 type BandMember = Pick<Track, "name" | "stereo" | "icon" | "mode" | "midi_port">
@@ -129,7 +132,6 @@ export function Setup({
   const [tracks, setTracks] = useState<Track[]>([])
   const [saved, setSaved] = useState(false)
   const [starting, setStarting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   // Signal check: listen to the inputs without recording, so everyone can
   // confirm they land on their own track.
@@ -537,14 +539,14 @@ export function Setup({
   // PortAudio lists the interfaces once, when the app starts, so a desk
   // switched on afterwards is found only by looking again.
   const lookAgain = async () => {
-    setError(null)
+    dismiss(ERROR)
     setStillMissing(false)
     if (checking) await stopCheck()
     setRescanning(true)
     try {
       const res = await api().rescan_devices()
       if (!res.ok) {
-        setError(res.error ?? "Could not look for interfaces")
+        notify({ key: ERROR, kind: "error", text: res.error ?? "Could not look for interfaces" })
         return
       }
       setStillMissing(
@@ -596,7 +598,7 @@ export function Setup({
     // Listening to last time and to the inputs at once is one sound too
     // many to tell which track is which.
     uncue()
-    setError(null)
+    dismiss(ERROR)
     setCheckProblem(null)
     // What this check opens, by each track's place, is set down before
     // Python is asked, from the tracks it is given. A track taken off, added
@@ -620,7 +622,11 @@ export function Setup({
       setOpeningCheck(false)
     })
     if (!res.ok) {
-      setError(res.error ?? "Could not open the input for checking")
+      notify({
+        key: ERROR,
+        kind: "error",
+        text: res.error ?? "Could not open the input for checking",
+      })
       return
     }
     setSeen({})
@@ -703,13 +709,15 @@ export function Setup({
   }
 
   // Turn the check off when leaving the screen. A track taken off can be put
-  // back only here: its Undo goes with the screen.
+  // back only here: its Undo goes with the screen, as does an error a button
+  // said.
   useEffect(() => {
     const said = saidKeys.current
     return () => {
       checkingRef.current = false
       void stopMonitorQuietly()
       for (const key of said) dismiss(key)
+      dismiss(ERROR)
     }
   }, [])
 
@@ -722,7 +730,7 @@ export function Setup({
     // down is still held, and nothing is missed while they would reopen.
     await stopMonitorQuietly(true)
     setStarting(true)
-    setError(null)
+    dismiss(ERROR)
     const res = await api().start_rehearsal(
       name.trim() || "Rehearsal",
       deviceIndex,
@@ -736,7 +744,7 @@ export function Setup({
       // No rehearsal took the ports the check left open: they go, or one
       // another app could use stays held with nothing listening to it.
       await stopMonitorQuietly()
-      setError(res.error ?? "Could not start the rehearsal")
+      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not start the rehearsal" })
       return
     }
     onStarted()
@@ -1160,7 +1168,7 @@ export function Setup({
       className={cn("p-0", wide && "flex overflow-hidden")}
       footer={
         <div className="animate-rise" style={rise(2)}>
-          <FooterRow error={error} rule left={nameField}>
+          <FooterRow rule left={nameField}>
             <div className="flex items-center gap-3">
               <SetPicker
                 sets={sets.sets}

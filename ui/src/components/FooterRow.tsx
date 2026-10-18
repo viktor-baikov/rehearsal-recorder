@@ -1,23 +1,6 @@
 import type { ReactNode } from "react"
 
-import { WholeTip, useCut } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
-
-/** The error over the buttons: out of the flow, one line, cut. */
-function FooterError({ text }: { text: string }) {
-  const [ref, cut] = useCut<HTMLParagraphElement>()
-  return (
-    <WholeTip cut={cut} text={text}>
-      <p
-        ref={ref}
-        role="alert"
-        className="absolute right-0 bottom-full mb-1 max-w-md truncate text-xs text-destructive"
-      >
-        {text}
-      </p>
-    </WholeTip>
-  )
-}
 
 /**
  * A screen's footer as one row: what the screen has to say on the left, its
@@ -26,9 +9,7 @@ function FooterError({ text }: { text: string }) {
  * review screen's footer came to about 270 px; in a row, 183.
  *
  * `rule` draws a line between the two halves, where the left one holds a
- * field or, on the screen after a take, the take itself. An error goes over
- * the buttons it is about, in the room the footer's top padding has, so that
- * it moves nothing (B4); one too long for a line is cut, whole on hover.
+ * field or, on the screen after a take, the take itself.
  *
  * With a field, the buttons get the same room on every screen that has one.
  * Its songs wrap under it by the room they have, and buttons of different
@@ -40,12 +21,10 @@ function FooterError({ text }: { text: string }) {
 export function FooterRow({
   left,
   rule = false,
-  error,
   children,
 }: {
   left?: ReactNode
   rule?: boolean
-  error?: string | null
   /** The buttons, and any line that goes under them. */
   children: ReactNode
 }) {
@@ -55,9 +34,8 @@ export function FooterRow({
       {rule && <div data-footer-rule aria-hidden className="w-px self-stretch bg-border" />}
       <div
         data-footer-actions
-        className={cn("relative flex shrink-0 flex-col items-end gap-2", rule && "min-w-[26rem]")}
+        className={cn("flex shrink-0 flex-col items-end gap-2", rule && "min-w-[26rem]")}
       >
-        {error && <FooterError text={error} />}
         {children}
       </div>
     </div>

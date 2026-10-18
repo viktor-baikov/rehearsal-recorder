@@ -33,9 +33,14 @@ import { cn } from "@/lib/utils"
 import { rise } from "@/lib/motion"
 import { useWide } from "@/lib/wide"
 import { useRunning, watching } from "@/lib/activity"
-import { dismiss } from "@/lib/notices"
+import { dismiss, notify } from "@/lib/notices"
 import { wentTo } from "@/lib/deletion"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
+
+/** The notice a button's failure is said in. Its own slot: "rehearsal" holds
+ *  the warning of a crop whose original could not be moved, and an error in
+ *  that slot would take its place. */
+const ERROR = "rehearsal-error"
 
 /**
  * The rehearsal hub: what has been recorded, and a big button to record more.
@@ -75,7 +80,8 @@ export function Rehearsal({
     (e) => e.folder === session.folder && e.take_number === selected?.take_number
   )
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // An error a button said is about this screen, and goes with it.
+  useEffect(() => () => dismiss(ERROR), [])
   const [toRename, setToRename] = useState<Take | null>(null)
   const renameChoices = useSongChoices(
     toRename !== null,
@@ -151,7 +157,7 @@ export function Rehearsal({
       try {
         const res = await api().set_next_take_name(sent)
         if (res.ok) {
-          setError(null)
+          dismiss(ERROR)
           // What the take will be called is Python's answer: "Palyn", an old
           // name, is Pałyn, and "Pałyn 5" is Pałyn. When that is the name the
           // session had already, nothing else would bring the field round
@@ -159,12 +165,12 @@ export function Rehearsal({
           const settled = res.next_take_name
           if (settled) setPicked((p) => (p && p.name === shown ? { ...p, name: settled } : p))
         } else {
-          setError(res.error ?? "Could not name the next take")
+          notify({ key: ERROR, kind: "error", text: res.error ?? "Could not name the next take" })
           // Python never took it: the field goes back to the name it has.
           setPicked(null)
         }
       } catch {
-        setError("Could not name the next take")
+        notify({ key: ERROR, kind: "error", text: "Could not name the next take" })
         setPicked(null)
       }
       onChanged()
@@ -226,13 +232,13 @@ export function Rehearsal({
   const startTake = async () => {
     if (busy) return
     setBusy(true)
-    setError(null)
+    dismiss(ERROR)
     player.pause()
     await naming.current
     const res = await api().start_take()
     setBusy(false)
     if (!res.ok || res.take_number == null) {
-      setError(res.error ?? "Could not start the take")
+      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not start the take" })
       return
     }
     const name = nextNameRef.current
@@ -248,7 +254,7 @@ export function Rehearsal({
     player.pause()
     const res = await api().finish_rehearsal()
     if (!res.ok) {
-      setError(res.error ?? "Could not finish the rehearsal")
+      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not finish the rehearsal" })
       return
     }
     onFinished()
@@ -284,7 +290,7 @@ export function Rehearsal({
     // What waited of this take, a crop of it, Python has sent on.
     endedByPython(res.ended)
     if (!res.ok) {
-      setError(res.error ?? "Could not delete the take")
+      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not delete the take" })
       return
     }
     forget(take)
@@ -301,7 +307,7 @@ export function Rehearsal({
   const renameTake = async (take: Take, name: string) => {
     const res = await api().rename_take(session.folder, take.take_number, name)
     if (!res.ok) {
-      setError(res.error ?? "Could not rename the take")
+      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not rename the take" })
       return
     }
     // The take folder moved with the name, so point the player at the fresh
@@ -319,7 +325,7 @@ export function Rehearsal({
   const cropTake = async (take: Take, from: number, to: number) => {
     if (busy) return
     setBusy(true)
-    setError(null)
+    dismiss(ERROR)
     dismiss("rehearsal")
     player.pause()
     const res = await watching(api().crop_take(session.folder, take.take_number, from, to))
@@ -327,7 +333,7 @@ export function Rehearsal({
     // The take's earlier crops, Python has sent on.
     endedByPython(res.ended)
     if (!res.ok) {
-      setError(res.error ?? "Could not crop the take")
+      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not crop the take" })
       return
     }
     if (res.take) reselect(res.take)
@@ -346,7 +352,7 @@ export function Rehearsal({
   const renameRehearsal = async (name: string) => {
     const res = await api().rename_rehearsal(session.folder, name)
     if (!res.ok) {
-      setError(res.error ?? "Could not rename the rehearsal")
+      notify({ key: ERROR, kind: "error", text: res.error ?? "Could not rename the rehearsal" })
       return
     }
     // The whole folder moved, so every take's paths changed with it.
@@ -499,7 +505,7 @@ export function Rehearsal({
         </aside>
       }
       footer={
-        <FooterRow error={error}>
+        <FooterRow>
           <div className="flex items-center gap-3">
             {/* Escape finishes only with no take in hand; with one, it puts
                 the take away — see useEscape above. */}
