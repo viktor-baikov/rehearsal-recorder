@@ -392,28 +392,33 @@ test.describe("Marks in History", () => {
     expect(heads.filter((h, i) => h !== heads[i - 1])).toEqual(["Note", "Keep this"])
   })
 
-  test("Marks entered again draws no page from before until its marks are read", async ({ page }) => {
+  test("Marks entered again on the same label shows its page at once, until the new read", async ({
+    page,
+  }) => {
     await openApp(page, { before: MORE })
     await openMarks(page)
     await chooseLabel(page, 3, "Went wrong")
     await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
-    await expect(page.getByRole("navigation", { name: "Rehearsals" })).toBeVisible()
+    await expect(page.locator("[data-pane-head] h2")).toBeVisible()
 
-    // Back in Marks, its marks held: Went wrong's page from the visit
-    // before is not drawn, and the pane stays empty until they are read.
+    // Back in Marks, its marks read again and held: Went wrong's page kept
+    // from before is drawn at once, in the same frame as the switch.
+    const reads = await callCount(page, "list_marks")
     await watchHeads(page)
     await hold(page, "list_marks")
     await page.getByRole("radio", { name: "Marks", exact: true }).click()
-    await expect(labelItem(page, 3)).toHaveAttribute("aria-current", "true")
+    const wrong = pane(page, "Went wrong")
+    await expect(wrong.getByRole("heading", { name: "Went wrong", level: 2 })).toBeVisible()
+    await expect.poll(() => callCount(page, "list_marks")).toBe(reads + 1)
     await page.waitForTimeout(300)
-    await expect(page.locator("[data-marks-group]")).toHaveCount(0)
-    await expect(pane(page, "Marks")).toBeVisible()
+    expect(await marksOn(page)).toEqual([VIASNA, DAROHA, GONE])
     await letGo(page)
-    await expect(pane(page, "Went wrong").getByRole("heading", { name: "Went wrong", level: 2 })).toBeVisible()
+    await settled(page)
+    expect(await marksOn(page)).toEqual([VIASNA, DAROHA, GONE])
     const heads = await headsSeen(page)
     const seen = heads.filter((h, i) => h !== heads[i - 1])
-    expect(seen.slice(0, -1)).not.toContain("Went wrong")
-    expect(seen.slice(-2)).toEqual([null, "Went wrong"])
+    expect(seen).not.toContain(null)
+    expect(seen.at(-1)).toBe("Went wrong")
   })
 
   test("play starts 5 s before the mark, and again pauses", async ({ page }) => {

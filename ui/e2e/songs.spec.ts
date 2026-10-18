@@ -193,9 +193,7 @@ test.describe("Songs in History", () => {
     expect(heads.filter((h, i) => h !== heads[i - 1])).toEqual(["Daroha", "Pałyn"])
   })
 
-  test("a song opened from another view, or Songs entered again, draws no page from before", async ({
-    page,
-  }) => {
+  test("a song opened from another view never shows another song's page first", async ({ page }) => {
     await openApp(page)
     await openSongs(page)
     await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
@@ -219,27 +217,38 @@ test.describe("Songs in History", () => {
     await expect(head(page)).toHaveCount(0)
     await letGo(page, "get_song")
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
-    let heads = await headsSeen(page)
-    let seen = heads.filter((h, i) => h !== heads[i - 1])
+    const heads = await headsSeen(page)
+    const seen = heads.filter((h, i) => h !== heads[i - 1])
     expect(seen).not.toContain("Daroha")
     expect(seen.slice(-2)).toEqual([null, "Pałyn"])
+  })
 
-    // Back in Songs later, Pałyn's page from that visit is not drawn either
-    // until it is read again.
+  test("Songs entered again on the same song shows its page at once, until the new read", async ({
+    page,
+  }) => {
+    await openApp(page)
+    await openSongs(page)
+    await chooseSong(page, "Pałyn")
     await page.getByRole("radio", { name: "Rehearsals", exact: true }).click()
-    await expect(page.getByRole("navigation", { name: "Rehearsals" })).toBeVisible()
+    await expect(page.locator("[data-pane-head] h2")).toBeVisible()
+
+    // Back in Songs, Pałyn's page read again and held: the one kept from
+    // before is drawn at once, in the same frame as the switch.
+    const reads = await callCount(page, "get_song")
     await watchHeads(page)
     await hold(page, "get_song")
     await page.getByRole("radio", { name: "Songs", exact: true }).click()
-    await expect(page.getByRole("navigation", { name: "Songs" })).toBeVisible()
-    await page.waitForTimeout(300)
-    await expect(head(page)).toHaveCount(0)
-    await letGo(page, "get_song")
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
-    heads = await headsSeen(page)
-    seen = heads.filter((h, i) => h !== heads[i - 1])
-    expect(seen.slice(0, -1)).not.toContain("Pałyn")
-    expect(seen.slice(-2)).toEqual([null, "Pałyn"])
+    await expect.poll(() => callCount(page, "get_song")).toBe(reads + 1)
+    await page.waitForTimeout(300)
+    await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+    await letGo(page, "get_song")
+    await settled(page)
+    await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+    const heads = await headsSeen(page)
+    const seen = heads.filter((h, i) => h !== heads[i - 1])
+    expect(seen).not.toContain(null)
+    expect(seen.at(-1)).toBe("Pałyn")
   })
 
   test("a song counts its goes, rehearsals and stars", async ({ page }) => {

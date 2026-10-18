@@ -380,20 +380,21 @@ export function HistoryScreen({
       }
     })()
   }, [])
-  /** Into another view. The song page and the marks read on this visit are
-   *  let go: one stays up only while it is the page already on screen, so a
-   *  view entered again, or a song opened from another view, never shows a
-   *  page from before, even for a moment. The pane is empty until the read. */
-  const enterView = (next: HistoryView) => {
+  /** Into another view, on `song` if it is Songs. A page kept from the visit
+   *  before shows again at once when it is of the song or label the view
+   *  opens on, and the fresh read takes its place in one render. One of
+   *  another song or label is let go, since a page never shows under
+   *  another's name: the pane is empty until the read. */
+  const enterView = (next: HistoryView, song: SongRef | null) => {
     if (next !== view) {
-      setSongPage(null)
-      setMarks(null)
+      setSongPage((p) => (p !== null && songOf(p) === song ? p : null))
+      setMarks((m) => (m !== null && m.label === chosenLabel ? m : null))
     }
     setView(next)
   }
   const showView = (next: HistoryView) => {
     forgetAsked()
-    enterView(next)
+    enterView(next, chosenSong)
     void api().save_history_view(next)
     if (next === "songs" && !songsShown.current) void loadSongs()
     // Fresh counts each time: marks made in the player since are in them.
@@ -422,9 +423,10 @@ export function HistoryScreen({
       setSongPage(res)
     })()
   }, [view, chosenSong, songsRead])
-  // The page on show is the one last read on this visit, under its own
-  // title: while the next song chosen is read, it stays as it is, and is
-  // then swapped whole, so the page never goes blank between two songs (B4).
+  // The page on show is the one last read, under its own title (enterView
+  // says which one a view entered again keeps): while the next song chosen
+  // is read, it stays as it is, and is then swapped whole, so the page never
+  // goes blank between two songs (B4).
   const pageShown = songPage !== null && chosenSong !== null ? songPage : null
   const songShown = pageShown ? songOf(pageShown) : null
 
@@ -463,10 +465,10 @@ export function HistoryScreen({
       setMarks({ label: chosenLabel, marks: res.marks ?? [] })
     })()
   }, [view, chosenLabel, marksRead])
-  // The marks on show are the ones last read on this visit, under the label
-  // they are of: while the next label chosen is read, the page stays as it
-  // is, and is then swapped whole, so it never goes blank between two
-  // labels (B4).
+  // The marks on show are the ones last read, under the label they are of
+  // (enterView says which a view entered again keeps): while the next label
+  // chosen is read, the page stays as it is, and is then swapped whole, so
+  // it never goes blank between two labels (B4).
   const labelShown = marks !== null ? (labels.find((l) => l.id === marks.label) ?? null) : null
 
   const summary = rehearsals?.find((r) => r.folder === current) ?? null
@@ -648,7 +650,7 @@ export function HistoryScreen({
     const index = await loadSongs()
     const ref = songRefFor(index, title)
     if (ref !== null) setSong(ref)
-    enterView("songs")
+    enterView("songs", ref)
     void api().save_history_view("songs")
   }
 
