@@ -20,7 +20,7 @@ import { rise } from "@/lib/motion"
 import { playLook } from "@/lib/playLook"
 import { drawnLength, TAKE_FILLS } from "@/lib/takeScale"
 import { PaneHead } from "@/components/PaneHead"
-import { SongName } from "@/components/SongName"
+import { NameLink, SongName } from "@/components/SongName"
 
 /**
  * Where the rows have under 25rem, as at 960 px and 150 %: beside the bars'
@@ -178,24 +178,15 @@ function GroupTitle({
   onOpenSong: (title: string | null) => void
   onOpenRehearsal: (folder: string) => void
 }) {
-  const [ref, cut] = useCut<HTMLSpanElement>()
   return (
     <h3 data-group-title className="mb-2 flex min-w-0 items-baseline gap-1 text-sm font-semibold">
       {g.kind === "rehearsal" ? (
-        <WholeTip cut={cut} text={g.name}>
-          <Button
-            variant="link"
-            aria-label={`Open the rehearsal ${g.name}`}
-            onClick={() => onOpenRehearsal(g.folder!)}
-            // Words in the heading, as SongName is: no height or padding, and
-            // the heading's colour, size and weight.
-            className="block h-auto min-w-0 shrink rounded-sm p-0 text-left text-inherit text-[length:inherit] font-[number:inherit] whitespace-normal"
-          >
-            <span ref={ref} data-cut={cut || undefined} className="line-clamp-2">
-              {g.name}
-            </span>
-          </Button>
-        </WholeTip>
+        <NameLink
+          text={g.name}
+          label={`Open the rehearsal ${g.name}`}
+          onOpen={() => onOpenRehearsal(g.folder!)}
+          textClassName="line-clamp-2"
+        />
       ) : (
         <SongName title={g.song ?? null} onOpen={onOpenSong} textClassName="line-clamp-2" />
       )}
@@ -298,7 +289,7 @@ function MarkRow({
             data-take-bar
             aria-hidden
             className={cn(
-              "relative block h-6 rounded-sm border",
+              "relative block h-6 overflow-hidden rounded-sm border",
               m.missing ? TAKE_FILLS.quiet : TAKE_FILLS.rest
             )}
             // Never under 6 px, as on a song's ladder; its least, 0.5rem, is
@@ -337,9 +328,10 @@ function Comment({ text, unsaid, onOpen }: { text: string; unsaid: boolean; onOp
         onClick={onOpen}
         className={cn(
           // No frame: a clear one would set the words 1 px in from the
-          // take's line under them.
-          "h-auto min-w-0 justify-start border-0 p-0 text-sm font-normal",
-          unsaid && "text-muted-foreground"
+          // take's line under them. Nor a fill or colour of its own under the
+          // pointer: the row's fill says where it is, and the keys have the ring.
+          "h-auto min-w-0 justify-start border-0 p-0 text-sm font-normal hover:bg-transparent dark:hover:bg-transparent",
+          unsaid ? "text-muted-foreground hover:text-muted-foreground" : "hover:text-foreground"
         )}
       >
         <span ref={ref} data-cut={cut || undefined} className="block min-w-0 truncate">

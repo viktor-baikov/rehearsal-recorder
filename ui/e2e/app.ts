@@ -319,6 +319,27 @@ export function withSets(sets: SetSeed[] = [GIG], chosen: number | null = 1, mor
   )
 }
 
+/** From now on, at every frame, which page head is drawn: its title (the
+ *  h2's name), or null in a frame with none. `headsSeen` stops and says them. */
+export const watchHeads = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __HEADS__: (string | null)[]; __WATCHING__: boolean }
+    w.__HEADS__ = []
+    w.__WATCHING__ = true
+    const look = () => {
+      if (!w.__WATCHING__) return
+      w.__HEADS__.push(document.querySelector("[data-pane-head] h2")?.getAttribute("aria-label") ?? null)
+      requestAnimationFrame(look)
+    }
+    requestAnimationFrame(look)
+  })
+export const headsSeen = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __HEADS__: (string | null)[]; __WATCHING__: boolean }
+    w.__WATCHING__ = false
+    return w.__HEADS__
+  })
+
 /** Until the screen's groups have risen into place: a box measured while one
  *  rises is up to 12 px off. */
 export const settled = (page: Page) =>

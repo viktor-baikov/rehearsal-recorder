@@ -1691,6 +1691,7 @@ window.__MAKE_API__ = () => ({
         goes.push({folder:r.folder, rehearsal:r.name, created_at:r.created_at,
                    missing:r.missing, take:t});
       }
+    await held('get_song');
     return JSON.parse(JSON.stringify({ok:true, id, title, also:title ? alsoOf(title) : [],
                                       plays:songPlays(goes), goes}));
   }),

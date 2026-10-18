@@ -3,6 +3,7 @@ import {
   calls,
   colour,
   expect,
+  headsSeen,
   openApp,
   openHistory,
   scaled,
@@ -10,6 +11,7 @@ import {
   settled,
   style,
   test,
+  watchHeads,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -320,13 +322,22 @@ test.describe("Marks in History", () => {
     const bySong = grouping.getByRole("radio", { name: "By song" })
     await expect(byRehearsal).toHaveAttribute("aria-checked", "true")
 
-    // Along the switch the arrows move the focus and choose nothing.
+    // A mark playing has the arrows, to skip 10 s through its take.
+    const viasna = row(page, VIASNA)
+    await viasna.getByRole("button", { name: "Play Viasna 1 from 0:35" }).click()
+    await expect(viasna.getByRole("button", { name: "Pause Viasna 1 from 0:35" })).toBeVisible()
+    await expect.poll(() => lastSeek(page)).toBe(35)
+    const seeks = await callCount(page, "player_seek")
+
+    // Along the switch the arrows move the focus, choose nothing and leave
+    // the take where it is.
     await byRehearsal.focus()
     await page.keyboard.press("ArrowRight")
     await expect(bySong).toBeFocused()
     await expect(bySong).toHaveAttribute("aria-checked", "false")
     await expect(byRehearsal).toHaveAttribute("aria-checked", "true")
     await expect(marks.locator("[data-group-title]")).toHaveCount(3)
+    expect(await callCount(page, "player_seek")).toBe(seeks)
 
     // Down and up are the list's: the next label, and back, grouped as
     // they were.
@@ -339,6 +350,46 @@ test.describe("Marks in History", () => {
     ).toHaveAttribute("aria-checked", "true")
     await expect(pane(page, "Went wrong").locator("[data-group-title]")).toHaveCount(3)
     expect(await calls(page, "save_marks_grouping")).toEqual([])
+  })
+
+  test("the page stays until the next label's marks are read, then starts at its top, the focus on Group by", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 320 })
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    const note = pane(page, "Note")
+    await expect(note.getByRole("heading", { name: "Note", level: 2 })).toBeVisible()
+    await settled(page)
+    // The focus is the keyboard's, moved along the switch: one left over
+    // from the clicks that opened Marks is let go on the next key.
+    await note.getByRole("radio", { name: "By rehearsal" }).focus()
+    await page.keyboard.press("ArrowRight")
+    await expect(note.getByRole("radio", { name: "By song" })).toBeFocused()
+    await note.evaluate((el) => (el.scrollTop = el.scrollHeight))
+    expect(await note.evaluate((el) => el.scrollTop)).toBeGreaterThan(40)
+
+    // Down to Keep this, its marks held: Note's page stays as it is.
+    await watchHeads(page)
+    await hold(page, "list_marks")
+    await page.keyboard.press("ArrowDown")
+    await expect(labelItem(page, 2)).toHaveAttribute("aria-current", "true")
+    await page.waitForTimeout(300)
+    await expect(note.getByRole("heading", { name: "Note", level: 2 })).toBeVisible()
+    await expect(note.getByRole("radio", { name: "By song" })).toBeFocused()
+
+    // Read, Keep this's page takes its place whole, at its top, and the
+    // focus is on the same Group by radio, never dropped.
+    await letGo(page)
+    const keep = pane(page, "Keep this")
+    await expect(keep.getByRole("heading", { name: "Keep this", level: 2 })).toBeVisible()
+    await expect(keep.locator("[data-mark]")).toHaveCount(1)
+    expect(await keep.evaluate((el) => el.scrollTop)).toBe(0)
+    expect(await keep.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(0)
+    await expect(keep.getByRole("radio", { name: "By song" })).toBeFocused()
+    const heads = await headsSeen(page)
+    expect(heads.length).toBeGreaterThan(10)
+    expect(heads.filter((h, i) => h !== heads[i - 1])).toEqual(["Note", "Keep this"])
   })
 
   test("play starts 5 s before the mark, and again pauses", async ({ page }) => {
@@ -378,9 +429,9 @@ test.describe("Marks in History", () => {
     expect((await calls(page, "player_open")).length).toBe(opened)
   })
 
-  for (const [what, again, from, at] of [
-    ["the same mark", "/rec/quiet#1@120", "1:55", 115],
-    ["another of its marks", "/rec/quiet#1@200", "3:15", 195],
+  for (const [what, again, from, at, press] of [
+    ["the same mark", "/rec/quiet#1@120", "1:55", 115, "Could not load Take 1 from 1:55. Try again"],
+    ["another of its marks", "/rec/quiet#1@200", "3:15", 195, "Play Take 1 from 3:15"],
   ] as const) {
     test(`a take that could not load opens again from ${what}, and plays from there`, async ({ page }) => {
       await openApp(page, { before: MORE, after: QUIET_TAKE_1_GONE })
@@ -399,7 +450,7 @@ test.describe("Marks in History", () => {
       // plays from 5 s before that mark.
       await setFake(page, "__FILES_BACK__", true)
       const mark = row(page, again)
-      await mark.locator("[data-look]").click()
+      await mark.getByRole("button", { name: press, exact: true }).click()
       await expect(mark.getByRole("button", { name: `Pause Take 1 from ${from}` })).toBeVisible()
       await expect.poll(() => lastSeek(page)).toBe(at)
       expect(await callCount(page, "player_open")).toBe(1)
@@ -433,6 +484,19 @@ test.describe("Marks in History", () => {
     await expect(comment).toHaveRole("button")
     await expect(comment).toHaveAttribute("data-variant", "ghost")
     expect(await style(comment, "font-size", "font-weight")).toEqual({ "font-size": "14px", "font-weight": "400" })
+    // Under the pointer it keeps its colour and has no fill of its own: the
+    // row's fill says where the pointer is. One with nothing written stays grey.
+    const resting = await style(comment, "color")
+    await comment.hover()
+    expect(await style(comment, "color", "background-color")).toEqual({
+      ...resting,
+      "background-color": "rgba(0, 0, 0, 0)",
+    })
+    const unsaid = row(page, DAROHA).locator("[data-line='comment']")
+    await unsaid.hover()
+    expect((await style(unsaid, "color")).color).toBe(
+      (await style(page.locator("[data-pane-head] p"), "color")).color
+    )
 
     await viasna.locator("[data-look]").focus()
     await page.keyboard.press("Tab")
@@ -800,6 +864,33 @@ test.describe("Marks in History", () => {
       .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width))
     expect(Math.max(...bars)).toBeCloseTo(7.5 * 16 * 1.5, 0)
     expect(Math.min(...bars)).toBeGreaterThanOrEqual(6)
+
+    // The long rehearsal's title takes two lines, then is cut, whole in its
+    // tip; its count stays beside it.
+    const tuesday = "Tuesday jam at the old brewery, with the horn section and the choir from upstairs"
+    const title = group.locator("[data-group-title]").first()
+    await expect(title).toContainText("· 6 marks")
+    const name = title.locator("[data-name]")
+    expect(
+      await name.evaluate((el) => ({
+        lines: Math.round(el.clientHeight / parseFloat(getComputedStyle(el).lineHeight)),
+        cut: el.scrollHeight > el.clientHeight + 1,
+      }))
+    ).toEqual({ lines: 2, cut: true })
+    await name.hover()
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(`${tuesday} · Sat 26 Sep`)
+    await page.mouse.move(0, 0, { steps: 8 })
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveCount(0)
+    // A song title too long for the take's line is cut; the take's number
+    // and the moment after it are whole.
+    const take = group.locator("[data-mark]").first().locator("[data-line='take']")
+    await expect(take.locator("[data-name][data-cut]")).toHaveCount(1)
+    expect(
+      await take.evaluate((el) => {
+        const rest = el.lastElementChild as HTMLElement
+        return { text: rest.textContent, cut: rest.scrollWidth > rest.clientWidth }
+      })
+    ).toEqual({ text: " 1 · 0:03", cut: false })
 
     // A comment cut at the end of its room is whole in its tip, which the
     // keys reach too.

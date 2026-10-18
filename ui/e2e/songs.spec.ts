@@ -3,6 +3,9 @@ import {
   calls,
   colour,
   expect,
+  headsSeen,
+  hold,
+  letGo,
   notices,
   openApp,
   openBandApp,
@@ -15,6 +18,7 @@ import {
   startRehearsal,
   style,
   test,
+  watchHeads,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -158,6 +162,35 @@ test.describe("Songs in History", () => {
     await page.getByRole("radio", { name: "Songs", exact: true }).click()
     await expect(list.locator("[aria-current='true']")).toHaveAttribute("data-song", "Pałyn")
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+  })
+
+  test("a song's page stays until the next song is read, then starts at its top", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 320 })
+    await openApp(page)
+    const list = await openSongs(page)
+    const daroha = page.getByRole("region", { name: "Daroha", exact: true })
+    await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
+    await settled(page)
+    await daroha.evaluate((el) => (el.scrollTop = el.scrollHeight))
+    expect(await daroha.evaluate((el) => el.scrollTop)).toBeGreaterThan(40)
+
+    // Down to Pałyn, its page held: Daroha's stays as it is.
+    await watchHeads(page)
+    await hold(page, "get_song")
+    await page.keyboard.press("ArrowDown")
+    await expect(list.locator("[aria-current='true']")).toHaveAttribute("data-song", "Pałyn")
+    await page.waitForTimeout(300)
+    await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
+
+    // Read, Pałyn's page takes its place whole, at its top.
+    await letGo(page, "get_song")
+    const palyn = page.getByRole("region", { name: "Pałyn", exact: true })
+    await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+    expect(await palyn.evaluate((el) => el.scrollTop)).toBe(0)
+    expect(await palyn.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(0)
+    const heads = await headsSeen(page)
+    expect(heads.length).toBeGreaterThan(10)
+    expect(heads.filter((h, i) => h !== heads[i - 1])).toEqual(["Daroha", "Pałyn"])
   })
 
   test("a song counts its goes, rehearsals and stars", async ({ page }) => {

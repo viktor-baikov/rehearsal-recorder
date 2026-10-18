@@ -84,6 +84,11 @@ import {
 /** A song as renaming and merging name it: which one, and its title. */
 type SongName = { id: number; title: string }
 
+/** Which song a page read is of, as the list names it. */
+function songOf(page: SongDetail): SongRef {
+  return page.id ?? "not_named"
+}
+
 /** "5 rehearsals · 2 h 24 min played · 5.0 GB", over the whole list, as
  *  figures that give way to the header's title: the size first, the count
  *  last. Under half a minute there is no honest time played. */
@@ -399,36 +404,36 @@ export function HistoryScreen({
       if (ticket !== askedSong.current) return
       if (!res.ok) {
         notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the song" })
+        // Another song's page does not stay up as if it were this one's.
+        setSongPage((p) => (p !== null && songOf(p) === chosenSong ? p : null))
         return
       }
       setSongPage(res)
     })()
   }, [view, chosenSong, songsRead])
-  const pageShown =
-    songPage !== null &&
-    chosenSong !== null &&
-    songPage.id === (chosenSong === "not_named" ? null : chosenSong)
-      ? songPage
-      : null
+  // The page on show is the one last read, under its own title: while the
+  // next song chosen is read, it stays as it is, and is then swapped whole,
+  // so the page never goes blank between two songs (B4).
+  const pageShown = songPage !== null && chosenSong !== null ? songPage : null
+  const songShown = pageShown ? songOf(pageShown) : null
 
   // The rungs open on each song's page, for as long as History is open. A
   // song not seen yet has its newest rehearsal on disk open.
   const [openRungs, setOpenRungs] = useState<Map<SongRef, Set<string>>>(new Map())
   const firstRung = pageShown ? firstOpen(rungsOf(pageShown.goes ?? [])) : null
   const rungsOpen: ReadonlySet<string> =
-    (chosenSong !== null ? openRungs.get(chosenSong) : undefined) ??
+    (songShown !== null ? openRungs.get(songShown) : undefined) ??
     new Set(firstRung ? [firstRung] : [])
   const toggleRung = (folder: string) => {
-    if (chosenSong === null) return
+    if (songShown === null) return
     const next = new Set(rungsOpen)
     if (next.has(folder)) next.delete(folder)
     else next.add(folder)
-    setOpenRungs((m) => new Map(m).set(chosenSong, next))
+    setOpenRungs((m) => new Map(m).set(songShown, next))
   }
 
   // The label chosen, or the first when none is or it was deleted.
   const chosenLabel = labels.find((l) => l.id === label)?.id ?? labels[0]?.id ?? null
-  const labelShown = labels.find((l) => l.id === chosenLabel) ?? null
   // Its marks. As with a song's page, an answer about a label chosen before
   // is dropped.
   const askedMarks = useRef(0)
@@ -440,12 +445,17 @@ export function HistoryScreen({
       if (ticket !== askedMarks.current) return
       if (!res.ok) {
         notify({ key: SAID, kind: "error", text: res.error ?? "Could not read the marks" })
+        // Another label's marks do not stay up as if they were this one's.
+        setMarks((m) => (m !== null && m.label === chosenLabel ? m : null))
         return
       }
       setMarks({ label: chosenLabel, marks: res.marks ?? [] })
     })()
   }, [view, chosenLabel, marksRead])
-  const marksOnShow = marks !== null && marks.label === chosenLabel ? marks.marks : null
+  // The marks on show are the ones last read, under the label they are of:
+  // while the next label chosen is read, the page stays as it is, and is
+  // then swapped whole, so it never goes blank between two labels (B4).
+  const labelShown = marks !== null ? (labels.find((l) => l.id === marks.label) ?? null) : null
 
   const summary = rehearsals?.find((r) => r.folder === current) ?? null
   // Whether the chosen one can be read: not until the list says it is there.
@@ -563,6 +573,13 @@ export function HistoryScreen({
     pane.current.scrollTop = paneScroll.current
     paneScroll.current = null
   }, [selected])
+  // Another label's or song's page starts at its top, in the frame it is
+  // swapped in; the same page read again stays where it was scrolled.
+  const pageOnShow =
+    view === "marks" ? `label ${labelShown?.id}` : view === "songs" ? `song ${songShown}` : null
+  useLayoutEffect(() => {
+    if (pane.current) pane.current.scrollTop = 0
+  }, [pageOnShow])
 
   /** A take asked for to open or to play, from a list left since: when its
    *  rehearsal has been read, it is dropped. */
@@ -1212,10 +1229,10 @@ export function HistoryScreen({
               aria-label={labelShown?.name ?? "Marks"}
               className="flex min-w-0 flex-1 flex-col gap-8 overflow-y-auto p-8"
             >
-              {labelShown && marksOnShow && (
+              {labelShown && marks && (
                 <MarksPage
                   label={labelShown}
-                  marks={marksOnShow}
+                  marks={marks.marks}
                   grouping={grouping}
                   onGrouping={chooseGrouping}
                   playing={
