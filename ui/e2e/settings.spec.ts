@@ -2,9 +2,12 @@ import {
   callCount,
   calls,
   colour,
+  DASH,
   EDGE,
   expect,
+  hold,
   keyOn,
+  letGo,
   nameTake,
   notices,
   openApp,
@@ -15,6 +18,7 @@ import {
   startRehearsal,
   style,
   test,
+  themed,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -33,6 +37,9 @@ const group = (page: Page, name: string) =>
 const TAB_NAMES = ["Audio", "Folders", "Marks", "Sets", "Appearance", "Keys", "Under the hood"]
 
 const CLOUD = "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';"
+
+// The hint for the original tracks: the notes of a MIDI take go with them.
+const TRACKS_HINT = "Every track as recorded, untouched, and the notes as .mid, to open in a DAW later."
 
 const sections = (page: Page) => page.getByRole("navigation", { name: "Settings sections" })
 const tabHead = (page: Page) => page.locator("[data-tab-head]")
@@ -340,16 +347,16 @@ test("the recording card and its rates are set in Settings", async ({ page }) =>
   await expect(channels).toBeDisabled()
   await expect(channels).toContainText("1–2")
   await expect(page.getByText("choose the interface itself")).toHaveCount(1)
-  await expect(page.getByRole("button", { name: "44.1 kHz" })).toHaveCount(1)
-  await expect(page.getByRole("button", { name: "96 kHz" })).toHaveCount(1)
+  await expect(page.getByRole("radio", { name: "44.1 kHz" })).toHaveCount(1)
+  await expect(page.getByRole("radio", { name: "96 kHz" })).toHaveCount(1)
 
-  await page.getByRole("button", { name: "48 kHz" }).click()
+  await page.getByRole("radio", { name: "48 kHz" }).click()
   await expect
     .poll(async () => (await calls(page, "set_recording_format")).at(-1)?.args.slice(1))
     .toEqual([48000, 24])
   // This card does 96 kHz only at 24 bit, so 16 stops being offered.
-  await page.getByRole("button", { name: "96 kHz" }).click()
-  await expect(page.getByRole("button", { name: "16 bit" })).toBeDisabled()
+  await page.getByRole("radio", { name: "96 kHz" }).click()
+  await expect(page.getByRole("radio", { name: "16 bit" })).toBeDisabled()
 })
 
 test("what cloud copies are written as, and nothing about copies without a folder", async ({
@@ -357,18 +364,19 @@ test("what cloud copies are written as, and nothing about copies without a folde
 }) => {
   await openSettings(page, "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';")
   await group(page, "Folders").click()
-  await page.getByRole("button", { name: "Lossless (FLAC)" }).click()
+  await page.getByRole("radio", { name: "Lossless (FLAC)" }).click()
   await expect.poll(async () => (await calls(page, "set_cloud_format")).at(-1)?.args[0]).toBe("flac")
   await page.getByText("Send saved takes automatically").click()
   await expect.poll(async () => (await calls(page, "set_auto_publish")).at(-1)?.args[0]).toBe(true)
-  await page.getByText("The original tracks").click()
+  await page.getByRole("radio", { name: "The original tracks" }).click()
   await expect.poll(async () => (await calls(page, "set_auto_publish")).at(-1)?.args[1]).toBe("tracks")
 
   // Turning sending off does not take the question with it: it also says
   // what Send starred sends, so it stays live, and its answer says what goes.
   await page.getByText("Send saved takes automatically").click()
-  await expect(page.getByText("What gets published")).toHaveCount(1)
-  await expect(page.getByRole("button", { name: "The mix" })).toBeEnabled()
+  await expect.poll(async () => (await calls(page, "set_auto_publish")).at(-1)?.args[0]).toBe(false)
+  await expect(page.getByRole("radiogroup", { name: "What gets sent" })).toHaveCount(1)
+  await expect(page.getByRole("radio", { name: "The mix" })).toBeEnabled()
   await expect(page.getByText("Every track as recorded")).toHaveCount(1)
   await expect(page.getByText("This is also what Send starred sends.")).toHaveCount(1)
 
@@ -380,9 +388,9 @@ test("what cloud copies are written as, and nothing about copies without a folde
   const field = page.locator("#cloud-dir")
   const says = (await field.inputValue()) + " " + ((await field.getAttribute("placeholder")) ?? "")
   expect(says).toContain("Not set")
-  await expect(page.getByRole("button", { name: "Lossless (FLAC)" })).toHaveCount(0)
+  await expect(page.getByRole("radio", { name: "Lossless (FLAC)" })).toHaveCount(0)
   await expect(page.locator("#auto-publish")).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "The mix" })).toHaveCount(0)
+  await expect(page.getByRole("radio", { name: "The mix" })).toHaveCount(0)
   await expect(page.getByText("Only the copies are affected")).toHaveCount(0)
 })
 
@@ -449,6 +457,293 @@ test("Appearance is one group: Theme and Scale as switches, applied at once and 
     "aria-checked",
     "true"
   )
+})
+
+test.describe("Audio and Folders", () => {
+  const AUDIO: [string, string][] = [
+    [
+      "Recording",
+      "Set once for the room and the interface. The start screen shows what is in force but does not change it.",
+    ],
+    [
+      "Playback output",
+      "Where takes play back: the headphones on the interface, say, rather than the laptop's speakers.",
+    ],
+  ]
+  const FOLDERS: [string, string][] = [
+    ["Recordings folder", "Where everything is recorded to."],
+    [
+      "False starts",
+      "A take this short, with no ★ and no marks, shows as a false start on the rehearsal screen and in " +
+        "History, where Clear false starts clears them all at once, with Undo.",
+    ],
+    [
+      "Cloud folder",
+      "Where the takes you pick out are copied. Point it at a Drive or Dropbox folder, not at the " +
+        "recordings folder, so only the takes worth keeping go up, one at a time.",
+    ],
+  ]
+
+  /** The open tab's groups, each a region named by its heading. */
+  const regions = (page: Page) => tabBody(page).getByRole("region")
+  const region = (page: Page, name: string) => tabBody(page).getByRole("region", { name })
+
+  /** The lines drawn in the open tab's body that are not a control's own
+   *  frame: an hr, or a box with an edge of its own. */
+  const lines = (page: Page) =>
+    tabBody(page).evaluate((body) =>
+      [...body.querySelectorAll("*")]
+        .filter((e) => {
+          if (e.closest("button, input, [data-slot=alert]")) return false
+          if (e.tagName === "HR") return true
+          const s = getComputedStyle(e)
+          return ["top", "right", "bottom", "left"].some(
+            (side) =>
+              parseFloat(s.getPropertyValue(`border-${side}-width`)) > 0 &&
+              s.getPropertyValue(`border-${side}-color`) !== "rgba(0, 0, 0, 0)"
+          )
+        })
+        .map((e) => `${e.tagName.toLowerCase()} ${e.className}`)
+    )
+
+  /** All the open tab says, its fields' placeholders too. */
+  const words = (page: Page) =>
+    tabBody(page).evaluate((body) =>
+      [(body as HTMLElement).innerText, ...[...body.querySelectorAll("input")].map((i) => i.placeholder)].join(
+        "\n"
+      )
+    )
+
+  for (const theme of ["dark", "light"] as const) {
+    test(`Audio is two groups and Folders three, each under one heading, in the ${theme} theme`, async ({
+      page,
+    }) => {
+      await openSettings(page, themed(theme) + CLOUD)
+      expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
+        theme === "dark"
+      )
+      const card = await colour(page, "--card")
+      const grouped = async (groups: [string, string][]) => {
+        await expect(tabBody(page).locator("[data-settings-group]")).toHaveCount(groups.length)
+        await expect(regions(page)).toHaveCount(groups.length)
+        for (const [i, [title, hint]] of groups.entries()) {
+          const group = regions(page).nth(i)
+          await expect(group).toHaveAccessibleName(title)
+          // One heading, the hint under it, and no form label over a field
+          // saying the heading again.
+          await expect(group.getByRole("heading"), title).toHaveText([title])
+          await expect(group.locator("h3 + p"), title).toHaveText(hint)
+          await expect(group.locator("label", { hasText: new RegExp(`^${title}$`) }), title).toHaveCount(0)
+          // Set apart by the card's fill alone (F4).
+          const look = await style(group, "background-color", "box-shadow", ...EDGE)
+          expect(look["background-color"], title).toBe(card)
+          expect(look["box-shadow"], title).toBe("none")
+          for (const side of ["top", "right", "bottom", "left"]) {
+            expect(look[`border-${side}-width`], `${title}, ${side}`).toBe("0px")
+          }
+        }
+        // No line splits a group, and none is drawn between them.
+        expect(await lines(page)).toEqual([])
+      }
+
+      await grouped(AUDIO)
+      // Each output counted in the shared way.
+      await page.click("#output-device")
+      await expect(page.getByRole("option")).toHaveText([
+        "System output",
+        "UA Monitors · 2 outputs",
+        "MacBook Speakers · 2 outputs",
+      ])
+      await page.keyboard.press("Escape")
+      await expect(page.getByRole("listbox")).toHaveCount(0)
+
+      await group(page, "Folders").click()
+      await expect(page.locator("#cloud-dir")).toHaveValue(/Google Drive/)
+      await grouped(FOLDERS)
+    })
+  }
+
+  test("the pick-one rows on Audio and Folders are switches, and nothing there is cobalt", async ({
+    page,
+  }) => {
+    await openSettings(page, CLOUD)
+    const cobalt = await colour(page, "--primary")
+    /** What in the open tab is filled in the accent. */
+    const blue = () =>
+      tabBody(page).evaluate(
+        (body, fill) =>
+          [...body.querySelectorAll("*")]
+            .filter((e) => getComputedStyle(e).backgroundColor === fill)
+            .map((e) => e.textContent),
+        cobalt
+      )
+    const switches = async (names: string[]) => {
+      const rows = tabBody(page).getByRole("radiogroup")
+      await expect(rows).toHaveCount(names.length)
+      for (const [i, name] of names.entries()) {
+        await expect(rows.nth(i)).toHaveAccessibleName(name)
+        await expect(rows.nth(i), name).toHaveAttribute("data-variant", "switch")
+        await expect(rows.nth(i).locator("[aria-checked='true']"), name).toHaveCount(1)
+      }
+    }
+
+    await switches(["Rate", "Depth"])
+    await expect(page.getByRole("radio", { name: "44.1 kHz" })).toHaveAttribute("aria-checked", "true")
+    expect(await blue()).toEqual([])
+    const faster = page.getByRole("radio", { name: "48 kHz" })
+    await faster.click()
+    await expect(faster).toHaveAttribute("aria-checked", "true")
+    expect(await blue()).toEqual([])
+
+    await group(page, "Folders").click()
+    await switches(["What the copies are written as", "What gets sent"])
+    // The shared box, ticked in the text's colour where the system's was blue.
+    const auto = page.locator("#auto-publish")
+    await expect(auto).toHaveAttribute("data-slot", "checkbox")
+    await auto.click()
+    await expect(auto).toBeChecked()
+    expect(await style(auto, "background-color")).toEqual({
+      "background-color": await colour(page, "--foreground"),
+    })
+    expect(await blue()).toEqual([])
+  })
+
+  test("Look again keeps its word and box, its icon turning to a spinner after a second", async ({
+    page,
+  }) => {
+    await page.clock.install()
+    await openSettings(page)
+    const look = tabBody(page).getByRole("button", { name: "Look again" })
+    // What it does is said in the shared tip, not the system's.
+    await expect(look).not.toHaveAttribute("title")
+    await look.hover()
+    await expect(tooltip(page)).toHaveText("Find an interface plugged in since the app started")
+    await away(page)
+    await expect(tooltip(page)).toHaveCount(0)
+    const before = await box(look)
+    const icon = look.locator("svg.lucide-refresh-cw")
+    const spinner = look.getByRole("status", { name: "Loading" })
+    await expect(icon).toBeVisible()
+
+    // The fake holds its answer, and the page's time stands still from here,
+    // so each second is the one the test counts.
+    await hold(page, "rescan_devices")
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000)
+    await look.click()
+    await expect(look).toBeDisabled()
+    await expect(look).toHaveText("Look again")
+    await expect(icon).toBeVisible()
+    await expect(spinner).toHaveCount(0)
+    await page.clock.runFor(999)
+    await expect(icon).toBeVisible()
+    await expect(spinner).toHaveCount(0)
+    await page.clock.runFor(1)
+    await expect(spinner).toBeVisible()
+    await expect(icon).toHaveCount(0)
+    await expect(look).toHaveText("Look again")
+    expect(await box(look)).toEqual(before)
+
+    await page.clock.resume()
+    await letGo(page, "rescan_devices")
+    await expect(look).toBeEnabled()
+    await expect(spinner).toHaveCount(0)
+    await expect(icon).toBeVisible()
+    expect(await box(look)).toEqual(before)
+  })
+
+  test("the warnings have the shared look: the icon amber, the words in the text's colour", async ({
+    page,
+  }) => {
+    await openSettings(
+      page,
+      `window.__FORMATS_REFUSED__ = true;
+       window.__PATH_WARNING__ = "This folder's path is already 214 characters.";
+       window.__NO_ENCODER__ = true;
+       window.__CLOUD_FORMAT__ = 'mp3';` + CLOUD
+    )
+    const warn = await colour(page, "--warn")
+    // The grey the shared Warning sets its words in, as the unsaved takes'
+    // warning has them: it reads on the wash in both themes, where amber
+    // words did not.
+    const ink = await colour(page, "--muted-foreground")
+    const shared = async (where: string, said: string) => {
+      const alert = region(page, where).locator("[data-slot=alert]")
+      await expect(alert, where).toHaveCount(1)
+      await expect(alert, where).toHaveAttribute("role", "status")
+      await expect(alert, where).toContainText(said)
+      await expect(alert.locator("svg.lucide-triangle-alert"), where).toHaveCount(1)
+      expect(await style(alert.locator("svg"), "color"), where).toEqual({ color: warn })
+      expect(await style(alert.locator("p"), "color"), where).toEqual({ color: ink })
+      return alert
+    }
+    /** The words in the open tab set in the warn colour. */
+    const amber = () =>
+      tabBody(page).evaluate(
+        (body, colour) =>
+          [...body.querySelectorAll("p, span")]
+            .filter((e) => getComputedStyle(e).color === colour)
+            .map((e) => e.textContent),
+        warn
+      )
+
+    const rates = await shared("Recording", "did not say which sample rates it takes")
+    // Under the interface and Look again, so it moves nothing above it.
+    const look = await box(page.getByRole("button", { name: "Look again" }))
+    expect((await box(rates)).y).toBeGreaterThan(look.y + look.height)
+    expect(await amber()).toEqual([])
+
+    await group(page, "Folders").click()
+    const path = await shared("Recordings folder", "214 characters")
+    const field = await box(page.locator("#recordings-dir"))
+    expect((await box(path)).y).toBeGreaterThan(field.y + field.height)
+    await shared("Cloud folder", "soundfile package is missing")
+    expect(await amber()).toEqual([])
+  })
+
+  test("the words say what happens, with no dashes", async ({ page }) => {
+    // Windows' shape: several drivers, and a desk under each.
+    await openSettings(page, "window.__HOST_API__ = 'Windows WASAPI';")
+    const body = tabBody(page)
+    await expect(
+      body.getByText(
+        "Each driver can offer a different number of inputs. If your interface shows fewer than it has, " +
+          "try another driver: ASIO, where there is one, usually offers all of them.",
+        { exact: true }
+      )
+    ).toHaveCount(1)
+    await page.click("#output-device")
+    await page.getByRole("option", { name: "Speakers" }).click()
+    await expect(
+      body.getByText(
+        "This driver offers two outputs on it. If your interface has more, choose it under another " +
+          "driver: ASIO, where there is one, usually offers all of them.",
+        { exact: true }
+      )
+    ).toHaveCount(1)
+    expect(await words(page)).not.toMatch(DASH)
+
+    // The interface it records with, unplugged since.
+    await setFake(page, "__PLUGGED_IN_LATE__", true)
+    await page.getByRole("button", { name: "Look again" }).click()
+    await expect(
+      body.getByText(
+        "Plug it in and switch it on, then press Look again, or pick another interface to record with.",
+        { exact: true }
+      )
+    ).toHaveCount(1)
+    expect(await words(page)).not.toMatch(DASH)
+
+    await group(page, "Folders").click()
+    const cloud = page.locator("#cloud-dir")
+    await expect(cloud).toHaveValue("")
+    await expect(cloud).toHaveAttribute("placeholder", "Not set, so nothing is copied anywhere")
+    expect(await words(page)).not.toMatch(DASH)
+    // With a cloud folder, all that is said about the copies.
+    await page.getByRole("button", { name: "Choose cloud folder" }).click()
+    await page.getByRole("radio", { name: "The original tracks" }).click()
+    await expect(body.getByText(TRACKS_HINT, { exact: true })).toHaveCount(1)
+    expect(await words(page)).not.toMatch(DASH)
+  })
 })
 
 test.describe("Under the hood", () => {
@@ -643,7 +938,7 @@ test("says so when a card will not say which rates it takes", async ({ page }) =
   await expect(note).not.toContainText("-9999")
   await expect(note).not.toContainText("PaErrorCode")
   await expect(note).toContainText("rather than its own")
-  await expect(page.getByRole("button", { name: "44.1 kHz" })).toHaveCount(1)
+  await expect(page.getByRole("radio", { name: "44.1 kHz" })).toHaveCount(1)
 })
 
 test.describe("on a machine shaped like Windows", () => {
@@ -752,18 +1047,18 @@ test.describe("on a machine shaped like Windows", () => {
     await page.getByRole("button", { name: "Folders", exact: true }).first().click()
     await expect(page.getByText("214 characters")).toHaveCount(1)
 
-    // Nothing offers to publish automatically while there is nowhere to
-    // publish to — every take would only collect "No cloud folder chosen".
+    // Nothing offers to send automatically while there is nowhere to send
+    // to: every take would only collect "No cloud folder chosen".
     await expect(page.locator("#auto-publish")).toHaveCount(0)
     for (const label of ["The mix", "The original tracks", "Both"]) {
-      await expect(page.getByRole("button", { name: label, exact: true })).toHaveCount(0)
+      await expect(page.getByRole("radio", { name: label, exact: true })).toHaveCount(0)
     }
-    await expect(page.getByRole("button", { name: "Compressed (MP3)" })).toHaveCount(0)
+    await expect(page.getByRole("radio", { name: "Compressed (MP3)" })).toHaveCount(0)
 
-    // Pick one and all of it appears — including what this machine has to
-    // say about the format it was already set to.
+    // Pick one and all of it appears, with what this machine has to say
+    // about the format it was already set to.
     await page.getByRole("button", { name: "Choose cloud folder" }).click()
-    await expect(page.getByRole("button", { name: "Compressed (MP3)" })).toBeEnabled()
+    await expect(page.getByRole("radio", { name: "Compressed (MP3)" })).toBeEnabled()
     await expect(page.locator("#auto-publish")).toHaveCount(1)
     await expect(page.getByText("soundfile package is missing")).toHaveCount(1)
   })
@@ -873,26 +1168,22 @@ test.describe("a newer version", () => {
   }
 })
 
-test("what gets published is chosen with sending off, and leaves it off", async ({ page }) => {
+test("what gets sent is chosen with sending off, and leaves it off", async ({ page }) => {
   // Send starred sends what it says, so it is a choice even while nothing
   // goes on its own; choosing must not switch automatic sending on.
   await openSettings(page, "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';")
   await group(page, "Folders").click()
   await expect(page.locator("#auto-publish")).not.toBeChecked()
-  const tracks = page.getByRole("button", { name: "The original tracks" })
+  const tracks = page.getByRole("radio", { name: "The original tracks" })
   await expect(tracks).toBeEnabled()
   await tracks.click()
   await expect
     .poll(async () => (await calls(page, "set_auto_publish")).at(-1)?.args)
     .toEqual([false, "tracks"])
-  await expect(tracks).toHaveAttribute("aria-pressed", "true")
+  await expect(tracks).toHaveAttribute("aria-checked", "true")
   await expect(page.locator("#auto-publish")).not.toBeChecked()
   await expect(page.getByText("Every track as recorded")).toHaveCount(1)
 })
-
-// The hint for the original tracks: the notes of a MIDI take go with them.
-const TRACKS_HINT =
-  "Every track as recorded, untouched, and the notes as .mid — for opening in a DAW later."
 
 test("the hint for the original tracks in Settings says the notes come as .mid", async ({ page }) => {
   // The narrowest window the app is laid out for: the longer words wrap, and
@@ -900,7 +1191,7 @@ test("the hint for the original tracks in Settings says the notes come as .mid",
   await page.setViewportSize({ width: 960, height: 820 })
   await openSettings(page, "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';")
   await group(page, "Folders").click()
-  await page.getByRole("button", { name: "The original tracks" }).click()
+  await page.getByRole("radio", { name: "The original tracks" }).click()
   const hint = page.getByText(TRACKS_HINT, { exact: true })
   await expect(hint).toHaveCount(1)
   await expect(hint).toBeVisible()
@@ -909,10 +1200,10 @@ test("the hint for the original tracks in Settings says the notes come as .mid",
   expect(box.x + box.width).toBeLessThanOrEqual(960)
   expect(await hint.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   // The other two answers did not pick up the words about notes.
-  await page.getByRole("button", { name: "The mix", exact: true }).click()
+  await page.getByRole("radio", { name: "The mix", exact: true }).click()
   await expect(page.getByText("This is what you send people.")).toHaveCount(1)
   await expect(page.getByText("the notes as .mid")).toHaveCount(0)
-  await page.getByRole("button", { name: "Both", exact: true }).click()
+  await page.getByRole("radio", { name: "Both", exact: true }).click()
   await expect(page.getByText("the tracks to work from.")).toHaveCount(1)
   await expect(page.getByText("the notes as .mid")).toHaveCount(0)
 })

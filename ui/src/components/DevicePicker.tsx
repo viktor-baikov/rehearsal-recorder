@@ -24,6 +24,7 @@ const SYSTEM = "default"
  */
 export function DevicePicker({
   id,
+  label,
   devices,
   value,
   onChange,
@@ -33,6 +34,9 @@ export function DevicePicker({
   disabled = false,
 }: {
   id: string
+  /** The device list's name, for a screen reader: the group it is in says
+   *  it on screen. */
+  label: string
   devices: Device[]
   value: number | null
   onChange: (index: number | null) => void
@@ -97,7 +101,7 @@ export function DevicePicker({
         onValueChange={(v) => onChange(v === SYSTEM ? null : Number(v))}
         disabled={disabled}
       >
-        <SelectTrigger id={id} className="w-full">
+        <SelectTrigger id={id} aria-label={label} className="w-full">
           <SelectValue placeholder={devicePlaceholder} />
         </SelectTrigger>
         <SelectContent>

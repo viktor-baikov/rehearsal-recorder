@@ -68,7 +68,9 @@ export function SettingsGroup({
  * the keys where they were.
  *
  * `name` is an item's name where its words alone would not say it: "Scale
- * 150 percent" for "150%".
+ * 150 percent" for "150%". An item `disabled` is shown but cannot be
+ * chosen, as 16 bit at a rate the interface takes only at 24. `value` is
+ * null until the setting is read, and then none is on.
  */
 export function PickRow<T extends string | number>({
   label,
@@ -77,8 +79,8 @@ export function PickRow<T extends string | number>({
   onChange,
 }: {
   label: string
-  value: T
-  options: { value: T; label: ReactNode; name?: string }[]
+  value: T | null
+  options: { value: T; label: ReactNode; name?: string; disabled?: boolean }[]
   onChange: (value: T) => void
 }) {
   const id = useId()
@@ -91,7 +93,7 @@ export function PickRow<T extends string | number>({
         type="single"
         variant="switch"
         aria-labelledby={id}
-        value={String(value)}
+        value={value === null ? "" : String(value)}
         // The one that is on, pressed again, sends "", which is no choice:
         // one is always on.
         onValueChange={(next) => {
@@ -100,7 +102,12 @@ export function PickRow<T extends string | number>({
         }}
       >
         {options.map((o) => (
-          <ToggleGroupItem key={String(o.value)} value={String(o.value)} aria-label={o.name}>
+          <ToggleGroupItem
+            key={String(o.value)}
+            value={String(o.value)}
+            aria-label={o.name}
+            disabled={o.disabled}
+          >
             {o.label}
           </ToggleGroupItem>
         ))}

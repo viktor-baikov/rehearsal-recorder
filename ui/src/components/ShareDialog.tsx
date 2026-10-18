@@ -1,5 +1,5 @@
-import { useEffect, useId, useState } from "react"
-import { CloudOff, CloudUpload, FolderOpen, Layers, Music4 } from "lucide-react"
+import { useEffect, useId, useState, type ReactNode } from "react"
+import { CloudOff, CloudUpload, FolderOpen, Layers, Music4, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,18 +14,33 @@ import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import { api, type ShareWhat, type Take } from "@/lib/api"
 import { pollSoon } from "@/lib/activity"
+import { dismiss } from "@/lib/notices"
+import { SHARE_OPTIONS } from "@/lib/share"
 import { reloadEveningSettings } from "@/hooks/useEveningSettings"
 import { useAfter } from "@/hooks/useAfter"
+import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useHeld } from "@/lib/held"
 import { SPINNER_AFTER_MS } from "@/lib/playLook"
+
+/** The notice slot for what the dialog could not do. */
+const SHARE = "share"
+
+const ICONS: Record<ShareWhat, ReactNode> = {
+  mix: <Music4 />,
+  tracks: <Layers />,
+  both: <CloudUpload />,
+}
 
 /**
  * Putting one take into the cloud folder.
  *
  * Copying everything would mean syncing every failed attempt, which is most of
- * a rehearsal. So it is done here, per take, after listening — and with a
+ * a rehearsal. So it is done here, per take, after listening, and with a
  * choice: the mix is what gets sent to people, the original tracks are what
  * someone opens in a DAW later.
+ *
+ * What it could not do is said in an error notice (C4), over the veil, and
+ * the dialog stays to try again from.
  */
 export function ShareDialog({
   take,
@@ -40,7 +55,7 @@ export function ShareDialog({
 }) {
   const [cloudDir, setCloudDir] = useState<string | null>(null)
   const [busy, setBusy] = useState<ShareWhat | "remove" | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const failed = useErrorNotice(SHARE)
   // Remove keeps its icon for the first second of a removal (B5).
   const removing = useAfter(busy === "remove", SPINNER_AFTER_MS)
 
@@ -51,18 +66,18 @@ export function ShareDialog({
 
   useEffect(() => {
     if (!take) return
-    setError(null)
+    dismiss(SHARE)
     void api()
       .get_settings()
       .then((s) => setCloudDir(s.cloud_dir))
   }, [take])
 
   const pickFolder = async () => {
-    setError(null)
+    dismiss(SHARE)
     const res = await api().choose_cloud_dir()
     if (res.cancelled) return
     if (!res.ok) {
-      setError(res.error ?? "Could not open the folder picker")
+      failed(res.error ?? "Could not open the folder picker")
       return
     }
     setCloudDir(res.cloud_dir ?? null)
@@ -72,12 +87,12 @@ export function ShareDialog({
 
   const share = async (what: ShareWhat) => {
     if (!take) return
-    setError(null)
+    dismiss(SHARE)
     setBusy(what)
     const res = await api().share_take(folder, take.take_number, what)
     setBusy(null)
     if (!res.ok) {
-      setError(res.error ?? "Could not copy the take")
+      failed(res.error ?? "Could not copy the take")
       return
     }
     // The copy runs in the background now and can be over in a fraction of
@@ -89,16 +104,23 @@ export function ShareDialog({
 
   const remove = async () => {
     if (!take) return
-    setError(null)
+    dismiss(SHARE)
     setBusy("remove")
     const res = await api().unshare_take(folder, take.take_number)
     setBusy(null)
     if (!res.ok) {
-      setError(res.error ?? "Could not remove the copies")
+      failed(res.error ?? "Could not remove the copies")
       return
     }
     onDone()
     onOpenChange(false)
+  }
+
+  // Each option is there when every copy it makes is.
+  const there: Record<ShareWhat, boolean> = {
+    mix: Boolean(shared.mix),
+    tracks: Boolean(shared.tracks),
+    both: Boolean(shared.mix && shared.tracks),
   }
 
   return (
@@ -107,17 +129,23 @@ export function ShareDialog({
         <DialogHeader>
           <DialogTitle>Copy “{shown?.name ?? ""}” to the cloud</DialogTitle>
           <DialogDescription>
-            The files are copied into your cloud folder — whatever client
-            watches it does the uploading.
+            The files are copied into your cloud folder, and the app that syncs it does the
+            uploading.
           </DialogDescription>
         </DialogHeader>
 
+        {/* With no folder, the shared warning look: the triangle in the
+            warn colour and the words in the text's own. */}
         <div className="flex items-center gap-2 rounded-lg border bg-background/50 px-3 py-2">
-          <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
+          {cloudDir ? (
+            <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
+          ) : (
+            <TriangleAlert className="size-3.5 shrink-0 text-warn" />
+          )}
           <span
             className={cn(
-              "flex-1 truncate font-mono text-xs",
-              cloudDir ? "text-muted-foreground" : "text-warn"
+              "flex-1 truncate text-xs",
+              cloudDir ? "font-mono text-muted-foreground" : "text-foreground"
             )}
           >
             {cloudDir ?? "No cloud folder chosen yet"}
@@ -128,36 +156,19 @@ export function ShareDialog({
         </div>
 
         <div className="flex flex-col gap-2">
-          <ShareOption
-            icon={<Music4 />}
-            title="The mix"
-            hint="One stereo file with the balance you set here. This is what you send people."
-            done={Boolean(shared.mix)}
-            busy={busy === "mix"}
-            disabled={!cloudDir || busy !== null}
-            onClick={() => void share("mix")}
-          />
-          <ShareOption
-            icon={<Layers />}
-            title="The original tracks"
-            hint="Every track as recorded, untouched, and the notes as .mid — for opening in a DAW later."
-            done={Boolean(shared.tracks)}
-            busy={busy === "tracks"}
-            disabled={!cloudDir || busy !== null}
-            onClick={() => void share("tracks")}
-          />
-          <ShareOption
-            icon={<CloudUpload />}
-            title="Both"
-            hint="The mix to listen to, the tracks to work from."
-            done={Boolean(shared.mix && shared.tracks)}
-            busy={busy === "both"}
-            disabled={!cloudDir || busy !== null}
-            onClick={() => void share("both")}
-          />
+          {SHARE_OPTIONS.map((o) => (
+            <ShareOption
+              key={o.id}
+              icon={ICONS[o.id]}
+              title={o.label}
+              hint={o.hint}
+              done={there[o.id]}
+              busy={busy === o.id}
+              disabled={!cloudDir || busy !== null}
+              onClick={() => void share(o.id)}
+            />
+          ))}
         </div>
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
 
         {/* The options act at once, so there is nothing to cancel: the one
             button is the way out. */}

@@ -446,6 +446,10 @@ export const mixed = (page: Page, token: string, percent: number) =>
 /** The four sides of a box, for `style`: its edge's colour and width. */
 export const EDGE = ["top", "right", "bottom", "left"].flatMap((s) => [`border-${s}-color`, `border-${s}-width`])
 
+/** A dash set in a sentence: an em dash, or an en dash or a hyphen with a
+ *  space on each side. A range, as in "1–2", and a hyphen in a word are not. */
+export const DASH = /—|\s[–-]\s/
+
 /**
  * The lines of the tooltip `el` shows once the pointer rests on it, one to a
  * line; none when it shows none, long after one would have. It goes away

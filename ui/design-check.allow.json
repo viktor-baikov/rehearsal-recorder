@@ -1,4 +1,3 @@
 {
-  "src/components/AudioSettings.tsx": ["raw-colour"],
   "src/components/UnderTheHood.tsx": ["px-text"]
 }
