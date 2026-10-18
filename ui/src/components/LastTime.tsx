@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Item } from "@/components/ui/item"
 import { MarkLine } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
+import { TakeColumns } from "@/components/ui/take-columns"
 import { FigureLine, Figures, WholeTip, useCut, type FigurePart } from "@/components/ui/whole"
 import { EveningStrip } from "@/components/EveningStrip"
 import { SongName } from "@/components/SongName"
@@ -21,7 +22,6 @@ import {
 } from "@/lib/format"
 import { labelOf, useLabels } from "@/lib/labels"
 import { playLook } from "@/lib/playLook"
-import { drawnLength } from "@/lib/takeScale"
 import { cn } from "@/lib/utils"
 import type { LastTime as LastTimeData, SongPlays, Take } from "@/lib/api"
 
@@ -302,26 +302,16 @@ function SongRow({
           </span>
         )}
       </div>
-      <div aria-hidden data-goes className="flex h-6 items-end gap-1">
-        {takes.map((t) => (
-          <span
-            key={t.take_number}
-            data-starred={t.starred || undefined}
-            data-lit={isTarget(t) || undefined}
-            className={cn(
-              "w-1.5 rounded-sm",
-              isTarget(t)
-                ? t.starred
-                  ? "bg-signal"
-                  : "bg-muted-foreground"
-                : t.starred
-                  ? "bg-signal/45"
-                  : "bg-muted-foreground/35"
-            )}
-            style={{ height: drawnLength(t.duration_sec, longest, 24) }}
-          />
-        ))}
-      </div>
+      <TakeColumns
+        height={24}
+        longest={longest}
+        columns={takes.map((t) => ({
+          key: t.take_number,
+          sec: t.duration_sec,
+          starred: t.starred ?? false,
+          lit: isTarget(t),
+        }))}
+      />
     </div>
   )
 }

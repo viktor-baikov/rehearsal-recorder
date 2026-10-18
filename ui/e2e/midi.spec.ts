@@ -1,4 +1,4 @@
-import { callCount, calls, expect, openApp, setFake, startButton, test } from "./app.ts"
+import { callCount, calls, expect, notices, openApp, setFake, startButton, test } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
 // MIDI on the setup screen: what each track records (Audio, Both or MIDI),
@@ -782,7 +782,7 @@ test.describe("setup", () => {
     await page.getByRole("button", { name: "Check signal" }).click()
     await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
     await startButton(page).click()
-    await expect(page.getByText("No room left")).toBeVisible()
+    await expect(notices(page, "error").filter({ hasText: "No room left" })).toBeVisible()
 
     // Kept open for the rehearsal, then let go when there was none.
     const log = await page.evaluate(() =>

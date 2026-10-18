@@ -203,11 +203,13 @@ export async function startRehearsal(page: Page, n = 1) {
   await settled(page)
 }
 
-/** Records take `n` and stops it, leaving it up for review. */
+/** Records take `n` and stops it, leaving it up for review once the
+ *  player's groups have risen into place: a box in them is measured then. */
 export async function recordTake(page: Page, n = 1) {
   await page.getByRole("button", { name: new RegExp(`Record take ${n}`) }).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
   await expect(page.locator("[data-take-summary]")).toBeVisible()
+  await settled(page)
 }
 
 /** Names the take on the screen after it, through its pencil and Rename

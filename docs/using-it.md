@@ -259,37 +259,53 @@ during a take. Press **Stop**, or Space, when the song is over.
 
 ### Keep the take or not
 
-![After stopping: the take's song and its takes tonight, then save or discard it](screenshots/review.png)
+![After stopping: the take's name at the top with the song's takes tonight beside it, the player, then Discard and Save take](screenshots/review.png)
 
-After you stop, the take opens straight away so you can listen to it. The
-bottom left says what was recorded: the song with its number, "Viasna 2",
-and under it how long the take ran against the song's last take tonight,
-"2:31 · 10 s longer than Viasna 1". With no take of the song tonight it is
-measured against the take before tonight, with the day: "8 s longer than on
-22 Sep". Left of the title is a bar for each of the song's takes tonight,
-the last ten of them, as tall as it ran: this one in the colour of the text,
-the starred ones (★) green, the others grey. A take nobody named says
-"Take 7", grey, and how long it ran.
+After you stop, the take opens straight away. Listen to it, then press
+**Save take** (Space) to keep it or **Discard** (Esc) to throw it away. A
+discarded take goes to the Trash at once. **Undo**, or ⌘Z on a Mac (Ctrl+Z
+elsewhere), brings it back to this screen as you left it, with its name,
+its marks and whether it goes to the cloud. See [Undo](#undo). If the take
+cannot be saved, a red notice says why and stays until you close it. The
+take is still here, so press **Save take** again.
 
-The name is filled in for you: after a take called "Pałyn", the next one is
-"Pałyn 2". Check it, then press **Save take** (Space) or **Discard**. A
-discarded take goes to the Trash at once. Pressing Esc also discards it.
-**Undo**, or ⌘Z on a Mac (Ctrl+Z elsewhere), brings it back to this screen
-as you left it, with its name, its marks and whether it goes to the cloud. See [Undo](#undo).
+The take's name is at the top: the song and its number, "Viasna 2". A long
+name takes a second line, and one longer than that is cut with its number
+kept; point at it to read it whole. The small line over it gives the take's
+place in the rehearsal and the rehearsal's name, "Take 5 · Thursday"; a long
+rehearsal name is cut, and shows whole when you point at it. A take nobody
+named says "Take 7", in grey. How long the take ran is in the player,
+"0:00 / 2:31".
 
-The pencil beside the title renames the take. The songs you have played
-are listed under the name, this rehearsal's first, then the others, most
-recent first: click one, or type a name, and press Enter. The title, the
-bars and the line under it follow. ✕ in the field puts back the name the
-take would have had if none had been picked before recording. While you
-rename, Space types and Esc closes the dialog. See [Names and
-songs](#names-and-songs).
+At the right of the name are the song's takes tonight as columns, the last
+ten of them. Each is as tall as that take ran, with the take's number under
+it. This take's column is in the colour of the text, the starred takes (★)
+are pale green and the others grey. Point at the columns to read them as
+times: "Viasna 1: 2:31, Viasna 2: 2:41". A song's first take tonight has no
+columns, and nor does a take nobody named. In a narrow window the columns go
+first, to leave the name its room; point at the name to read them then.
 
-If you have a cloud folder, a checkbox under the buttons shows whether this
-take will be sent there. Changing it affects this take only.
+Check the name before you save. It is filled in for you: after a take called
+"Pałyn", the next one is "Pałyn 2". The pencil right after the name opens
+**Rename take**. The songs you have played are listed under its field, this
+rehearsal's first, then the others, most recent first: click one, or type a
+name, and press Enter. The title and the columns follow. ✕ in the field puts
+back the name the take would have had if none had been picked before
+recording. While **Rename take** is open, Space types and Esc closes it. See
+[Names and songs](#names-and-songs).
 
-You can listen, add markers and crop the take here, before you save it. The
-markers are saved with the take.
+The bottom left says whether this take goes to your cloud folder: "Send to
+the cloud: the mix, FLAC", with a box in front. The line names what would be
+sent and in which format, as you set them (see [Sending takes to the
+cloud](#sending-takes-to-the-cloud)), and the box starts ticked when **Send
+saved takes automatically** is on. Tick it to send this take, or untick it
+to leave it on this computer; the setting stays as it is. The box lets go of
+the keyboard as soon as you change it, so Space still saves the take. With
+no cloud folder, the line says "Stays on this computer: no cloud folder is
+set".
+
+You can listen, add marks and crop the take here, before you save it. The
+marks are saved with the take.
 
 ## Listening back
 

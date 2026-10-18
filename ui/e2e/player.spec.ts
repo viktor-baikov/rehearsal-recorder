@@ -42,7 +42,7 @@ const keysList = (page: Page) => page.getByRole("dialog").filter({ hasText: "Key
 test.describe("the review screen", () => {
   test("names a first take, and puts its keys on its buttons", async ({ page }) => {
     await review(page)
-    await expect(page.locator("[data-take-summary] h2")).toHaveText("Take 1")
+    await expect(page.locator("[data-take-summary]")).toHaveText("Take 1")
     // The keys are on the buttons they press, not in a line underneath.
     await expect.poll(() => keyOn(page.getByRole("button", { name: /Save take/ }))).toBe("Space")
     await expect.poll(() => keyOn(page.getByRole("button", { name: /Discard/ }))).toBe("Esc")
@@ -162,7 +162,7 @@ test.describe("the review screen", () => {
     await review(page)
     await nameTake(page, "Pałyn")
     expect(await callCount(page, "discard_take")).toBe(0)
-    await expect(page.locator("[data-take-summary] h2")).toHaveText("Pałyn 1")
+    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn 1")
     await page.keyboard.press("Space")
     await expect.poll(() => callCount(page, "keep_take")).toBe(1)
     // A saved take says it is on its way to the cloud, and stops saying so
@@ -173,7 +173,7 @@ test.describe("the review screen", () => {
 
   test("the next take takes the last one's name, numbered", async ({ page }) => {
     await secondTake(page)
-    await expect(page.locator("[data-take-summary] h2")).toHaveText("Pałyn 2")
+    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn 2")
     await expect(page.locator("[data-take-summary] [data-go]")).toHaveText("2")
   })
 
@@ -189,7 +189,7 @@ test.describe("the review screen", () => {
       .filter({ hasText: "“Pałyn 2” went to the Trash." })
       .getByRole("button", { name: "Undo" })
       .click()
-    await expect(page.locator("[data-take-summary] h2")).toHaveText("Pałyn 2")
+    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn 2")
   })
 
   test("a mark made before saving goes with the take when it is saved", async ({ page }) => {

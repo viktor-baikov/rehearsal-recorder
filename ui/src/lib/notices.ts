@@ -116,11 +116,25 @@ function commit(next: Notice[]) {
   for (const n of gone) if (n.onGone) call("a notice's onGone", n.onGone)
 }
 
+/**
+ * At most MAX_NOTICES stay. The newest is always said; room is made with
+ * the oldest notice that has no action, so an error or a "done" does not
+ * push out an Undo still in its time: an Undo that goes lets go for good of
+ * what it would have brought back. An Undo makes room only when every other
+ * notice up has an action too.
+ */
+function trimmed(list: Notice[]): Notice[] {
+  const out = [...list]
+  while (out.length > MAX_NOTICES) {
+    const plain = out.findIndex((c, i) => !c.action && i < out.length - 1)
+    out.splice(plain >= 0 ? plain : 0, 1)
+  }
+  return out
+}
+
 export function notify(n: Omit<Notice, "id">) {
   const notice: Notice = { ...n, id: nextId++ }
-  commit(
-    [...current.filter((c) => c.key !== n.key), notice].slice(-MAX_NOTICES)
-  )
+  commit(trimmed([...current.filter((c) => c.key !== n.key), notice]))
 }
 
 export function dismiss(key: string) {

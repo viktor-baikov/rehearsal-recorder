@@ -1185,12 +1185,6 @@ window.__MAKE_API__ = () => ({
     nextName = (name || '').trim() || null;
     return {ok:true, next_take_name:suggestName(), next_take_go:nextTake().go};
   }),
-  last_attempt: track('last_attempt', async (name) => {
-    await held('last_attempt');
-    if (!session) return null;
-    const song = songOf(name, session.takes);
-    return lastAttempt(session.takes, song, await goBeforeTonight(song));
-  }),
   // api.song_choices: the songs of the rehearsal (the live one with no
   // folder), each as the next go at it, and the rest of the repertoire.
   song_choices: track('song_choices', async (folder, n) => {

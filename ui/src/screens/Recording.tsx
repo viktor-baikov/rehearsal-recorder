@@ -6,6 +6,7 @@ import { StopTake } from "@/components/StopTake"
 import { GoTitle } from "@/components/TakeTitle"
 import { TrackTile } from "@/components/TrackTile"
 import { Progress } from "@/components/ui/progress"
+import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
@@ -31,6 +32,9 @@ const TIMER_TICK_MS = 200
 const HEALTH_POLL_MS = 2000
 // The slot this screen's notice takes: why a take stopped by itself.
 const SAID = "recording"
+// The slot a failed Stop says so in. Its own: SAID holds why the take stopped
+// by itself, and the Stop that follows it can fail as well; both are said.
+const ERROR = "recording-error"
 // The clock is as big as the window's height allows, and the take's name
 // over it half that, so the two read from the same distance.
 const CLOCK_SIZE = "clamp(4rem, 19vh, 9.5rem)"
@@ -123,7 +127,6 @@ export function Recording({
   )
   const takesNotes = tracks.some(recordsNotes)
   const [stopping, setStopping] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [health, setHealth] = useState<RecordingHealth | null>(null)
   const startedAt = useRef(Date.now())
   const stopRef = useRef<() => Promise<void>>(async () => {})
@@ -133,6 +136,8 @@ export function Recording({
   // A new take is recording: why the last one stopped by itself no longer
   // stands, and "Recording stopped" over a take that is recording is wrong.
   useEffect(() => dismiss(SAID), [])
+  // An error Stop said is about this take, and goes with the screen.
+  const sayError = useErrorNotice(ERROR)
 
   // Nothing moves while a take is recording (spec F11): <html> says so for
   // the stylesheet and for motionOff(), and stops saying so when this screen
@@ -197,10 +202,11 @@ export function Recording({
   const stop = async () => {
     if (stopping) return
     setStopping(true)
+    dismiss(ERROR)
     const res = await watching(api().stop_take())
     if (!res.ok) {
       setStopping(false)
-      setError(("error" in res && res.error) || "Could not stop the recording")
+      sayError(("error" in res && res.error) || "Could not stop the recording")
       return
     }
     onStopped(res as PendingTake)
@@ -386,7 +392,7 @@ export function Recording({
       air
       className="px-8 [--screen-pad-y:2rem]"
       footer={
-        <FooterRow error={error} left={statusRow}>
+        <FooterRow left={statusRow}>
           <StopTake onStop={stop} stopping={stopping} saving={saving} />
         </FooterRow>
       }

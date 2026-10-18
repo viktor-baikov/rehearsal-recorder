@@ -1,7 +1,9 @@
 import {
   calls,
   callCount,
+  colour,
   expect,
+  mixed,
   openApp,
   openHistory,
   recordTake,
@@ -169,17 +171,43 @@ test("the bar of the go ▶ plays is lit, starred or not", async ({ page }) => {
   await openApp(page, {
     before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#1'];",
   })
-  const bars = lastTime(page).locator("[data-song='Pałyn'] [data-goes] > span")
+  const bars = lastTime(page).locator("[data-song='Pałyn'] [data-columns] > [data-column]")
   await expect(bars.locator("xpath=self::*[@data-lit]")).toHaveCount(1)
   await expect(bars.first()).toHaveAttribute("data-lit", "true")
   await expect(bars.first()).toHaveAttribute("data-starred", "true")
+})
+
+test("the lit bar is in the text's colour, or green when starred; a starred one is paler and the rest grey", async ({
+  page,
+}) => {
+  const fillOf = (bar: ReturnType<Page["locator"]>) =>
+    bar.locator("[data-bar]").evaluate((e) => getComputedStyle(e).backgroundColor)
+  const bars = () => lastTime(page).locator("[data-song='Pałyn'] [data-columns] > [data-column]")
+
+  // No star: Pałyn 2, the last go, is lit, and Pałyn 1 is grey.
+  await openApp(page, {
+    before: "window.__FULL_EVENING__ = true; window.__STARRED__ = [];",
+  })
+  await expect(bars().last()).toHaveAttribute("data-lit", "true")
+  expect(await fillOf(bars().last())).toBe(await colour(page, "--foreground"))
+  expect(await fillOf(bars().first())).toBe(await mixed(page, "--muted-foreground", 35))
+
+  // Both starred: the newest, Pałyn 2, is lit in the star's green, and
+  // Pałyn 1 is that green at 45 %.
+  await openApp(page, {
+    before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#1', '/rec/old#2'];",
+  })
+  await expect(bars().last()).toHaveAttribute("data-lit", "true")
+  await expect(bars().first()).toHaveAttribute("data-starred", "true")
+  expect(await fillOf(bars().last())).toBe(await colour(page, "--signal"))
+  expect(await fillOf(bars().first())).toBe(await mixed(page, "--signal", 45))
 })
 
 test("with no ★ the lit bar is the song's last go", async ({ page }) => {
   await openApp(page, {
     before: "window.__FULL_EVENING__ = true; window.__STARRED__ = [];",
   })
-  const bars = lastTime(page).locator("[data-song='Pałyn'] [data-goes] > span")
+  const bars = lastTime(page).locator("[data-song='Pałyn'] [data-columns] > [data-column]")
   await expect(bars.locator("xpath=self::*[@data-lit]")).toHaveCount(1)
   await expect(bars.last()).toHaveAttribute("data-lit", "true")
 })

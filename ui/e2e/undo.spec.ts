@@ -263,7 +263,7 @@ test("one false start cleared is said as one", async ({ page }) => {
 })
 
 test.describe("on the screen after a take", () => {
-  const title = (page: Page) => page.locator("[data-take-summary] h2")
+  const title = (page: Page) => page.locator("[data-take-summary]")
 
   test("Esc leaves it, and Undo opens it again as it was left", async ({ page }) => {
     await openApp(page)
@@ -415,7 +415,7 @@ test.describe("on the screen after a take", () => {
       w.pywebview.api.keep_take = async () => ({ ok: false, error: "The disk is full" })
     })
     await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(page.getByText("The disk is full")).toBeVisible()
+    await expect(notices(page, "error").filter({ hasText: "The disk is full" })).toBeVisible()
     await expect(cropped.getByRole("button", { name: "Undo" })).toHaveCount(1)
     expect(await callCount(page, "end_trash")).toBe(0)
   })

@@ -22,7 +22,7 @@ import type { Page } from "@playwright/test"
 
 /** The take's name field in Rename take, on the screen after a take. */
 const nameField = (page: Page) => page.locator("#take-name")
-/** That screen's title: the take's song, without its go. */
+/** That screen's title: the take's song and its number. */
 const reviewTitle = (page: Page) => page.locator("[data-take-summary] [data-go-title]")
 const renameReview = (page: Page) =>
   page.locator("[data-take-summary]").getByRole("button", { name: "Rename take" }).click()
@@ -156,6 +156,35 @@ test("renaming a take on the rehearsal screen offers the songs, ✕ puts its nam
   expect((await calls(page, "rename_take")).at(-1)?.args.slice(1)).toEqual([2, "Viasna"])
 })
 
+test("a rename that fails and then works on the rehearsal screen leaves no error", async ({
+  page,
+}) => {
+  // The first rename fails; the next goes through to the fake.
+  await openApp(page, {
+    after:
+      "const rename = window.pywebview.api.rename_take; let n = 0;" +
+      " window.pywebview.api.rename_take = async (...a) =>" +
+      " (++n === 1 ? {ok: false, error: 'Could not rename the take'} : rename(...a));",
+  })
+  await startRehearsal(page)
+  await recordTake(page)
+  await saveAs(page, "Pałyn")
+  const rename = async (name: string) => {
+    await page.hover("[data-take='1']")
+    await page.getByRole("button", { name: /^Rename take / }).click()
+    const dialog = page.getByRole("dialog")
+    await dialog.getByRole("textbox", { name: "Take name" }).fill(name)
+    await page.keyboard.press("Enter")
+    await expect(dialog).toHaveCount(0)
+  }
+  await rename("Viasna")
+  await expect(notices(page, "error").filter({ hasText: "Could not rename the take" })).toBeVisible()
+  await rename("Sonca")
+  await expect.poll(() => callCount(page, "rename_take")).toBe(1)
+  await expect(page.locator("[data-take='1']")).toContainText("Sonca")
+  await expect(notices(page, "error")).toHaveCount(0)
+})
+
 test("renaming a take in history offers what that rehearsal played, as the next go", async ({
   page,
 }) => {
@@ -249,13 +278,13 @@ test.describe("the next take", () => {
     await page.keyboard.press("Space")
     await expect(page.getByRole("heading", { level: 1, name: "Viasna" })).toBeVisible()
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(reviewTitle(page)).toHaveText("Viasna")
+    await expect(reviewTitle(page)).toHaveText("Viasna 1")
 
     // Thrown away, it is played again under the same name.
     await page.getByRole("button", { name: /^Discard/ }).click()
     await expect(field(page)).toHaveValue("Viasna")
     await recordTake(page, 2)
-    await expect(reviewTitle(page)).toHaveText("Viasna")
+    await expect(reviewTitle(page)).toHaveText("Viasna 1")
     await page.getByRole("button", { name: /Save take/ }).click()
     // Kept, it is used up, and the next one follows on from it.
     await expect(field(page)).toHaveValue("Viasna")
@@ -384,7 +413,7 @@ test.describe("the next take", () => {
     await field(page).fill("Lost")
     await page.keyboard.press("Enter")
     await expect(field(page)).toHaveValue("Take 1")
-    await expect(page.getByText("Could not name it")).toBeVisible()
+    await expect(notices(page, "error").filter({ hasText: "Could not name it" })).toBeVisible()
 
     await page.getByRole("button", { name: /Record take 1/ }).click()
     await expect(page.getByRole("heading", { level: 1, name: "Take 1" })).toBeVisible()
@@ -399,11 +428,11 @@ test.describe("the next take", () => {
     await startRehearsal(page)
     await field(page).fill("Lost")
     await page.keyboard.press("Enter")
-    await expect(page.getByText("Could not name it")).toBeVisible()
+    await expect(notices(page, "error").filter({ hasText: "Could not name it" })).toBeVisible()
 
     await field(page).fill("Found")
     await page.keyboard.press("Enter")
-    await expect(page.getByText("Could not name it")).toHaveCount(0)
+    await expect(notices(page, "error")).toHaveCount(0)
     await expect(field(page)).toHaveValue("Found")
   })
 
@@ -446,9 +475,10 @@ test.describe("after Stop", () => {
     await page.keyboard.press("Enter")
     await page.getByRole("button", { name: /Record take 1/ }).click()
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(reviewTitle(page)).toHaveText("Viasna")
-    // Beside Save take, with a line between it and the buttons.
-    await expect(page.locator("footer [data-footer-rule]")).toHaveCount(1)
+    await expect(reviewTitle(page)).toHaveText("Viasna 1")
+    // The header's title, and no line in the footer between it and the buttons.
+    await expect(page.locator("header [data-take-summary]")).toHaveCount(1)
+    await expect(page.locator("footer [data-footer-rule]")).toHaveCount(0)
 
     await renameReview(page)
     await expect(nameField(page)).toHaveValue("Viasna")
@@ -470,7 +500,7 @@ test.describe("after Stop", () => {
     await expect(nameField(page)).toHaveValue("Ahoń")
     await page.keyboard.press("Enter")
     await expect(page.getByRole("dialog")).toHaveCount(0)
-    await expect(reviewTitle(page)).toHaveText("Ahoń")
+    await expect(reviewTitle(page)).toHaveText("Ahoń 1")
     await page.keyboard.press("Space")
     await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ahoń")
   })
