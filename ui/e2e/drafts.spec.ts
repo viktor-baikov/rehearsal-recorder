@@ -329,7 +329,7 @@ test("the group and then the footer rise in, 40 ms apart", async ({ page }) => {
   expect(await page.locator("header").evaluate((e) => e.closest(".animate-rise") === null)).toBe(true)
 })
 
-test("two takes of one rehearsal are told apart by length, and each Undo brings back its own", async ({
+test("two takes of one rehearsal are told apart by length, and each Undo and Recover acts on its own", async ({
   page,
 }) => {
   await openDrafts(page)
@@ -366,6 +366,13 @@ test("two takes of one rehearsal are told apart by length, and each Undo brings 
   // counts is that all three are there.
   const dirs = await rows(page).evaluateAll((els) => els.map((e) => e.getAttribute("data-draft")))
   expect([...dirs].sort()).toEqual([SEVEN.dir, TWELVE.dir, EIGHT.dir].sort())
+
+  // The 0:41 take's own Recover recovers that one, and the 4:12 one stays.
+  await page.getByRole("button", { name: "Recover Tuesday jam, 0:41", exact: true }).click()
+  await expect(rows(page)).toHaveCount(2)
+  expect((await calls(page, "recover_draft")).map((c) => c.args)).toEqual([[EIGHT.dir]])
+  await expect(rowOf(page, EIGHT)).toHaveCount(0)
+  await expect(rowOf(page, SEVEN)).toHaveCount(1)
 })
 
 // The main button. With one take the footer's Recover recovers it; with more,
@@ -555,6 +562,8 @@ test("Decide later during Recover all leaves the takes not reached for next time
   await expect.poll(() => onDisk(page)).toEqual([TWELVE.dir, EIGHT.dir])
   await page.waitForTimeout(200)
   expect(await callCount(page, "recover_draft")).toBe(1)
+  // Nothing comes back to work while the screen goes, but Decide later.
+  await expect(working(page)).toHaveText(["Decide later"])
   await letThrough(page)
   await expect(startButton(page)).toBeVisible()
   expect(await callCount(page, "recover_draft")).toBe(1)
@@ -610,10 +619,10 @@ test("an Undo after Recover closed the list opens it again, Recover in the foote
   await expect(rows(page).getByRole("button")).toHaveText(["Discard"])
 })
 
-test("a take still recovering when an Undo opens the list again is busy, and no Recover works until it is done", async ({
-  page,
-}) => {
-  await openDrafts(page)
+/** A take still recovering for the list before, when an Undo opens the list
+ *  again: busy there until its recovery answers, which `fails` or not. */
+async function recoveringForTheListBefore(page: Page, fails: boolean) {
+  await openDrafts(page, [SEVEN, TWELVE, EIGHT], fails ? `window.__RECOVER_FAILS__ = ${JSON.stringify(SEVEN.dir)};` : "")
   await page.getByRole("button", { name: "Discard Tuesday jam, 0:41", exact: true }).click()
   await expect(rows(page)).toHaveCount(2)
   await hold(page, "recover_draft")
@@ -646,17 +655,77 @@ test("a take still recovering when an Undo opens the list again is busy, and no 
     await expect(rowOf(page, other).getByRole("button", { name: /^Discard/ })).toBeEnabled()
   }
 
-  // Once it is done it leaves this list too, and the rest works.
+  // The journal says done before Python has moved the take, and the move can
+  // fail: once nothing runs every button works, and the row is still there.
   await setFake(page, "__ACTIVITY__", [{ ...recovering(SEVEN.dir, 1), state: "done" }])
-  await expect(inHand).toHaveCount(0)
-  await expect(rows(page)).toHaveCount(2)
   await expect(page.locator("main button:disabled, footer button:disabled")).toHaveCount(0)
-  await expect(mainButton(page)).toHaveText("Recover all")
+  await expect(rows(page)).toHaveCount(3)
+  await expect(inHand).toHaveCount(1)
+
+  // The answer says how it went.
   await letGo(page, "recover_draft")
-  await expect.poll(() => onDisk(page)).toEqual([TWELVE.dir, EIGHT.dir])
+  if (fails) {
+    await expect(notices(page, "error").locator("p")).toHaveText(
+      "Recover all stopped at “Tuesday jam”: Could not recover the take: its folder is read-only"
+    )
+    await expect(rows(page)).toHaveCount(3)
+    await expect(inHand.locator("[data-slot=item-description]")).toHaveCount(1)
+    expect(await onDisk(page)).toEqual([SEVEN.dir, TWELVE.dir, EIGHT.dir])
+  } else {
+    await expect(inHand).toHaveCount(0)
+    await expect(rows(page)).toHaveCount(2)
+    await expect(mainButton(page)).toHaveText("Recover all")
+    expect(await onDisk(page)).toEqual([TWELVE.dir, EIGHT.dir])
+  }
+  await expect(page.locator("main button:disabled, footer button:disabled")).toHaveCount(0)
   await page.waitForTimeout(200)
   expect((await calls(page, "recover_draft")).map((c) => c.args)).toEqual([[SEVEN.dir]])
+}
+
+test("a take still recovering when an Undo opens the list again is busy, and leaves when its recovery answers", async ({
+  page,
+}) => {
+  await recoveringForTheListBefore(page, false)
+})
+
+test("a take still recovering when an Undo opens the list again stays if its recovery fails after the journal's done", async ({
+  page,
+}) => {
+  await recoveringForTheListBefore(page, true)
+})
+
+test("an Undo from the list before joins the list open now, and its Recover all goes on", async ({ page }) => {
+  await openDrafts(page)
+  await page.getByRole("button", { name: "Discard Tuesday jam, 4:12", exact: true }).click()
   await expect(rows(page)).toHaveCount(2)
+  await page.getByRole("button", { name: "Discard Tuesday jam, 0:41", exact: true }).click()
+  await expect(rows(page)).toHaveCount(1)
+  await page.getByRole("button", { name: "Decide later" }).click()
+  await expect(startButton(page)).toBeVisible()
+
+  // The 4:12 take's Undo opens the list again, with it and the brewery's.
+  // The notices stand oldest first.
+  const gone = notices(page).filter({ hasText: "“Tuesday jam” went to the Trash." })
+  await expect(gone).toHaveCount(2)
+  await gone.first().getByRole("button", { name: "Undo" }).click()
+  await expect(page.getByRole("heading", { name: "Unsaved takes found" })).toBeVisible()
+  await expect(rows(page)).toHaveCount(2)
+  await hold(page, "recover_draft")
+  await mainButton(page).click()
+  await expect.poll(() => callCount(page, "recover_draft")).toBe(1)
+
+  // The 0:41 take's Undo, from the list before, while the run is on its
+  // first take: the take joins this list, not its run, and the run goes on.
+  await expect(gone).toHaveCount(1)
+  await gone.getByRole("button", { name: "Undo" }).click()
+  await expect(rows(page)).toHaveCount(3)
+  await letGo(page, "recover_draft")
+  await expect(rows(page)).toHaveCount(1)
+  await expect(rowOf(page, EIGHT)).toHaveCount(1)
+  await expect(page.locator("main button:disabled, footer button:disabled")).toHaveCount(0)
+  expect((await calls(page, "recover_draft")).map((c) => c.args)).toEqual([[SEVEN.dir], [TWELVE.dir]])
+  await expect(footerButtons(page)).toHaveText(["Decide later", "Recover"])
+  expect(await onDisk(page)).toEqual([EIGHT.dir])
 })
 
 // B5, as the start screen's Start: a press that takes a second shows a

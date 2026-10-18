@@ -44,6 +44,19 @@ const SAID = "drafts"
  *  footer's word and the rows' own Recover stay as they were until it ends. */
 type Busy = { dir: string; job: "recover" | "discard" | "all"; many: boolean }
 
+/** The list on screen, for one that has closed. App shows one list at a
+ *  time, but a list that has closed can still get a recovery's answer or an
+ *  Undo: a take it recovered then leaves the list on screen, and one its
+ *  Undo brought back joins it. */
+let onScreen: { recovered: (dir: string) => void; cameBack: (dir: string) => void } | null = null
+
+/** A take an Undo brought back: into the list on screen, or with the list
+ *  again when none is. */
+function bringBack(dir: string, reopen: () => void) {
+  if (onScreen) onScreen.cameBack(dir)
+  else reopen()
+}
+
 export function DraftsScreen({
   drafts,
   onDone,
@@ -99,10 +112,10 @@ export function DraftsScreen({
     setRemaining(list)
   }, [])
 
-  // A take recovered or discarded, if it is still listed: a recovery's answer
-  // and the journal can both say so. With the last one the list closes,
-  // unless it has closed already: after Decide later the app stays where it
-  // is.
+  // A take recovered or discarded, if it is still listed: a list's own
+  // recovery and one from the list before can both say so. With the last one
+  // the list closes, unless it has closed already: after Decide later the app
+  // stays where it is.
   const drop = useCallback(
     (dir: string) => {
       if (!listed.current.some((d) => d.dir === dir)) return
@@ -113,13 +126,29 @@ export function DraftsScreen({
     [put, onDone]
   )
 
-  // A take the journal says is recovered leaves the list, also when the list
-  // before this one recovered it. One that failed stays.
+  // An Undo brought this take back: it joins the takes listed, not a run
+  // going on. One recovered or discarded while the list was being read
+  // stays gone.
+  const cameBack = useCallback(
+    async (dir: string) => {
+      const now = await api().list_drafts()
+      if (shown.current) {
+        put(now.filter((d) => d.dir === dir || listed.current.some((l) => l.dir === d.dir)))
+      } else bringBack(dir, onReopen)
+    },
+    [put, onReopen]
+  )
+
+  // On screen, this list hears what a closed one has to say. A take leaves
+  // on its recovery's answer, not on the journal's done: Python marks it
+  // done before it moves the take, and the move can fail.
   useEffect(() => {
-    for (const e of work) {
-      if (e.kind === "recover" && e.state === "done" && e.folder !== null) drop(e.folder)
+    const me = { recovered: drop, cameBack }
+    onScreen = me
+    return () => {
+      if (onScreen === me) onScreen = null
     }
-  }, [work, drop])
+  }, [drop, cameBack])
 
   // One take through Python: null once it is recovered, else the reason it
   // was not.
@@ -131,28 +160,35 @@ export function DraftsScreen({
     endedByPython(res.ended)
     if (!res.ok) return res.error ?? "Could not recover the take"
     drop(draft.dir)
+    // And from the list on screen, if this one has closed since and an Undo
+    // opened another with the take in it.
+    onScreen?.recovered(draft.dir)
     return null
   }
 
-  // Busy stays set once the list is empty: it is going, and the footer
-  // keeps its word until it has gone.
+  // Busy stays set once the list is empty or Decide later is pressed: the
+  // screen is going, and nothing on it comes back to work meanwhile. A press
+  // after a Decide later that did not close it works again.
   const recover = async (draft: Draft) => {
+    leaving.current = false
     setBusy({ dir: draft.dir, job: "recover", many })
     const error = await recoverOne(draft)
-    if (listed.current.length) setBusy(null)
+    if (listed.current.length && !leaving.current) setBusy(null)
     if (error) notify({ key: SAID, kind: "error", text: error })
   }
 
   // The takes listed when it was pressed, one after another; one an Undo
-  // brings back meanwhile joins the list, not the run. It stops at a take
-  // that fails, and after the take in hand once Decide later is pressed: the
-  // rest wait for next time. Pressed again after a Decide later that did not
-  // close the list, it runs.
+  // brings back meanwhile joins the list, not the run, and one the list
+  // before recovered meanwhile is passed over. It stops at a take that
+  // fails, and after the take in hand once Decide later is pressed: the rest
+  // wait for next time. Pressed again after a Decide later that did not close
+  // the list, it runs.
   const recoverAll = async () => {
     leaving.current = false
     const pressed = listed.current
     for (const draft of pressed) {
       if (!shown.current || leaving.current) break
+      if (!listed.current.some((d) => d.dir === draft.dir)) continue
       setBusy({ dir: draft.dir, job: "all", many: true })
       const error = await recoverOne(draft)
       if (error) {
@@ -164,13 +200,12 @@ export function DraftsScreen({
         break
       }
     }
-    if (listed.current.length) setBusy(null)
+    if (listed.current.length && !leaving.current) setBusy(null)
   }
 
-  // Asks nothing: Undo brings the take back, into this list while it is on
-  // screen, or with the list again once it has closed. Which, is decided
-  // when the Undo comes, not when the take went. Named as the list names
-  // it, by its rehearsal.
+  // Asks nothing: Undo brings the take back, into the list on screen, or with
+  // the list again when none is. Which, is decided when the Undo comes, not
+  // when the take went. Named as the list names it, by its rehearsal.
   const discard = async (draft: Draft) => {
     setBusy({ dir: draft.dir, job: "discard", many })
     dismiss(SAID)
@@ -186,18 +221,9 @@ export function DraftsScreen({
     offerUndo({
       text: wentTo(`“${draft.rehearsal_name}”`),
       token: res.undo,
-      onUndone: async () => {
-        if (!shown.current) {
-          onReopen()
-          return
-        }
-        const now = await api().list_drafts()
-        // This take back, and only it: one recovered or discarded while the
-        // list was being read stays gone.
-        if (shown.current) {
-          put(now.filter((d) => d.dir === draft.dir || listed.current.some((l) => l.dir === d.dir)))
-        } else onReopen()
-      },
+      // Into the list on screen: this one, or one opened since. A list open
+      // again is not opened afresh, so a run in it goes on.
+      onUndone: () => bringBack(draft.dir, onReopen),
     })
   }
 
