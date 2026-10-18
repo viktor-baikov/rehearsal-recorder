@@ -1,8 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { FolderOpen, Library, Pencil, Trash2 } from "lucide-react"
+import { FolderOpen, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
-import { Shell, EmptyState } from "@/components/Shell"
+import { Spinner } from "@/components/ui/spinner"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Figures, Whole, useCut, type FigurePart } from "@/components/ui/whole"
+import { Shell } from "@/components/Shell"
+import { PaneHead } from "@/components/PaneHead"
 import { RehearsalList } from "@/components/RehearsalList"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { EveningFacts } from "@/components/EveningFacts"
@@ -20,6 +26,7 @@ import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/Conf
 import { RenameSongDialog } from "@/components/RenameSongDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
+import { useAfter } from "@/hooks/useAfter"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEveningSettings } from "@/hooks/useEveningSettings"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
@@ -44,9 +51,12 @@ import {
   formatDay,
   formatDuration,
   formatWhen,
+  rehearsalsLabel,
 } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
-import { cn } from "@/lib/utils"
+import { showFolder } from "@/lib/folder"
+import { rise } from "@/lib/motion"
+import { useSystem, words } from "@/lib/platform"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 import {
   useActivity,
@@ -75,16 +85,66 @@ import {
 /** A song as renaming and merging name it: which one, and its title. */
 type SongName = { id: number; title: string }
 
-/** "5 rehearsals · 2 h 24 min played · 5.0 GB", over the whole list. */
-function allOf(rehearsals: RehearsalSummary[]): string {
+/** Which song a page read is of, as the list names it. */
+function songOf(page: SongDetail): SongRef {
+  return page.id ?? "not_named"
+}
+
+/** "5 rehearsals · 2 h 24 min played · 5.0 GB", over the whole list, as
+ *  figures that give way to the header's title: the size first, the count
+ *  last. Under half a minute there is no honest time played. */
+function totalsOf(rehearsals: RehearsalSummary[]): FigurePart[] {
   const seconds = rehearsals.reduce((sum, r) => sum + r.total_duration_sec, 0)
   const bytes = rehearsals.reduce((sum, r) => sum + r.disk_bytes, 0)
-  const parts = [
-    rehearsals.length === 1 ? "1 rehearsal" : `${rehearsals.length} rehearsals`,
+  return [
+    { text: rehearsalsLabel(rehearsals.length), keep: 2 },
+    ...(seconds >= 30 ? [{ text: `${formatDuration(seconds / 60)} played`, keep: 1 }] : []),
+    { text: formatBytes(bytes), keep: 0 },
   ]
-  if (seconds >= 30) parts.push(`${formatDuration(seconds / 60)} played`)
-  parts.push(formatBytes(bytes))
-  return parts.join(" · ")
+}
+
+/**
+ * The rehearsal's folder as the last of the line under its name: the path,
+ * cut at its end where the line runs out, is the button that opens it. Its
+ * name and its tip say what it does in the system's words, "Show in Finder";
+ * the tip has the path whole under them while it is cut.
+ */
+function FolderPath({ folder }: { folder: string }) {
+  const { folderButton } = words(useSystem())
+  const [ref, cut] = useCut<HTMLSpanElement>()
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/* A link's words in the line: no padding beside the icon. It has
+            what the date and the set leave, and no more than its path, so the
+            set keeps its room and the path is cut at the line's end. Its
+            icon and the gap after it stay: on a line too short for them, the
+            set gives way first. */}
+        <Button
+          variant="link"
+          onClick={() => void showFolder(folder)}
+          className="h-auto max-w-fit min-w-5 flex-1 gap-1.5 rounded-sm p-0 text-xs has-[>svg]:p-0"
+        >
+          <FolderOpen className="size-3.5" />
+          <span className="sr-only">{folderButton} </span>
+          <span ref={ref} data-cut={cut || undefined} className="min-w-0 truncate font-mono">
+            {folder}
+          </span>
+        </Button>
+      </TooltipTrigger>
+      {/* For the eyes: the button's name says it all already. */}
+      <TooltipContent className="break-words">
+        <span aria-hidden className="block">
+          {folderButton}
+        </span>
+        {cut && (
+          <span aria-hidden className="block font-mono">
+            {folder}
+          </span>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 // What an action here said — one slot, so each says over the last.
@@ -321,9 +381,21 @@ export function HistoryScreen({
       }
     })()
   }, [])
+  /** Into another view, on `song` if it is Songs. A page kept from the visit
+   *  before shows again at once when it is of the song or label the view
+   *  opens on, and the fresh read takes its place in one render. One of
+   *  another song or label is let go, since a page never shows under
+   *  another's name: the pane is empty until the read. */
+  const enterView = (next: HistoryView, song: SongRef | null) => {
+    if (next !== view) {
+      setSongPage((p) => (p !== null && songOf(p) === song ? p : null))
+      setMarks((m) => (m !== null && m.label === chosenLabel ? m : null))
+    }
+    setView(next)
+  }
   const showView = (next: HistoryView) => {
     forgetAsked()
-    setView(next)
+    enterView(next, chosenSong)
     void api().save_history_view(next)
     if (next === "songs" && !songsShown.current) void loadSongs()
     // Fresh counts each time: marks made in the player since are in them.
@@ -345,36 +417,37 @@ export function HistoryScreen({
       if (ticket !== askedSong.current) return
       if (!res.ok) {
         notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the song" })
+        // Another song's page does not stay up as if it were this one's.
+        setSongPage((p) => (p !== null && songOf(p) === chosenSong ? p : null))
         return
       }
       setSongPage(res)
     })()
   }, [view, chosenSong, songsRead])
-  const pageShown =
-    songPage !== null &&
-    chosenSong !== null &&
-    songPage.id === (chosenSong === "not_named" ? null : chosenSong)
-      ? songPage
-      : null
+  // The page on show is the one last read, under its own title (enterView
+  // says which one a view entered again keeps): while the next song chosen
+  // is read, it stays as it is, and is then swapped whole, so the page never
+  // goes blank between two songs (B4).
+  const pageShown = songPage !== null && chosenSong !== null ? songPage : null
+  const songShown = pageShown ? songOf(pageShown) : null
 
   // The rungs open on each song's page, for as long as History is open. A
   // song not seen yet has its newest rehearsal on disk open.
   const [openRungs, setOpenRungs] = useState<Map<SongRef, Set<string>>>(new Map())
   const firstRung = pageShown ? firstOpen(rungsOf(pageShown.goes ?? [])) : null
   const rungsOpen: ReadonlySet<string> =
-    (chosenSong !== null ? openRungs.get(chosenSong) : undefined) ??
+    (songShown !== null ? openRungs.get(songShown) : undefined) ??
     new Set(firstRung ? [firstRung] : [])
   const toggleRung = (folder: string) => {
-    if (chosenSong === null) return
+    if (songShown === null) return
     const next = new Set(rungsOpen)
     if (next.has(folder)) next.delete(folder)
     else next.add(folder)
-    setOpenRungs((m) => new Map(m).set(chosenSong, next))
+    setOpenRungs((m) => new Map(m).set(songShown, next))
   }
 
   // The label chosen, or the first when none is or it was deleted.
   const chosenLabel = labels.find((l) => l.id === label)?.id ?? labels[0]?.id ?? null
-  const labelShown = labels.find((l) => l.id === chosenLabel) ?? null
   // Its marks. As with a song's page, an answer about a label chosen before
   // is dropped.
   const askedMarks = useRef(0)
@@ -386,12 +459,18 @@ export function HistoryScreen({
       if (ticket !== askedMarks.current) return
       if (!res.ok) {
         notify({ key: SAID, kind: "error", text: res.error ?? "Could not read the marks" })
+        // Another label's marks do not stay up as if they were this one's.
+        setMarks((m) => (m !== null && m.label === chosenLabel ? m : null))
         return
       }
       setMarks({ label: chosenLabel, marks: res.marks ?? [] })
     })()
   }, [view, chosenLabel, marksRead])
-  const marksOnShow = marks !== null && marks.label === chosenLabel ? marks.marks : null
+  // The marks on show are the ones last read, under the label they are of
+  // (enterView says which a view entered again keeps): while the next label
+  // chosen is read, the page stays as it is, and is then swapped whole, so
+  // it never goes blank between two labels (B4).
+  const labelShown = marks !== null ? (labels.find((l) => l.id === marks.label) ?? null) : null
 
   const summary = rehearsals?.find((r) => r.folder === current) ?? null
   // Whether the chosen one can be read: not until the list says it is there.
@@ -509,6 +588,13 @@ export function HistoryScreen({
     pane.current.scrollTop = paneScroll.current
     paneScroll.current = null
   }, [selected])
+  // Another label's or song's page starts at its top, in the frame it is
+  // swapped in; the same page read again stays where it was scrolled.
+  const pageOnShow =
+    view === "marks" ? `label ${labelShown?.id}` : view === "songs" ? `song ${songShown}` : null
+  useLayoutEffect(() => {
+    if (pane.current) pane.current.scrollTop = 0
+  }, [pageOnShow])
 
   /** A take asked for to open or to play, from a list left since: when its
    *  rehearsal has been read, it is dropped. */
@@ -519,7 +605,8 @@ export function HistoryScreen({
 
   /** ▶ on a mark: its take plays here from just before the mark, or, when
    *  it is the mark playing, pauses. Its rehearsal is read for the take,
-   *  and an answer that comes back after another ▶ is dropped. */
+   *  and an answer that comes back after another ▶ is dropped. A take that
+   *  could not be opened is tried again, from this mark. */
   const cueing = useRef(0)
   const playMark = async (m: MarkHit) => {
     const ticket = ++cueing.current
@@ -527,7 +614,8 @@ export function HistoryScreen({
       playingMark &&
       markKey(playingMark) === markKey(m) &&
       cued?.folder === m.folder &&
-      cued.take_number === m.take_number
+      cued.take_number === m.take_number &&
+      !player.loadError
     ) {
       player.toggle()
       return
@@ -563,7 +651,10 @@ export function HistoryScreen({
     const index = await loadSongs()
     const ref = songRefFor(index, title)
     if (ref !== null) setSong(ref)
-    setView("songs")
+    // enterView goes by the view at the click, from before the await. That
+    // is safe: whatever the view is by now, all it does is let go of another
+    // song's page or keep this song's own, which is right either way.
+    enterView("songs", ref)
     void api().save_history_view("songs")
   }
 
@@ -756,7 +847,7 @@ export function HistoryScreen({
   /** An old name forgotten from a song's page: typed again, a new song. */
   const forgetName = async (name: string) => {
     dismiss(SAID)
-    if (await forgetSongName(name)) await loadSongs()
+    if (await forgetSongName(name, () => loadSongs())) await loadSongs()
   }
 
   // Python let go of the files before rewriting them, so the take has to be
@@ -934,6 +1025,12 @@ export function HistoryScreen({
     </>
   )
 
+  // Neither view is drawn until History knows which it is on. Reading the
+  // list from disk is said with a spinner from its first second, and in
+  // words from its tenth (B5).
+  const reading = rehearsals === null || view === null
+  const slow = useAfter(reading, 10_000)
+
   // A take open in the player: the whole window, the way it always had it.
   // Its rehearsal is the one chosen in Rehearsals, or a go's from a song.
   const inPlayer =
@@ -958,6 +1055,8 @@ export function HistoryScreen({
     return (
       <Shell
         playback
+        air
+        className="px-8 [--screen-pad-y:2rem]"
         subtitle={formatDateHuman(opened.created_at)}
         title={opened.name}
         onBack={back}
@@ -969,7 +1068,7 @@ export function HistoryScreen({
           />
         }
       >
-        <div className="flex w-full flex-col gap-4">
+        <div className="flex w-full flex-col gap-12">
           <TakeStrip
             takes={opened.takes}
             selected={selected}
@@ -1009,85 +1108,104 @@ export function HistoryScreen({
   }
 
   const empty = rehearsals?.length === 0
-  // Neither view is drawn until History knows which it is on.
-  const reading = rehearsals === null || view === null
   const noSongs = songIndex !== null && songOrder.length === 0
-  // The evening's figures, in the head of the pane of a rehearsal that is on
-  // disk: the overview under it does not say them, and the header has them
-  // only once a take is open. Their place is there from the first frame,
-  // with the folder button and no figure until the takes are read, so that
-  // the name is laid out once, and not again when they arrive or at each
-  // switch from one rehearsal to another.
+  // The evening's figures, in the head of the page of a rehearsal that is on
+  // disk: the overview under it does not say them, and the window's header
+  // has them only once a take is open. Their place is there from the first
+  // frame, with no figure until the takes are read, so that the name is laid
+  // out once, and not again when they arrive or at each switch from one
+  // rehearsal to another. The folder opens from the path under the name.
   const facts =
     summary && readable ? (
       <EveningFacts
         takes={opened?.folder === current ? opened.takes : null}
         bytes={summary.disk_bytes}
         folder={summary.folder}
+        withFolder={false}
       />
     ) : null
 
   return (
     <Shell
       playback
+      air
       title="Rehearsal history"
       onBack={back}
       backKey
-      headerAction={
+      // The whole list's totals beside the title, giving way to it whole in
+      // a narrow window, the size first.
+      facts={
         rehearsals && rehearsals.length > 0 ? (
-          <span className="hidden text-xs text-muted-foreground lg:block">
-            {allOf(rehearsals)}
-          </span>
+          <Figures
+            parts={totalsOf(rehearsals)}
+            className="tnum text-right text-xs text-muted-foreground"
+          />
         ) : undefined
       }
-      className={empty || reading ? undefined : "flex overflow-hidden p-0"}
+      className={empty || reading ? "px-8 [--screen-pad-y:2rem]" : "flex overflow-hidden p-0"}
     >
-      {reading && <p className="text-sm text-muted-foreground">Reading the folder…</p>}
+      {reading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner />
+          {slow && <span>Reading the folder…</span>}
+        </div>
+      )}
 
       {empty && (
-        <div className="mx-auto max-w-3xl">
-          <EmptyState
-            icon={<Library className="size-6" />}
-            title="No past rehearsals yet"
-            hint="Every rehearsal where you saved at least one take shows up here."
-          />
-        </div>
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>No past rehearsals yet</EmptyTitle>
+            <EmptyDescription>
+              Every rehearsal where you saved at least one take shows up here.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {rehearsals && rehearsals.length > 0 && view !== null && (
         <>
+          {/* The list as a side panel on its grey. The switch stays above it,
+              in view, while the list scrolls under it. */}
           <nav
             aria-label={view === "songs" ? "Songs" : view === "marks" ? "Labels" : "Rehearsals"}
-            className="flex w-64 shrink-0 flex-col gap-3 overflow-y-auto border-r px-3 py-4 xl:w-80"
+            className="flex w-64 shrink-0 flex-col border-r bg-panel xl:w-80"
           >
-            <HistorySwitch view={view} onChange={showView} />
-            {view === "songs" ? (
-              songIndex && (
-                <SongList index={songIndex} current={chosenSong} onChoose={chooseSong} />
-              )
-            ) : view === "marks" ? (
-              <LabelList labels={labels} current={chosenLabel} onChoose={chooseLabel} />
-            ) : (
-              <RehearsalList rehearsals={rehearsals} current={current} onChoose={choose} />
-            )}
-            <p className="mt-auto flex items-center gap-1.5 px-3 pt-2 text-xs text-muted-foreground">
-              <Kbd>↑</Kbd>
-              <Kbd>↓</Kbd>
-              to go through them
-            </p>
+            <div className="flex min-h-0 flex-1 animate-rise flex-col" style={rise(0)}>
+              <div className="shrink-0 p-4 pb-3">
+                <HistorySwitch view={view} onChange={showView} />
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+                {view === "songs" ? (
+                  songIndex && (
+                    <SongList index={songIndex} current={chosenSong} onChoose={chooseSong} />
+                  )
+                ) : view === "marks" ? (
+                  <LabelList labels={labels} current={chosenLabel} onChoose={chooseLabel} />
+                ) : (
+                  <RehearsalList rehearsals={rehearsals} current={current} onChoose={choose} />
+                )}
+                <p className="mt-auto flex items-center gap-1.5 px-3 pt-2 text-xs text-muted-foreground">
+                  <Kbd>↑</Kbd>
+                  <Kbd>↓</Kbd>
+                  to go through them
+                </p>
+              </div>
+            </div>
           </nav>
 
           {view === "songs" ? (
             <section
               ref={pane}
               aria-label={pageShown ? (pageShown.title ?? "Not named") : "Song"}
-              className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
+              className="flex min-w-0 flex-1 flex-col gap-8 overflow-y-auto p-8"
             >
               {noSongs && (
-                <EmptyState
-                  title="No songs yet"
-                  hint="A take named after a song shows up here."
-                />
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyTitle>No songs yet</EmptyTitle>
+                    <EmptyDescription>A take named after a song shows up here.</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
               {pageShown && (
                 <SongPage
@@ -1098,6 +1216,7 @@ export function HistoryScreen({
                           take: cued,
                           playing: player.playing,
                           loading: player.loading,
+                          failed: Boolean(player.loadError),
                           position: player.position,
                           duration: player.duration,
                         }
@@ -1126,12 +1245,12 @@ export function HistoryScreen({
             <section
               ref={pane}
               aria-label={labelShown?.name ?? "Marks"}
-              className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
+              className="flex min-w-0 flex-1 flex-col gap-8 overflow-y-auto p-8"
             >
-              {labelShown && marksOnShow && (
+              {labelShown && marks && (
                 <MarksPage
                   label={labelShown}
-                  marks={marksOnShow}
+                  marks={marks.marks}
                   grouping={grouping}
                   onGrouping={chooseGrouping}
                   playing={
@@ -1142,6 +1261,7 @@ export function HistoryScreen({
                           key: markKey(playingMark),
                           playing: player.playing,
                           loading: player.loading,
+                          failed: Boolean(player.loadError),
                           position: player.position,
                           duration: player.duration,
                         }
@@ -1162,81 +1282,82 @@ export function HistoryScreen({
           ) : (
             <section
               aria-label={summary?.name ?? "Rehearsal"}
-              className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
+              className="flex min-w-0 flex-1 flex-col gap-8 overflow-y-auto p-8"
             >
+              {/* The name on up to two lines, then cut and whole in the tip,
+                  and the facts beside it giving way to it first, as in the
+                  rehearsal screen's header; Delete at the right. Under them,
+                  across the whole head, the date, the set and the path: the
+                  date is whole, the set cut only to half the line at most,
+                  and the path has what they leave, cut at its end. */}
               {summary && (
-                <div>
-                  <div className="flex items-start gap-2">
-                    {/* With the facts beside it the name keeps its width and
-                        they give way to it, as in the rehearsal screen's
-                        header. The name wraps when it is longer than its row,
-                        through a word if need be, and is never cut (B6); the
-                        pencil stays beside its first line. */}
+                <PaneHead
+                  title={summary.name}
+                  rename={
+                    summary.missing
+                      ? undefined
+                      : {
+                          label: `Rename rehearsal ${summary.name}`,
+                          tip: "Rename rehearsal",
+                          onClick: () => setRehearsalToRename(summary),
+                        }
+                  }
+                  actions={
+                    !summary.missing && (
+                      <>
+                        {facts}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Delete rehearsal ${summary.name}`}
+                              onClick={() => void deleteRehearsal(summary)}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <span aria-hidden>Delete rehearsal</span>
+                          </TooltipContent>
+                        </Tooltip>
+                      </>
+                    )
+                  }
+                  lines={
                     <div
-                      className={cn(
-                        "flex min-w-0 items-start gap-1",
-                        facts ? "flex-[0_1_auto]" : "flex-1"
-                      )}
+                      data-rehearsal-head
+                      className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
                     >
-                      <h2 className="min-w-0 pt-1 text-xl leading-tight font-semibold wrap-anywhere">
-                        {summary.name}
-                      </h2>
-                      {!summary.missing && (
-                        <Button
-                          variant="ghost"
-                          size="icon-row"
-                          aria-label={`Rename rehearsal ${summary.name}`}
-                          onClick={() => setRehearsalToRename(summary)}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          <Pencil />
-                        </Button>
+                      <span className="shrink-0">
+                        {formatDay(summary.created_at).split(" ")[0]}{" "}
+                        {formatDateHuman(summary.created_at)}
+                      </span>
+                      <span aria-hidden>·</span>
+                      {summary.set_name && (
+                        <>
+                          <SetName name={summary.set_name} whole className="max-w-1/2" />
+                          <span aria-hidden>·</span>
+                        </>
+                      )}
+                      {summary.missing ? (
+                        // Where it was, to read: there is no folder to open,
+                        // so no folder icon either, which would make it look
+                        // like the button it is not.
+                        <Whole text={summary.folder} className="min-w-0 flex-1 truncate font-mono" />
+                      ) : (
+                        <FolderPath folder={summary.folder} />
                       )}
                     </div>
-                    {facts}
-                    {!summary.missing && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Delete rehearsal ${summary.name}`}
-                        onClick={() => void deleteRehearsal(summary)}
-                        className="text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 />
-                      </Button>
-                    )}
-                  </div>
-                  {/* Under the name, the facts and Delete, across the whole
-                      head: under the name alone, a short name made it as narrow
-                      as the name. The date is whole; the folder has what the
-                      date and the set leave, and is cut at the head's edge;
-                      the set is cut only when there is no room for it whole,
-                      and to half the line at most. */}
-                  <div
-                    data-rehearsal-head
-                    className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
-                  >
-                    <span className="shrink-0">
-                      {formatDay(summary.created_at).split(" ")[0]}{" "}
-                      {formatDateHuman(summary.created_at)}
-                    </span>
-                    <span aria-hidden>·</span>
-                    {summary.set_name && (
-                      <>
-                        <SetName name={summary.set_name} className="max-w-1/2" />
-                        <span aria-hidden>·</span>
-                      </>
-                    )}
-                    <FolderOpen className="size-3.5 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate font-mono">{summary.folder}</span>
-                  </div>
-                </div>
+                  }
+                />
               )}
-  
+
               {summary?.missing && (
-                <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed px-5 py-4">
+                <Card className="gap-3 p-6">
                   <p className="text-sm">
-                    <span className="font-medium">Not found on disk.</span>{" "}
+                    <span className="font-semibold text-destructive">Not found on disk.</span>{" "}
                     <span className="text-muted-foreground">
                       Its folder was deleted, renamed outside the app, or is on a
                       drive that is not plugged in. Recorded {formatWhen(summary.created_at)}.
@@ -1255,12 +1376,13 @@ export function HistoryScreen({
                       Remove from history
                     </Button>
                   </div>
-                </div>
+                </Card>
               )}
-  
+
               {readable && opened?.folder === current && (
                 opened.takes.length > 0 ? (
                   <RehearsalOverview
+                    rise={1}
                     set={opened.set}
                     takes={opened.takes}
                     songs={opened.songs ?? []}
@@ -1273,6 +1395,7 @@ export function HistoryScreen({
                             take: cued.take_number,
                             playing: player.playing,
                             loading: player.loading,
+                            failed: Boolean(player.loadError),
                             position: player.position,
                             duration: player.duration,
                           }
@@ -1306,10 +1429,14 @@ export function HistoryScreen({
                     }
                   />
                 ) : (
-                  <EmptyState
-                    title="No takes"
-                    hint="Nothing was kept from this rehearsal, or every take since got deleted."
-                  />
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyTitle>No takes</EmptyTitle>
+                      <EmptyDescription>
+                        Nothing was kept from this rehearsal, or every take since got deleted.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
                 )
               )}
             </section>
@@ -1348,7 +1475,7 @@ export function HistoryScreen({
         open={rehearsalToForget !== null}
         onOpenChange={(open) => !open && setRehearsalToForget(null)}
         title={rehearsalToForget && `Remove “${rehearsalToForget.name}” from history?`}
-        description="Only the entry goes — there is nothing on disk to delete. If the folder turns up again, it will not come back by itself."
+        description="Only the entry goes: there is nothing on disk to delete. If the folder turns up again, it will not come back by itself."
         actionLabel="Remove"
         onConfirm={() => {
           if (rehearsalToForget) void forgetRehearsal(rehearsalToForget)

@@ -338,7 +338,7 @@ export function usePlayerKeys(skip: (delta: number) => void, enabled = true) {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
       const el = document.activeElement
-      if (keyIsClaimed(el)) return
+      if (keyIsClaimed(el) || inRadios(el)) return
       // On the volume slider and the seek bar the arrows mean their own thing
       if (!letGoOfLeftover(el) && isSlider(el)) return
       e.preventDefault()

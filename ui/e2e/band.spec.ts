@@ -22,7 +22,7 @@ test("the band's rehearsal played by its set lists the set", async ({ page }) =>
     .click()
   await startButton(page).click()
   const card = page.locator("[data-set-card]")
-  await expect(card.locator("h2")).toHaveText("Gig on the 25th — 3 of 6 played")
+  await expect(card.locator("h2")).toHaveText("Gig on the 25th · 3 of 6 played")
   await expect(card.locator("[data-set-song='Viasna']")).toHaveAttribute("aria-current", "true")
 })
 
@@ -43,5 +43,5 @@ test("a rehearsal of the band's played by its set says so in History", async ({ 
   await openBandApp(page)
   await openHistory(page)
   await expect(page.locator("[data-set-name]").first()).toHaveText("Gig on the 25th")
-  await expect(page.locator("[data-set-played-card] h3")).toHaveText("Gig on the 25th — 4 of 6 played")
+  await expect(page.locator("[data-set-card] h2")).toHaveText("Gig on the 25th · 4 of 6 played")
 })

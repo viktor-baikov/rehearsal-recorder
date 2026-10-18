@@ -1,17 +1,37 @@
-import { Loader2, Pause, Play } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
+import { Item } from "@/components/ui/item"
+import { LabelDot, MarkTick } from "@/components/ui/mark"
+import { PlayButton } from "@/components/ui/play-button"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { useCut, Whole, WholeTip } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
 import type { Label, MarkHit, MarksGrouping } from "@/lib/api"
-import { formatClock } from "@/lib/format"
-import { labelLook } from "@/lib/labels"
+import { formatClock, marksLabel } from "@/lib/format"
 import {
   groupMarks,
   headLine,
   markKey,
-  marksLabel,
   playFrom,
   rowLine,
   type MarkGroup,
 } from "@/lib/marks"
+import { rise } from "@/lib/motion"
+import { playLook } from "@/lib/playLook"
+import { drawnLength, TAKE_FILLS } from "@/lib/takeScale"
+import { PaneHead } from "@/components/PaneHead"
+import { NameLink, SongName } from "@/components/SongName"
+
+/**
+ * Where the rows have under 25rem, as at 960 px and 150 %: beside the bars'
+ * 7.5rem and the length, the comment would have under 10rem. There the bar
+ * and the length go under the take's line. Tailwind reads a class whole, so
+ * the width is in each; this is the one place they are.
+ */
+const NARROW = {
+  columns: "@max-[25rem]:grid-cols-[2rem_minmax(0,1fr)]",
+  bar: "@max-[25rem]:col-start-2",
+} as const
 
 const GROUPINGS: { grouping: MarksGrouping; label: string }[] = [
   { grouping: "rehearsal", label: "By rehearsal" },
@@ -19,14 +39,13 @@ const GROUPINGS: { grouping: MarksGrouping; label: string }[] = [
   { grouping: "list", label: "One list" },
 ]
 
-/** How wide the longest take's bar is; the others are drawn to its scale. */
-const BAR_PX = 120
-
 /** The mark playing in the list, and where its take has got to. */
 export type MarkPlayback = {
   key: string
   playing: boolean
   loading: boolean
+  /** The take could not be loaded: its ▶ says so, and pressing it tries again. */
+  failed?: boolean
   position: number
   duration: number
 }
@@ -34,9 +53,14 @@ export type MarkPlayback = {
 /**
  * The right of History's Marks view: every mark with the chosen label, from
  * every rehearsal, newest first, grouped as the band chose (spec H3 to H6).
- * ▶ plays a mark's take here from just before it; a click opens the take in
- * the player at the mark. A mark of a rehearsal not on disk is listed,
- * greyed, with nothing to play or open.
+ * Its head is the pane head the other pages have, with the label's dot and
+ * no pencil: a label is renamed in Settings › Marks.
+ *
+ * Under the head, one group: "Group by" in its head row, then a part per
+ * rehearsal or song, split by lines; one list is one part with no title.
+ * ▶ plays a mark's take here from just before it; the comment, or a click on
+ * the row, opens the take in the player at the mark. A mark of a rehearsal
+ * not on disk is listed, greyed, with nothing to play or open.
  */
 export function MarksPage({
   label,
@@ -59,85 +83,124 @@ export function MarksPage({
   onOpenSong: (title: string | null) => void
   onOpenRehearsal: (folder: string) => void
 }) {
-  const look = labelLook(label.colour)
   const empty = marks.length === 0
   const longest = Math.max(1, ...marks.map((m) => m.duration_sec || 0))
 
-  const heading = (g: MarkGroup) => (
-    <h3
-      data-group-title
-      className="mb-1.5 flex min-w-0 items-baseline gap-1 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
-    >
-      <button
-        type="button"
-        onClick={() => (g.kind === "rehearsal" ? onOpenRehearsal(g.folder!) : onOpenSong(g.song ?? null))}
-        title={g.kind === "rehearsal" ? "Open the rehearsal" : "Open the song's page"}
-        className="min-w-0 truncate rounded-sm uppercase hover:text-foreground hover:underline hover:underline-offset-3"
-      >
-        {g.name}
-      </button>
-      <span className="shrink-0 font-medium tracking-normal normal-case"> · {marksLabel(g.marks.length)}</span>
-    </h3>
-  )
-
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <span className={cn("size-3.5 shrink-0 rounded-full", look.dot)} />
-        <div className="min-w-48 flex-1">
-          <h2 className="truncate text-[26px] leading-tight font-semibold">{label.name}</h2>
-          <p className="mt-1 text-[13px] text-muted-foreground">{headLine(marks)}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="text-xs text-muted-foreground">Group by</span>
-          <div role="group" aria-label="Group marks" className="flex gap-1 rounded-lg bg-muted p-1">
+    <div className="flex flex-col gap-8">
+      {/* The head holds its place from the first frame: it does not rise. */}
+      <PaneHead
+        lead={
+          // The dot sits on the middle of the title's first line.
+          <span className="flex h-7 items-center">
+            <LabelDot colour={label.colour} className="size-3.5" />
+          </span>
+        }
+        title={label.name}
+        lines={<p className="text-sm text-muted-foreground">{headLine(marks)}</p>}
+      />
+
+      <div data-marks-group className="flex animate-rise flex-col rounded-xl bg-card" style={rise(1)}>
+        {/* Where the row has no room for both, the words go above the switch.
+            Arrows along the switch move along it; up and down are left to
+            the list of labels, as on History's own switch. */}
+        <div
+          data-marks-head
+          className="flex flex-wrap items-center justify-end gap-2 px-6 pt-6 pb-4"
+        >
+          <span className="text-xs whitespace-nowrap text-muted-foreground">Group by</span>
+          <ToggleGroup
+            type="single"
+            variant="switch"
+            orientation="horizontal"
+            aria-label="Group marks"
+            value={grouping}
+            disabled={empty}
+            // The grouping that is on, pressed again, would leave none on.
+            onValueChange={(next) => {
+              if (next && next !== grouping) onGrouping(next as MarksGrouping)
+            }}
+          >
             {GROUPINGS.map((g) => (
-              <button
+              <ToggleGroupItem
                 key={g.grouping}
-                type="button"
-                disabled={empty}
-                aria-pressed={grouping === g.grouping}
-                onClick={() => grouping !== g.grouping && onGrouping(g.grouping)}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-sm whitespace-nowrap transition-colors disabled:opacity-50",
-                  "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                  grouping === g.grouping
-                    ? "bg-background font-medium text-foreground shadow-sm"
-                    : "text-muted-foreground enabled:hover:text-foreground"
-                )}
+                value={g.grouping}
+                // As on History's switch: a click lets go of the focus, so
+                // ←, → and Space are the mark playing's again; a choice
+                // made from the keys keeps it.
+                onClick={(e) => {
+                  if (e.detail > 0) e.currentTarget.blur()
+                }}
               >
                 {g.label}
-              </button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
         </div>
-      </header>
 
-      {empty ? (
-        <p className="max-w-[60ch] text-[13px] text-muted-foreground">
-          Marks given the label {label.name} in the player gather here, from every rehearsal.
-        </p>
-      ) : (
-        groupMarks(marks, grouping).map((g) => (
-          <div key={g.key} className="flex min-w-0 flex-col gap-0.5">
-            {g.kind !== "list" && heading(g)}
-            {g.marks.map((m) => (
-              <MarkRow
-                key={markKey(m)}
-                mark={m}
-                label={label}
-                grouping={grouping}
-                longest={longest}
-                here={playing && playing.key === markKey(m) ? playing : null}
-                onPlay={onPlay}
-                onOpen={onOpen}
-                onOpenSong={onOpenSong}
-              />
-            ))}
-          </div>
-        ))
-      )}
+        {empty ? (
+          <Empty>
+            <EmptyDescription>
+              Marks given the label {label.name} in the player gather here, from every rehearsal.
+            </EmptyDescription>
+          </Empty>
+        ) : (
+          groupMarks(marks, grouping).map((g) => (
+            <div key={g.key} data-marks-part className="border-t px-6 py-4 last:pb-6">
+              {g.kind !== "list" && (
+                <GroupTitle group={g} onOpenSong={onOpenSong} onOpenRehearsal={onOpenRehearsal} />
+              )}
+              <div className="@container flex min-w-0 flex-col gap-0.5">
+                {g.marks.map((m) => (
+                  <MarkRow
+                    key={markKey(m)}
+                    mark={m}
+                    label={label}
+                    grouping={grouping}
+                    longest={longest}
+                    here={playing && playing.key === markKey(m) ? playing : null}
+                    onPlay={onPlay}
+                    onOpen={onOpen}
+                    onOpenSong={onOpenSong}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
+  )
+}
+
+/**
+ * A part's title: the rehearsal, which opens it in Rehearsals, or the song,
+ * which opens its page; then how many marks are in the part. The name takes
+ * two lines at most, then is cut, whole in the shared tip.
+ */
+function GroupTitle({
+  group: g,
+  onOpenSong,
+  onOpenRehearsal,
+}: {
+  group: MarkGroup
+  onOpenSong: (title: string | null) => void
+  onOpenRehearsal: (folder: string) => void
+}) {
+  return (
+    <h3 data-group-title className="mb-2 flex min-w-0 items-baseline gap-1 text-sm font-semibold">
+      {g.kind === "rehearsal" ? (
+        <NameLink
+          text={g.name}
+          label={`Open the rehearsal ${g.name}`}
+          onOpen={() => onOpenRehearsal(g.folder!)}
+          textClassName="line-clamp-2"
+        />
+      ) : (
+        <SongName title={g.song ?? null} onOpen={onOpenSong} textClassName="line-clamp-2" />
+      )}
+      <span className="shrink-0 font-normal text-muted-foreground"> · {marksLabel(g.marks.length)}</span>
+    </h3>
   )
 }
 
@@ -160,120 +223,132 @@ function MarkRow({
   onOpen: (mark: MarkHit) => void
   onOpenSong: (title: string | null) => void
 }) {
-  const playing = here?.playing ?? false
   const line = rowLine(m, grouping)
   const said = m.note.trim()
+  const comment = said || label.name
   const length = m.duration_sec || 0
-  const along = (sec: number) => (length > 0 ? Math.min(100, (100 * sec) / length) : 0)
+  // The mark is kept off the bar's very ends, where its frame would hide it.
+  const along = (sec: number) => (length > 0 ? Math.min(98.5, Math.max(1, (100 * sec) / length)) : 0)
+  const played = here && length > 0 ? Math.min(100, Math.max(0, (100 * here.position) / length)) : null
   return (
-    <div
+    <Item
+      size="sm"
       data-mark={markKey(m)}
       data-missing={m.missing || undefined}
       onClick={(e) => {
         if (!m.missing && !(e.target as HTMLElement).closest("button")) onOpen(m)
       }}
       className={cn(
-        "-mx-2 grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1.5 transition-colors",
-        m.missing ? "opacity-55" : "cursor-pointer hover:bg-accent/60",
+        "-mx-2 grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-2 py-1.5",
+        NARROW.columns,
+        // Lit under the pointer, and while the focus is on one of its
+        // controls, as a take's row is.
+        m.missing ? "opacity-55" : "cursor-pointer hover:bg-accent/60 focus-within:bg-accent/60",
         here && "bg-accent/60"
       )}
     >
-      {m.missing ? (
-        <button
-          type="button"
-          disabled
-          aria-label={`Play ${m.name} from ${formatClock(playFrom(m.at))}`}
-          title="Not found on disk"
-          className="size-8 rounded-full border border-dashed"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => onPlay(m)}
-          aria-label={playing ? `Pause ${m.name}` : `Play ${m.name} from ${formatClock(playFrom(m.at))}`}
-          aria-keyshortcuts={here ? "Space" : undefined}
-          title="Plays the take from 5 s before the mark, here"
-          className={cn(
-            "flex size-8 items-center justify-center rounded-full border transition-colors",
-            here ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"
-          )}
-        >
-          {here?.loading ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : playing ? (
-            <Pause className="size-3.5 fill-current" />
-          ) : (
-            <Play className="size-3.5 fill-current" />
-          )}
-        </button>
-      )}
+      <PlayButton
+        look={playLook({
+          loaded: here !== null,
+          playing: here?.playing ?? false,
+          loading: here?.loading ?? false,
+          failed: here?.failed ?? false,
+          missing: m.missing,
+        })}
+        name={`${m.name} from ${formatClock(playFrom(m.at))}`}
+        onClick={() => onPlay(m)}
+        aria-keyshortcuts={here ? "Space" : undefined}
+      />
 
       <div className="flex min-w-0 flex-col gap-px">
         {m.missing ? (
-          <span
+          <Whole
+            text={comment}
             data-line="comment"
             data-unsaid={!said || undefined}
-            title={said || label.name}
-            className={cn("truncate text-[13.5px]", !said && "text-muted-foreground")}
-          >
-            {said || label.name}
-          </span>
+            className={cn("truncate text-sm", !said && "text-muted-foreground")}
+          />
         ) : (
-          <button
-            type="button"
-            data-line="comment"
-            data-unsaid={!said || undefined}
-            onClick={() => onOpen(m)}
-            title={said || label.name}
-            className={cn(
-              "truncate text-left text-[13.5px] focus-visible:underline focus-visible:outline-none",
-              !said && "text-muted-foreground"
-            )}
-          >
-            {said || label.name}
-          </button>
+          <Comment text={comment} unsaid={!said} onOpen={() => onOpen(m)} />
         )}
-        <span data-line="take" className="truncate text-xs text-muted-foreground">
+        {/* The song and what follows it share the line: each has half of it
+            at least, or all it needs, so a long title does not push the
+            take's number and moment out. */}
+        <span
+          data-line="take"
+          className="grid grid-cols-[minmax(0,max-content)_minmax(0,max-content)] items-baseline text-xs text-muted-foreground"
+        >
           {line.song !== null && (
-            <button
-              type="button"
-              onClick={() => onOpenSong(line.song)}
-              title="Open the song's page"
-              className="font-medium text-foreground hover:underline hover:underline-offset-3"
-            >
-              {line.song}
-            </button>
+            <SongName
+              title={line.song}
+              onOpen={onOpenSong}
+              className="font-semibold text-foreground"
+              textClassName="truncate"
+            />
           )}
-          <span className="tnum">{line.rest}</span>
+          {/* Its own spaces kept: the line would drop the one it starts with. */}
+          <span className="tnum truncate whitespace-pre">{line.rest}</span>
         </span>
+        {m.missing && <span className="text-xs text-destructive">Not found on disk</span>}
       </div>
 
-      <div className="flex items-center gap-2.5">
-        <span className="w-[120px]">
+      <div className={cn("flex items-center gap-2.5", NARROW.bar)}>
+        {/* The bars line up in a column as wide as the longest. A picture:
+            the length beside it says it in words. */}
+        <span className="w-30">
           <span
             data-take-bar
-            title={`${m.name} · ${formatClock(length)}`}
-            className="relative block h-[22px] rounded-sm border bg-muted"
-            style={{ width: `${Math.max(8, Math.round((length / longest) * BAR_PX))}px` }}
+            aria-hidden
+            className={cn(
+              "relative block h-6 overflow-hidden rounded-sm border",
+              m.missing ? TAKE_FILLS.quiet : TAKE_FILLS.rest
+            )}
+            // Never under 6 px, as on a song's ladder; its least, 0.5rem, is
+            // 7.2 px at the 90 % scale.
+            style={{ width: `max(6px, ${drawnLength(length, longest, 7.5, 0.5)}rem)` }}
           >
-            <span
-              aria-hidden
-              className={cn("absolute inset-y-[4px] w-[3px] -translate-x-px rounded-sm", labelLook(label.colour).dot)}
-              style={{ left: `${along(m.at)}%` }}
-            />
-            {here && (
+            <MarkTick colour={label.colour} at={along(m.at)} className="inset-y-1" />
+            {played !== null && (
               <span
-                aria-hidden
                 data-playhead
                 className="absolute inset-y-px w-0.5 rounded-sm bg-foreground"
-                style={{ left: `${along(here.position)}%` }}
+                style={{ left: `${played}%` }}
               />
             )}
           </span>
         </span>
-        <span className="tnum w-10 text-right text-[12.5px]">{formatClock(length)}</span>
-        {m.missing && <span className="text-xs whitespace-nowrap text-muted-foreground">not on disk</span>}
+        <span className="tnum w-10 text-right text-xs">{formatClock(length)}</span>
       </div>
-    </div>
+    </Item>
+  )
+}
+
+/**
+ * What was written at the mark, or the label's name where nothing was: the
+ * row's Tab stop, which opens the take at the mark. Cut at the end of its
+ * room, whole in the shared tip.
+ */
+function Comment({ text, unsaid, onOpen }: { text: string; unsaid: boolean; onOpen: () => void }) {
+  const [ref, cut] = useCut<HTMLSpanElement>()
+  return (
+    <WholeTip cut={cut} text={text}>
+      <Button
+        variant="ghost"
+        data-line="comment"
+        data-unsaid={unsaid || undefined}
+        onClick={onOpen}
+        className={cn(
+          // No frame: a clear one would set the words 1 px in from the
+          // take's line under them. Nor a fill or colour of its own under the
+          // pointer: the row's fill says where it is, and the keys have the ring.
+          "h-auto min-w-0 justify-start border-0 p-0 text-sm font-normal hover:bg-transparent dark:hover:bg-transparent",
+          unsaid ? "text-muted-foreground hover:text-muted-foreground" : "hover:text-foreground"
+        )}
+      >
+        <span ref={ref} data-cut={cut || undefined} className="block min-w-0 truncate">
+          {text}
+        </span>
+      </Button>
+    </WholeTip>
   )
 }

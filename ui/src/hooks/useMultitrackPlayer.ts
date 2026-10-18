@@ -98,6 +98,11 @@ export function useMultitrackPlayer(
   // Counts the takes opened, so a step waiting on Python's answer about one
   // take is not then sent to a take opened since.
   const opening = useRef(0)
+  // A take that could not be opened is opened again when it is asked for
+  // once more: each try is a new number here. Asked for by Play, it plays
+  // as soon as it is open.
+  const [attempt, setAttempt] = useState(0)
+  const playOnOpen = useRef(false)
 
   const applyState = useCallback(
     (s: {
@@ -139,6 +144,8 @@ export function useMultitrackPlayer(
   // Opening a take
   useEffect(() => {
     let cancelled = false
+    const playNow = playOnOpen.current
+    playOnOpen.current = false
     openedRef.current = false
     opening.current += 1
     setMedia([])
@@ -192,7 +199,15 @@ export function useMultitrackPlayer(
         setLoadError(e instanceof Error ? e.message : String(e))
         setLoading(false)
         settle()
+        return
       }
+      // Outside the open's try: a take that opened and then would not start
+      // was loaded all the same. A start that fails is said as any other
+      // player call's failure is, by api() in the problem bar, and the take
+      // stays open, paused.
+      if (!playNow || cancelled) return
+      const s = await api().player_play()
+      if (!cancelled) applyState(s)
     })()
 
     return () => {
@@ -203,7 +218,8 @@ export function useMultitrackPlayer(
       heard({ level: 0 })
       void api().player_close()
     }
-  }, [tracks, fallbackDuration, applyState])
+    // A new `attempt` opens the same take again.
+  }, [tracks, fallbackDuration, applyState, attempt])
 
   // Poll the state while playing
   useEffect(() => {
@@ -376,6 +392,13 @@ export function useMultitrackPlayer(
     [duration, applyLoop, setView, seek, call]
   )
 
+  /** The take could not be opened: try once more, and play it once it is
+   *  open if `play`. */
+  const tryAgain = useCallback((play: boolean) => {
+    playOnOpen.current = play
+    setAttempt((n) => n + 1)
+  }, [])
+
   /** Whether the take is open in Python now, not as of the last render. */
   const isOpen = useCallback(() => openedRef.current, [])
   /** The latest open to have settled, now, not as of the last render. */
@@ -401,8 +424,12 @@ export function useMultitrackPlayer(
     // peaks in hand are the whole take's.
     peaksWindow: peaksWindow.to > 0 ? peaksWindow : { from: 0, to: duration },
 
-    toggle: () => void call(() => api().player_toggle()),
+    // Pressed on a take that could not be opened, Play tries again.
+    toggle: () => (loadError ? tryAgain(true) : void call(() => api().player_toggle())),
     play: () => void call(() => api().player_play()),
+    /** Opens a take that could not be opened once more, for a caller that
+     *  says what to do once it is open. */
+    openAgain: () => tryAgain(false),
     pause: () => void call(() => api().player_pause()),
     restart: () => seek(region.a !== null && looping ? region.a : 0),
     skip: (delta: number) => seek(position + delta),

@@ -145,6 +145,11 @@ export function songsLabel(n: number): string {
   return `${n} ${nounFor(n, "song")}`
 }
 
+/** "1 mark", "221 marks": the marks in a take, a rehearsal, a song or a label. */
+export function marksLabel(n: number): string {
+  return countOf(n, "mark")
+}
+
 /** "1 input", "18 inputs": the inputs a card has. */
 export function inputsLabel(n: number): string {
   return `${n} ${nounFor(n, "input")}`

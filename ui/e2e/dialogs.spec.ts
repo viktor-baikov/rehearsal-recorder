@@ -236,7 +236,7 @@ const PALYN = `window.__EXTRA_SONGS__ = ["Palyn", "Palyn"]; window.__ACTIVITY__ 
 
 async function openSongPage(page: Page, title: string) {
   await openHistory(page)
-  await page.getByRole("button", { name: "Songs", exact: true }).click()
+  await page.getByRole("radio", { name: "Songs", exact: true }).click()
   await page.getByRole("navigation", { name: "Songs" }).locator(`[data-song='${title}']`).click()
   await page.locator("[data-song-head]").getByRole("button", { name: `Rename song ${title}`, exact: true }).click()
 }

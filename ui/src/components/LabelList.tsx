@@ -1,6 +1,6 @@
-import { cn } from "@/lib/utils"
+import { HistoryRow } from "@/components/HistoryRow"
+import { LabelDot } from "@/components/ui/mark"
 import type { Label } from "@/lib/api"
-import { labelLook } from "@/lib/labels"
 import { labelLine } from "@/lib/marks"
 
 /**
@@ -23,44 +23,23 @@ export function LabelList({
       {labels.map((label) => {
         const empty = !label.marks
         return (
-          <button
+          <HistoryRow
             key={label.id}
-            type="button"
             data-label={label.id}
             data-empty={empty || undefined}
-            aria-current={label.id === current ? "true" : undefined}
+            data-count={label.marks || undefined}
+            lead={<LabelDot colour={label.colour} className={empty ? "opacity-45" : undefined} />}
+            name={label.name}
+            nameClassName={
+              empty ? "text-base font-normal text-muted-foreground" : "text-base font-semibold"
+            }
+            figures={empty ? [] : [{ text: String(label.marks), keep: 0 }]}
+            current={label.id === current}
             onClick={() => onChoose(label.id)}
-            className={cn(
-              "flex flex-col gap-1 rounded-lg border border-transparent px-3 pt-2.5 pb-3 text-left transition-colors",
-              "hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-              label.id === current && "border-border bg-accent hover:bg-accent"
-            )}
           >
-            <span className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  labelLook(label.colour).dot,
-                  empty && "opacity-45"
-                )}
-              />
-              <span
-                data-name
-                className={cn(
-                  "min-w-0 flex-1 truncate",
-                  empty ? "text-base font-medium text-muted-foreground" : "text-base font-semibold"
-                )}
-              >
-                {label.name}
-              </span>
-              {!empty && (
-                <span data-count className="tnum shrink-0 text-xs text-muted-foreground">
-                  {label.marks}
-                </span>
-              )}
-            </span>
+            {/* Under the name, past the dot. */}
             <span className="truncate pl-4 text-xs text-muted-foreground">{labelLine(label)}</span>
-          </button>
+          </HistoryRow>
         )
       })}
     </div>

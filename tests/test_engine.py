@@ -6724,12 +6724,23 @@ def main():
     picked61 = p61.set_next_take_name("Palyn")
     ok("the old name typed for the next take is the song it went to",
        picked61["next_take_name"] == "Pałyn" and picked61["next_take_go"] == 6)
-    ok("forgetting it", p61.forget_song_name("palyn") == {"ok": True})
+    ok("forgetting it says whose it was and how it was spelt",
+       p61.forget_song_name("palyn") == {"ok": True, "song_id": pałyn61, "name": "Palyn"})
     again61 = p61.set_next_take_name("Palyn")
     ok("typed again, it is a new song",
        again61["next_take_name"] == "Palyn" and again61["next_take_go"] == 1)
     ok("a name no song was called is not forgotten",
        p61.forget_song_name("Palyn") == {"ok": False, "error": "No song was called Palyn"})
+    ok("brought back, it is the song's again",
+       p61.remember_song_name(pałyn61, "Palyn") == {"ok": True})
+    back61 = p61.set_next_take_name("Palyn")
+    ok("and typed, it is the song's next go as before",
+       back61["next_take_name"] == "Pałyn" and back61["next_take_go"] == 6)
+    ok("a name that is a song's title now is refused, with the reason",
+       p61.remember_song_name(pałyn61, "polin")
+       == {"ok": False, "error": "There is already a song called Polin"})
+    ok("so is one for a song that is gone",
+       p61.remember_song_name(999, "Palyn") == {"ok": False, "error": "Its song is gone"})
     p61.finish_rehearsal()
 
     print("\n[62] Song sets")

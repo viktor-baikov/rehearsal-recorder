@@ -39,6 +39,28 @@ describe("newsLead", () => {
   it("is null when the version has no section", () => {
     expect(newsLead(CHANGELOG, "1.0.0")).toBeNull()
   })
+  it("is read whole when it is wrapped over two lines, with one space where the line broke", () => {
+    const wrapped = `## 1.0.0
+
+- **The start of a new look: cobalt, calmer type, rounder corners and lower
+  track lanes.** The blue of the main button is a stronger cobalt.
+- **Another item.** Its text.
+`
+    expect(newsLead(wrapped, "1.0.0")).toBe(
+      "The start of a new look: cobalt, calmer type, rounder corners and lower track lanes."
+    )
+  })
+  it("stops at the end of the first item: a lead not closed in it is no lead", () => {
+    const open = `## 1.0.0
+
+- **Opened here
+  and never closed.
+
+**Closed** under a blank line.
+`
+    expect(newsLead(open, "1.0.0")).toBeNull()
+    expect(newsLead("## 1.0.0\n\n- **Opened here\n- and closed** in the next item.\n", "1.0.0")).toBeNull()
+  })
 })
 
 // A release that changed only the site, between two that changed the app.

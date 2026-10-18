@@ -14,19 +14,25 @@ export function latestVersion(changelog: string): string {
  * The bold lead of the first item under a version's heading, without its
  * asterisks: "The app says when a newer version is out." Null when the
  * version has no section or its first item does not open in bold.
+ *
+ * A lead may be wrapped over several lines, as CHANGELOG.md is: the item is
+ * read up to the next item, a blank line or a heading, its lines joined with
+ * one space, and the lead found in that.
  */
 export function newsLead(changelog: string, version: string): string | null {
   const lines = changelog.replace(/\r\n/g, "\n").split("\n")
   const start = lines.findIndex((l) => l.trim() === `## ${version}`)
   if (start < 0) return null
-  for (const line of lines.slice(start + 1)) {
-    if (line.startsWith("## ")) return null
-    if (/^- /.test(line)) {
-      const lead = /^- \*\*(.+?)\*\*/.exec(line)
-      return lead ? lead[1].trim() : null
-    }
+  const rest = lines.slice(start + 1)
+  const first = rest.findIndex((l) => l.startsWith("## ") || /^- /.test(l))
+  if (first < 0 || rest[first].startsWith("## ")) return null
+  const item = [rest[first].trim()]
+  for (const line of rest.slice(first + 1)) {
+    if (line.trim() === "" || line.startsWith("#") || /^- /.test(line)) break
+    item.push(line.trim())
   }
-  return null
+  const lead = /^- \*\*(.+?)\*\*/.exec(item.join(" "))
+  return lead ? lead[1].trim() : null
 }
 
 /**

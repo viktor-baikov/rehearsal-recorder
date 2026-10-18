@@ -502,15 +502,18 @@ class Library:
                 for i, (take, key) in enumerate(rows)]
 
     @staticmethod
-    def _taken(db, title, song_id):
+    def _taken(db, title, song_id, names=None):
         """Refused when `title` is another song's, by its title or by an old
-        name, naming that song (SongRefused.into)."""
+        name, naming that song (SongRefused.into). `names` is
+        _names_by_key's answer, for a caller that has read it already."""
         key = title.casefold()
         other = Library._songs_by_key(db).get(key)
         if other is not None and other.id != song_id:
             raise SongRefused(f"There is already a song called {other.title}",
                               {"id": other.id, "title": other.title})
-        old = Library._names_by_key(db).get(key)
+        if names is None:
+            names = Library._names_by_key(db)
+        old = names.get(key)
         if old is not None and old.song_id != song_id:
             owner = db.get(Song, old.song_id)
             raise SongRefused(f"{title} is {owner.title} now",
@@ -600,15 +603,39 @@ class Library:
         return answer
 
     def forget_song_name(self, name):
-        """Forgets an old name (D8): typed again, it is a new song. False when
-        no song had it."""
+        """Forgets an old name (D8): typed again, it is a new song. Returns
+        {"song_id", "name"}, the song that had it and the name as it was
+        spelt, for remember_song_name to put back; None when no song had it."""
         key = str(name or "").strip().casefold()
         with self._session.begin() as db:
             found = self._names_by_key(db).get(key)
             if found is None:
-                return False
+                return None
             db.delete(found)
-            return True
+            return {"song_id": found.song_id, "name": found.name}
+
+    def remember_song_name(self, song_id, name):
+        """
+        Puts back an old name that forget_song_name took, spelt as it was,
+        without spaces round it. Refused (SongRefused) when its song has
+        been merged into another since ("Its song is gone"), for an empty
+        name, as rename_song refuses an empty title, and when the name has
+        become another song's title or old name (_taken). Nothing is added
+        when it is the song's own title now, or already one of its old names.
+        """
+        name = str(name or "").strip()
+        with self._session.begin() as db:
+            song = db.get(Song, song_id)
+            if song is None:
+                raise SongRefused("Its song is gone")
+            if not name:
+                raise SongRefused("A song needs a title")
+            names = self._names_by_key(db)
+            self._taken(db, name, song.id, names)
+            key = name.casefold()
+            if key == song.title.casefold() or key in names:
+                return
+            db.add(SongName(song_id=song.id, name=name))
 
     def songs(self):
         """

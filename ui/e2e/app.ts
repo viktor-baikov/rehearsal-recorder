@@ -162,6 +162,48 @@ export async function letGo(page: Page, name: string) {
   }, name)
 }
 
+/**
+ * Holds the fake's answers to `name` for one `arg`, its first argument,
+ * until `letThrough`, and answers every other call to it at once: one
+ * song's or label's read left waiting while the others come back. The
+ * fake logs a held call only once it is let through, so `calls` and
+ * `callCount` do not see it before; `waitingFor` says how many are held,
+ * and is back to 0 once they have been answered.
+ */
+export async function holdFor(page: Page, name: string, arg: unknown) {
+  await page.evaluate(
+    ([n, a]) => {
+      const w = window as unknown as {
+        pywebview: { api: Record<string, (...args: unknown[]) => Promise<unknown>> }
+        __WAITING__?: number
+        __LET_THROUGH__?: () => void
+      }
+      const api = w.pywebview.api
+      const answer = api[n as string]
+      const gate = new Promise<void>((r) => (w.__LET_THROUGH__ = r))
+      w.__WAITING__ = 0
+      api[n as string] = async (...args) => {
+        if (args[0] !== a) return answer(...args)
+        w.__WAITING__! += 1
+        await gate
+        const said = await answer(...args)
+        w.__WAITING__! -= 1
+        return said
+      }
+    },
+    [name, arg] as const
+  )
+}
+
+/** How many of the calls `holdFor` holds are not answered yet. */
+export const waitingFor = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __WAITING__?: number }).__WAITING__ ?? 0)
+
+/** Lets the calls `holdFor` held through, and the next ones. */
+export async function letThrough(page: Page) {
+  await page.evaluate(() => (window as unknown as { __LET_THROUGH__: () => void }).__LET_THROUGH__())
+}
+
 /** The key a button shows it answers to, or null when it shows none: a chip
  *  kept unseen, holding the button's width, shows none. */
 export async function keyOn(button: Locator): Promise<string | null> {
@@ -318,6 +360,27 @@ export function withSets(sets: SetSeed[] = [GIG], chosen: number | null = 1, mor
     more
   )
 }
+
+/** From now on, at every frame, which page head is drawn: its title (the
+ *  h2's name), or null in a frame with none. `headsSeen` stops and says them. */
+export const watchHeads = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __HEADS__: (string | null)[]; __WATCHING__: boolean }
+    w.__HEADS__ = []
+    w.__WATCHING__ = true
+    const look = () => {
+      if (!w.__WATCHING__) return
+      w.__HEADS__.push(document.querySelector("[data-pane-head] h2")?.getAttribute("aria-label") ?? null)
+      requestAnimationFrame(look)
+    }
+    requestAnimationFrame(look)
+  })
+export const headsSeen = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __HEADS__: (string | null)[]; __WATCHING__: boolean }
+    w.__WATCHING__ = false
+    return w.__HEADS__
+  })
 
 /** Until the screen's groups have risen into place: a box measured while one
  *  rises is up to 12 px off. */

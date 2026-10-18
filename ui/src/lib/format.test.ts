@@ -18,6 +18,7 @@ import {
   inCloudLabel,
   inputsLabel,
   longAgo,
+  marksLabel,
   notConnected,
   nounFor,
   peakToDb,
@@ -126,6 +127,12 @@ describe("amounts", () => {
     expect(countOf(1_234_567, "note")).toBe("1,234,567 notes")
     expect(countOf(2, "box", "boxes")).toBe("2 boxes")
     expect(countOf(1, "box", "boxes")).toBe("1 box")
+  })
+  it("counts marks: one, many, and thousands set apart", () => {
+    expect(marksLabel(1)).toBe("1 mark")
+    expect(marksLabel(221)).toBe("221 marks")
+    expect(marksLabel(0)).toBe("0 marks")
+    expect(marksLabel(1234)).toBe("1,234 marks")
   })
   it("names the noun alone for a count drawn apart from it", () => {
     expect(nounFor(1, "take")).toBe("take")

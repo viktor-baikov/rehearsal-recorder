@@ -233,20 +233,46 @@ test.describe("the player's line", () => {
     await letGo(page, "crop_take")
   })
 
-  test("a load error is said in the player's line", async ({ page }) => {
+  test("a load error is said in the player's line, and play tries again", async ({ page }) => {
     await openEvening(page, "", [
       { name: "Pałyn", duration_sec: 60, tracks: [{ name: "Guitar", file: "/gone/t1.wav" }] },
     ])
     await page.getByRole("button", { name: /^Take 1 Pałyn 1/ }).click()
     const said = line(page).getByRole("alert")
     await expect(said).toHaveText("Track file not found")
-    await expect(play(page)).toBeDisabled()
     // An alert of its own colour, with no box round it.
     expect(await style(said, "color", "border-top-width", "background-color")).toEqual({
       color: await colour(page, "--destructive"),
       "border-top-width": "0px",
       "background-color": "rgba(0, 0, 0, 0)",
     })
+    // Play stays on. It has the name a take's play button has on the other
+    // pages when its take could not load, and still answers to Space.
+    const again = transport(page).getByRole("button", {
+      name: "Could not load the take. Try again",
+      exact: true,
+    })
+    await expect(again).toBeEnabled()
+    await expect(again).toHaveAttribute("aria-keyshortcuts", "Space")
+
+    // The files are back where they were: pressing it opens the take once
+    // more, and it plays.
+    await page.evaluate(() => {
+      const bridge = (
+        window as unknown as { pywebview: { api: Record<string, (...a: unknown[]) => Promise<unknown>> } }
+      ).pywebview.api
+      const media = bridge.take_media
+      bridge.take_media = (tracks, ...rest) =>
+        media(
+          (tracks as { file: string }[]).map((t) => ({ ...t, file: t.file.replace("/gone/", "/rec/back/") })),
+          ...rest
+        )
+    })
+    const opens = (await calls(page, "player_open")).length
+    await again.click()
+    await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+    await expect(said).toHaveCount(0)
+    expect((await calls(page, "player_open")).length).toBe(opens + 1)
   })
 
   test("one thing at a time in the player's line", async ({ page }) => {

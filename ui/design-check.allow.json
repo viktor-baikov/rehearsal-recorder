@@ -1,16 +1,7 @@
 {
-  "src/components/HistorySwitch.tsx": ["raw-button"],
-  "src/components/LabelList.tsx": ["raw-button"],
-  "src/components/MarksPage.tsx": ["px-text", "uppercase", "raw-button"],
   "src/components/MarksSettings.tsx": ["raw-button"],
-  "src/components/OldNames.tsx": ["raw-button"],
-  "src/components/RehearsalList.tsx": ["px-text", "uppercase", "raw-button"],
   "src/components/SetEditor.tsx": ["raw-button"],
-  "src/components/SetPlayed.tsx": ["px-text", "raw-button"],
   "src/components/SetsSettings.tsx": ["raw-button"],
-  "src/components/SongLadder.tsx": ["px-text", "uppercase", "raw-button"],
-  "src/components/SongList.tsx": ["raw-button"],
-  "src/components/SongPage.tsx": ["px-text", "uppercase", "raw-button"],
   "src/components/UnderTheHood.tsx": ["px-text"],
   "src/screens/Settings.tsx": ["raw-colour", "raw-button"]
 }

@@ -1,4 +1,5 @@
 import { EveningStrip } from "@/components/EveningStrip"
+import { HistoryRow } from "@/components/HistoryRow"
 import { SetName } from "@/components/SetPlayed"
 import { cn } from "@/lib/utils"
 import { formatDuration, formatMonth, formatWhen, takesLabel } from "@/lib/format"
@@ -40,61 +41,34 @@ export function RehearsalList({
           aria-label={month.title}
           className="flex flex-col gap-1"
         >
-          <h2 className="px-3 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-            {month.title}
-          </h2>
+          <h2 className="px-3 pb-1 text-xs font-semibold text-muted-foreground">{month.title}</h2>
           {month.items.map((r) => (
-            <Item
+            <HistoryRow
               key={r.folder}
-              rehearsal={r}
+              data-rehearsal={r.folder}
+              name={r.name}
+              nameClassName="text-sm font-semibold"
+              // Under half a minute there is no honest number of minutes.
+              figures={
+                r.total_duration_sec >= 30
+                  ? [{ text: formatDuration(r.total_duration_sec / 60), keep: 0 }]
+                  : []
+              }
               current={r.folder === current}
-              onChoose={onChoose}
-            />
+              onClick={() => onChoose(r.folder)}
+            >
+              <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate">{formatWhen(r.created_at)}</span>
+                <span className={cn("shrink-0", r.missing && "text-destructive")}>
+                  {r.missing ? "Not found on disk" : takesLabel(r.take_count)}
+                </span>
+              </span>
+              {r.set_name && <SetName name={r.set_name} />}
+              {!r.missing && <EveningStrip runs={r.runs ?? []} />}
+            </HistoryRow>
           ))}
         </div>
       ))}
     </div>
-  )
-}
-
-function Item({
-  rehearsal: r,
-  current,
-  onChoose,
-}: {
-  rehearsal: RehearsalSummary
-  current: boolean
-  onChoose: (folder: string) => void
-}) {
-  return (
-    <button
-      type="button"
-      data-rehearsal={r.folder}
-      aria-current={current ? "true" : undefined}
-      onClick={() => onChoose(r.folder)}
-      className={cn(
-        "flex flex-col gap-1.5 rounded-lg border border-transparent px-3 pt-2.5 pb-3 text-left transition-colors",
-        "hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-        current && "border-border bg-accent hover:bg-accent"
-      )}
-    >
-      <span className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{r.name}</span>
-        {/* Under half a minute there is no honest number of minutes. */}
-        {r.total_duration_sec >= 30 && (
-          <span className="tnum shrink-0 text-xs text-muted-foreground">
-            {formatDuration(r.total_duration_sec / 60)}
-          </span>
-        )}
-      </span>
-      <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
-        <span className="min-w-0 flex-1 truncate">{formatWhen(r.created_at)}</span>
-        <span className={cn("shrink-0", r.missing && "text-destructive")}>
-          {r.missing ? "Not found on disk" : takesLabel(r.take_count)}
-        </span>
-      </span>
-      {r.set_name && <SetName name={r.set_name} />}
-      {!r.missing && <EveningStrip runs={r.runs ?? []} />}
-    </button>
   )
 }

@@ -287,7 +287,7 @@ test("a tab list's day headings have no capitals", async ({ page }) => {
     before: `window.__FULL_EVENING__ = true; window.__EXTRA_SONGS__ = ["Pałyn", "Pałyn"];`,
   })
   await openHistory(page)
-  await page.getByRole("button", { name: "Songs", exact: true }).click()
+  await page.getByRole("radio", { name: "Songs", exact: true }).click()
   await page.locator("[data-song='Pałyn']").click()
   await page
     .locator(`[data-rung-group="/rec/old"]`)

@@ -3,11 +3,11 @@ import { FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FigureLine, WholeTip, useFitted } from "@/components/ui/whole"
-import { api, type Take } from "@/lib/api"
+import type { Take } from "@/lib/api"
 import { eveningOf, lengthLabel, takesLine } from "@/lib/evening"
 import { fitFigures, joinFigures } from "@/lib/figures"
+import { showFolder } from "@/lib/folder"
 import { formatBytes } from "@/lib/format"
-import { notify } from "@/lib/notices"
 import { useSystem, words } from "@/lib/platform"
 import { cn } from "@/lib/utils"
 
@@ -35,28 +35,28 @@ function Fact({ label, value, hidden }: { label: string; value: string; hidden?:
  * Takes, and Length last, as it says how long the evening has run. Pointing
  * at them says all four, as one line, once any has given way; a screen
  * reader is read that line whatever shows. The folder button never gives
- * way.
+ * way. Without `withFolder` there is none: History opens the folder from the
+ * path under the rehearsal's name.
  *
  * `takes` is null while they are being read: the place is there all the
- * same, as tall as ever, with the folder button in it and no figure (no
- * zeros), so that what is beside it is laid out once and does not move when
- * they arrive.
+ * same, as tall as ever, with the folder button in it if there is one and
+ * no figure (no zeros), so that what is beside it is laid out once and does
+ * not move when they arrive.
  */
 export function EveningFacts({
   takes,
   bytes,
   folder,
+  withFolder = true,
 }: {
   takes: Take[] | null
   bytes: number | null
   folder: string
+  /** The button to the folder, after the facts. */
+  withFolder?: boolean
 }) {
   const f = takes && eveningOf(takes)
   const { folderButton } = words(useSystem())
-  const show = async () => {
-    const res = await api().show_rehearsal_folder(folder)
-    if (!res.ok) notify({ key: "folder", kind: "error", text: res.error ?? "Could not open the folder" })
-  }
   // In the order they stand; `keep` says which goes first (lowest first).
   const facts = f
     ? [
@@ -108,7 +108,10 @@ export function EveningFacts({
             aria-hidden
             // Contained, so that the facts ask for no room of their own: the
             // name takes what it needs first and they have what is left.
-            className="flex min-w-0 flex-1 items-center justify-end gap-6 self-stretch overflow-hidden pr-6 [contain:inline-size]"
+            className={cn(
+              "flex min-w-0 flex-1 items-center justify-end gap-6 self-stretch overflow-hidden [contain:inline-size]",
+              withFolder && "pr-6"
+            )}
           >
             {facts.map((x, i) => (
               <Fact key={x.label} label={x.label} value={x.value} hidden={!shown[i]} />
@@ -125,15 +128,17 @@ export function EveningFacts({
         </div>
         {/* The path is not shown (Alex, 2026-10-06): the button is enough, and
             it says where it goes when the mouse rests on it. */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="outline" size="row" onClick={() => void show()}>
-              <FolderOpen className="text-muted-foreground" />
-              {folderButton}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent className="break-words">{folder}</TooltipContent>
-        </Tooltip>
+        {withFolder && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="row" onClick={() => void showFolder(folder)}>
+                <FolderOpen className="text-muted-foreground" />
+                {folderButton}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="break-words">{folder}</TooltipContent>
+          </Tooltip>
+        )}
       </div>
       {/* The same facts, out of sight and outside the group, to measure. */}
       <div

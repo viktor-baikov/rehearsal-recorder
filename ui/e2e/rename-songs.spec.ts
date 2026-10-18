@@ -6,6 +6,7 @@ import {
   notices,
   openApp,
   openHistory,
+  style,
   test,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
@@ -21,12 +22,14 @@ const PALYN = `window.__EXTRA_SONGS__ = ["Palyn", "Palyn"]; window.__ACTIVITY__ 
 /** History's Songs view, with `title`'s page open. */
 async function openSong(page: Page, title: string) {
   await openHistory(page)
-  await page.getByRole("button", { name: "Songs", exact: true }).click()
+  await page.getByRole("radio", { name: "Songs", exact: true }).click()
   await page.getByRole("navigation", { name: "Songs" }).locator(`[data-song='${title}']`).click()
   await expect(head(page).getByRole("heading", { name: title, exact: true })).toBeVisible()
 }
 
 const head = (page: Page) => page.locator("[data-song-head]")
+/** A tip open on the page, as drawn. */
+const tipShown = (page: Page) => page.locator("[data-slot='tooltip-content'][data-state$='open']")
 const dialog = (page: Page) => page.getByRole("dialog", { name: "Rename song" })
 const titleField = (page: Page) => dialog(page).getByRole("textbox", { name: "Song title" })
 const question = (page: Page) => page.getByRole("dialog", { name: /^Merge / })
@@ -344,14 +347,36 @@ test.describe("Rename song, from a song's page", () => {
     await openSong(page, "Pałyn")
     const old = head(page).locator("[data-old-names]")
     await expect(old).toHaveText(/Also typed as\s*Palyn\s*Polyn/)
-    const forget = old.getByRole("button", { name: "Forget Palyn", exact: true })
-    await expect(forget).toHaveAttribute("title", "Forget Palyn: typed again, it is a new song")
-    await forget.click()
+    await old.getByRole("button", { name: "Forget Palyn", exact: true }).click()
     await expect(old.getByRole("button", { name: "Forget Palyn", exact: true })).toHaveCount(0)
     await expect(old).toContainText("Polyn")
     expect((await calls(page, "forget_song_name")).map((c) => c.args[0])).toEqual(["Palyn"])
     await old.getByRole("button", { name: "Forget Polyn", exact: true }).click()
     await expect(old).toHaveCount(0)
+  })
+
+  test("the cross on an old name is the shared button with its tip", async ({ page }) => {
+    await openApp(page, { before: "window.__OLD_NAMES__ = [['Palyn', 'Pałyn']];" })
+    await openSong(page, "Pałyn")
+    const old = head(page).locator("[data-old-names]")
+    // The name on the shared badge, in the regular weight.
+    const badge = old.locator("[data-slot='badge']")
+    await expect(badge).toHaveCount(1)
+    await expect(badge).toHaveAttribute("data-variant", "outline")
+    await expect(badge).toContainText("Palyn")
+    expect((await style(badge, "font-weight"))["font-weight"]).toBe("400")
+
+    // The cross: the shared tiny icon button, round, with no native title.
+    const forget = old.getByRole("button", { name: "Forget Palyn", exact: true })
+    await expect(forget).toHaveAttribute("data-variant", "ghost")
+    await expect(forget).toHaveAttribute("data-size", "icon-tiny")
+    await expect(forget).not.toHaveAttribute("title")
+    const box = (await forget.boundingBox())!
+    const corner = parseFloat((await style(forget, "border-top-left-radius"))["border-top-left-radius"])
+    expect(corner).toBeGreaterThanOrEqual(box.height / 2)
+    // Its tip says what forgetting does.
+    await forget.hover()
+    await expect(tipShown(page)).toHaveText("Forget Palyn: typed again, it is a new song")
   })
 
   test("a 960 px window with a 60-character title and twelve old names scrolls nothing sideways", async ({
