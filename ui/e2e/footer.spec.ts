@@ -85,7 +85,7 @@ test("review: Discard with an edge, Save take rightmost", async ({ page }) => {
   expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
 })
 
-test("drafts: the note on the left, Decide later with an edge on the right", async ({ page }) => {
+test("drafts: the note on the left, Decide later with an edge, Recover rightmost", async ({ page }) => {
   await openApp(page, {
     before: `window.__DRAFTS__ = [{dir: '/rec/old/_drafts/take 1', name: 'take 1',
       tracks: ['Guitar', 'Vocals'], duration_sec: 95,
@@ -94,8 +94,9 @@ test("drafts: the note on the left, Decide later with an edge on the right", asy
   })
   await expect(page.getByRole("button", { name: "Decide later" })).toBeVisible()
   const f = await footer(page)
-  expect(f.variants).toEqual(["outline"])
-  expect(f).toMatchObject({ onTheRight: true, sideways: false, inside: true })
+  expect(f.main).toMatch(/^Recover/)
+  expect(f.variants).toEqual(["outline", "default"])
+  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
   const note = page.locator("footer").getByText("They stay on disk")
   expect((await note.boundingBox())!.x).toBeLessThan(960 / 2)
 })

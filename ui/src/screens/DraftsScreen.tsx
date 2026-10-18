@@ -12,16 +12,19 @@ import {
   ItemSeparator,
   ItemTitle,
 } from "@/components/ui/item"
+import { Spinner } from "@/components/ui/spinner"
 import { Whole } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
 import { Shell } from "@/components/Shell"
 import { RunningLine } from "@/components/RunningLine"
+import { useAfter } from "@/hooks/useAfter"
 import { api, type Draft } from "@/lib/api"
 import { countOf, formatMMSS, formatWhen } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
 import { useActivity, watching } from "@/lib/activity"
 import { rise } from "@/lib/motion"
 import { dismiss, notify } from "@/lib/notices"
+import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import { endedByPython, offerUndo } from "@/lib/trash"
 
 /**
@@ -35,6 +38,10 @@ import { endedByPython, offerUndo } from "@/lib/trash"
 // What an action here said — one slot, so each says over the last.
 const SAID = "drafts"
 
+/** What the screen is doing, to the take in `dir`: recovering it from its
+ *  row or the footer, discarding it, or recovering it as one of Recover all. */
+type Busy = { dir: string; job: "recover" | "discard" | "all" }
+
 export function DraftsScreen({
   drafts,
   onDone,
@@ -47,9 +54,13 @@ export function DraftsScreen({
   onReopen: () => void
 }) {
   const [remaining, setRemaining] = useState(drafts)
-  const [busy, setBusy] = useState<string | null>(null)
-  // Whether this list is still the one on screen: an Undo can come after it
-  // closed, its last take discarded since.
+  // The list as it stands, for a call that answers late: Recover all, a
+  // recovery and an Undo each change it while the others wait, and each goes
+  // on from what the others left.
+  const listed = useRef(drafts)
+  const [busy, setBusy] = useState<Busy | null>(null)
+  // Whether this list is still the one on screen: an Undo or a recovery can
+  // answer after it closed, by its last take or by Decide later.
   const shown = useRef(true)
   useEffect(() => {
     shown.current = true
@@ -60,24 +71,66 @@ export function DraftsScreen({
   // Turning a long take's raw tracks into .wav takes real seconds.
   const { entries: work } = useActivity()
 
-  const finish = (rest: Draft[]) => {
-    setRemaining(rest)
-    if (rest.length === 0) onDone()
+  // More than one take, or Recover all going on: the footer's button is
+  // Recover all and each row has its own Recover. A run keeps it so until it
+  // ends, so its buttons do not change under it.
+  const many = remaining.length > 1 || busy?.job === "all"
+  // A recovery that takes a second turns a spinner in its button (B5).
+  const slow = useAfter(busy?.job === "recover" || busy?.job === "all", SPINNER_AFTER_MS)
+
+  const put = (list: Draft[]) => {
+    listed.current = list
+    setRemaining(list)
   }
 
-  const recover = async (draft: Draft) => {
-    setBusy(draft.dir)
+  // A take recovered or discarded. With the last one the list closes, unless
+  // it has closed already: after Decide later the app stays where it is.
+  const drop = (dir: string) => {
+    const rest = listed.current.filter((d) => d.dir !== dir)
+    put(rest)
+    if (rest.length === 0 && shown.current) onDone()
+  }
+
+  // One take through Python: null once it is recovered, else the reason it
+  // was not.
+  const recoverOne = async (draft: Draft): Promise<string | null> => {
     dismiss(SAID)
     const res = await watching(api().recover_draft(draft.dir))
-    setBusy(null)
     // A crop's Undo of it that was waiting, Python has ended, however the
     // recovery went.
     endedByPython(res.ended)
-    if (!res.ok) {
-      notify({ key: SAID, kind: "error", text: res.error ?? "Could not recover the take" })
-      return
+    if (!res.ok) return res.error ?? "Could not recover the take"
+    drop(draft.dir)
+    return null
+  }
+
+  const recover = async (draft: Draft) => {
+    setBusy({ dir: draft.dir, job: "recover" })
+    const error = await recoverOne(draft)
+    setBusy(null)
+    if (error) notify({ key: SAID, kind: "error", text: error })
+  }
+
+  // The takes listed when it was pressed, one after another; one an Undo
+  // brings back meanwhile joins the list, not the run. It stops at a take
+  // that fails, and once the list has closed (Decide later), after the take
+  // in hand: the rest wait for next time.
+  const recoverAll = async () => {
+    const pressed = listed.current
+    for (const draft of pressed) {
+      if (!shown.current) break
+      setBusy({ dir: draft.dir, job: "all" })
+      const error = await recoverOne(draft)
+      if (error) {
+        notify({
+          key: SAID,
+          kind: "error",
+          text: `Recover all stopped at “${draft.rehearsal_name}”: ${error}`,
+        })
+        break
+      }
     }
-    finish(remaining.filter((d) => d.dir !== draft.dir))
+    setBusy(null)
   }
 
   // Asks nothing: Undo brings the take back, into this list while it is on
@@ -85,7 +138,7 @@ export function DraftsScreen({
   // when the Undo comes, not when the take went. Named as the list names
   // it, by its rehearsal.
   const discard = async (draft: Draft) => {
-    setBusy(draft.dir)
+    setBusy({ dir: draft.dir, job: "discard" })
     dismiss(SAID)
     const res = await api().discard_draft(draft.dir)
     setBusy(null)
@@ -94,7 +147,7 @@ export function DraftsScreen({
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not discard the take" })
       return
     }
-    finish(remaining.filter((d) => d.dir !== draft.dir))
+    drop(draft.dir)
     if (!res.undo) return
     offerUndo({
       text: wentTo(`“${draft.rehearsal_name}”`),
@@ -105,7 +158,7 @@ export function DraftsScreen({
           return
         }
         const now = await api().list_drafts()
-        if (shown.current) setRemaining(now)
+        if (shown.current) put(now)
         else onReopen()
       },
     })
@@ -125,9 +178,27 @@ export function DraftsScreen({
               </p>
             }
           >
-            <Button variant="outline" size="footer-aside" onClick={onDone}>
-              Decide later
-            </Button>
+            <div className="flex items-center gap-3">
+              {/* Works while a take recovers, to leave the rest for next
+                  time. */}
+              <Button variant="outline" size="footer-aside" onClick={onDone}>
+                Decide later
+              </Button>
+              {/* The screen's main button, rightmost: the one take, or all
+                  of them one after another. */}
+              <Button
+                size="footer"
+                onClick={() => void (many ? recoverAll() : recover(remaining[0]))}
+                disabled={busy !== null || remaining.length === 0}
+              >
+                {slow && busy?.job === (many ? "all" : "recover") ? (
+                  <Spinner after={0} className="size-5" />
+                ) : (
+                  <Save />
+                )}
+                {many ? "Recover all" : "Recover"}
+              </Button>
+            </div>
           </FooterRow>
         </div>
       }
@@ -198,15 +269,25 @@ export function DraftsScreen({
                         <Trash2 />
                         Discard
                       </Button>
-                      <Button
-                        size="row"
-                        aria-label={`Recover ${draft.rehearsal_name}, ${length}`}
-                        onClick={() => recover(draft)}
-                        disabled={busy !== null}
-                      >
-                        <Save />
-                        Recover
-                      </Button>
+                      {/* With more than one take a row has its own Recover,
+                          for this take alone; in outline, since the
+                          footer's is the main one. */}
+                      {many && (
+                        <Button
+                          variant="outline"
+                          size="row"
+                          aria-label={`Recover ${draft.rehearsal_name}, ${length}`}
+                          onClick={() => void recover(draft)}
+                          disabled={busy !== null}
+                        >
+                          {slow && busy?.job === "recover" && busy.dir === draft.dir ? (
+                            <Spinner after={0} />
+                          ) : (
+                            <Save />
+                          )}
+                          Recover
+                        </Button>
+                      )}
                     </ItemActions>
                   </Item>
                 </Fragment>

@@ -1513,7 +1513,9 @@ window.__MAKE_API__ = () => ({
     await held('recover_draft');
     // A crop of the draft waiting for its Undo is over, as when it is kept.
     const ended = endHeld(dir, null, true);
-    if (window.__RECOVER_FAILS__)
+    // window.__RECOVER_FAILS__: true fails every take, a take's dir that one only.
+    const fails = window.__RECOVER_FAILS__;
+    if (fails === true || fails === dir)
       return {ok:false, error:'Could not recover the take: its folder is read-only', ended};
     drafts = drafts.filter(d => d.dir !== dir);
     return {ok:true, ended, take:{take_number:1, song:'Recovered', go:1, name:'Recovered 1', duration_sec:5, tracks:[], markers:[]}};

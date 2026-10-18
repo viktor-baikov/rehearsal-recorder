@@ -765,7 +765,7 @@ test("discarding the last unsaved take leaves the list, and Undo opens it again"
   ])
   await said(page, "“Tuesday jam” went to the Trash.").getByRole("button", { name: "Undo" }).click()
   await expect(page.getByText("Unsaved takes found")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Recover" })).toHaveCount(1)
+  await expect(page.locator("[data-draft]")).toHaveCount(1)
 })
 
 test("an unsaved take discarded from a list still showing comes back into it", async ({
@@ -781,14 +781,14 @@ test("an unsaved take discarded from a list still showing comes back into it", a
        created_at: '2026-09-03T19:00:00'}];`,
   })
   const list = page.getByText("Unsaved takes found")
-  const recover = page.getByRole("button", { name: "Recover" })
-  await expect(recover).toHaveCount(2)
+  const takes = page.locator("[data-draft]")
+  await expect(takes).toHaveCount(2)
   await page.getByRole("button", { name: "Discard" }).first().click()
-  await expect(recover).toHaveCount(1)
+  await expect(takes).toHaveCount(1)
   await expect(list).toBeVisible()
 
   await said(page, "“Tuesday jam” went to the Trash.").getByRole("button", { name: "Undo" }).click()
-  await expect(recover).toHaveCount(2)
+  await expect(takes).toHaveCount(2)
   await expect(page.getByText("Tuesday jam")).toBeVisible()
   await expect(list).toHaveCount(1)
 })
@@ -807,21 +807,21 @@ test("two unsaved takes discarded, each Undo brings its own back to the list", a
   })
   const list = page.getByText("Unsaved takes found")
   await expect(list).toBeVisible()
-  const recover = page.getByRole("button", { name: "Recover" })
-  await expect(recover).toHaveCount(2)
+  const takes = page.locator("[data-draft]")
+  await expect(takes).toHaveCount(2)
   await page.getByRole("button", { name: "Discard" }).first().click()
-  await expect(recover).toHaveCount(1)
+  await expect(takes).toHaveCount(1)
   await page.getByRole("button", { name: "Discard" }).click()
   await expect(list).toHaveCount(0)
 
   // The first one back, after the list closed on the second.
   await said(page, "“Tuesday jam” went to the Trash.").getByRole("button", { name: "Undo" }).click()
   await expect(list).toBeVisible()
-  await expect(recover).toHaveCount(1)
+  await expect(takes).toHaveCount(1)
   await expect(page.getByText("Tuesday jam")).toBeVisible()
   // And the second, into the list now showing.
   await said(page, "“Wednesday jam” went to the Trash.").getByRole("button", { name: "Undo" }).click()
-  await expect(recover).toHaveCount(2)
+  await expect(takes).toHaveCount(2)
 })
 
 test("a folder switch names what could not be ended in the old folder", async ({ page }) => {

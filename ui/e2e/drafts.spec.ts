@@ -1,18 +1,23 @@
 import {
+  callCount,
   calls,
   colour,
   EDGE,
   expect,
   hold,
+  holdFor,
   letGo,
+  letThrough,
   notices,
   openApp,
   scaled,
   settled,
   setFake,
+  startButton,
   style,
   test,
   themed,
+  waitingFor,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -45,6 +50,37 @@ const workButton = (page: Page) => page.locator("header button[aria-label^='Back
 /** The tip a cut name shows whole. */
 const tip = (page: Page) => page.locator("[data-whole][data-state$='open']")
 const box = async (el: Locator) => (await el.boundingBox())!
+/** A take's row. */
+const rowOf = (page: Page, draft: { dir: string }) => page.locator(`[data-draft="${draft.dir}"]`)
+/** The footer's buttons, in order, and its main one, the last. By its place,
+ *  since a second into a recovery its spinner's "Loading" is in its name. */
+const footerButtons = (page: Page) => page.locator("footer").getByRole("button")
+const mainButton = (page: Page) => footerButtons(page).last()
+/** The buttons of the screen itself, its rows' and its footer's, that work now. */
+const working = (page: Page) => page.locator("main button:enabled, footer button:enabled")
+/** The journal's entry for a take being recovered, this far along. */
+const recovering = (dir: string, fraction: number) => ({
+  id: 1,
+  kind: "recover",
+  title: "recover",
+  folder: dir,
+  take_number: null,
+  state: "running",
+  fraction,
+  step: null,
+  error: null,
+  detail: null,
+  retry: null,
+  seen: false,
+})
+/** The takes Python still has unsaved, as it would list them next time. */
+const onDisk = (page: Page) =>
+  page.evaluate(async () => {
+    const w = window as unknown as {
+      pywebview: { api: { list_drafts: () => Promise<{ dir: string }[]> } }
+    }
+    return (await w.pywebview.api.list_drafts()).map((d) => d.dir)
+  })
 
 /** The screen with these takes, risen into place; `before` runs ahead of the fake. */
 async function openDrafts(page: Page, list: object[] = [SEVEN, TWELVE, EIGHT], before = "") {
@@ -252,22 +288,7 @@ async function recoveringKeepsTheBoxes(page: Page, draft: ReturnType<typeof take
 
   // Python is slow to recover; the journal says how far it has come.
   await hold(page, "recover_draft")
-  await setFake(page, "__ACTIVITY__", [
-    {
-      id: 1,
-      kind: "recover",
-      title: "recover",
-      folder: draft.dir,
-      take_number: null,
-      state: "running",
-      fraction: 0.42,
-      step: null,
-      error: null,
-      detail: null,
-      retry: null,
-      seen: false,
-    },
-  ])
+  await setFake(page, "__ACTIVITY__", [recovering(draft.dir, 0.42)])
   await page.getByRole("button", { name: /^Recover/ }).click()
   await expect(row).toContainText("Recovering… 42%")
   // In its line's place: the line is gone, and the progress is as tall.
@@ -343,4 +364,258 @@ test("two takes of one rehearsal are told apart by length, and each Undo brings 
   // counts is that all three are there.
   const dirs = await rows(page).evaluateAll((els) => els.map((e) => e.getAttribute("data-draft")))
   expect([...dirs].sort()).toEqual([SEVEN.dir, TWELVE.dir, EIGHT.dir].sort())
+})
+
+// The main button. With one take the footer's Recover recovers it; with more,
+// Recover all does them one after another, and each row has its own Recover
+// as well, in outline.
+
+test("one take: Recover is the footer's main button, at its right beside Decide later", async ({ page }) => {
+  await openDrafts(page, [SEVEN])
+  await expect(footerButtons(page)).toHaveText(["Decide later", "Recover"])
+  const recover = page.locator("footer").getByRole("button", { name: "Recover", exact: true })
+  const later = await box(footerButtons(page).first())
+  const main = await box(recover)
+  // At the right of Decide later, on its line, the 56 px of a main button, in
+  // the accent.
+  expect(main.x).toBeGreaterThan(later.x + later.width)
+  expect(main.y + main.height / 2).toBeCloseTo(later.y + later.height / 2, 0)
+  expect(main.height).toBeCloseTo(56, 0)
+  expect(await style(recover, "background-color")).toEqual({
+    "background-color": await colour(page, "--primary"),
+  })
+  // The row keeps its Discard alone.
+  await expect(rows(page).getByRole("button")).toHaveText(["Discard"])
+
+  await recover.click()
+  await expect(startButton(page)).toBeVisible()
+  expect((await calls(page, "recover_draft")).map((c) => c.args)).toEqual([[SEVEN.dir]])
+})
+
+test("more takes: Recover all in the footer, each row its own Recover in outline", async ({ page }) => {
+  await openDrafts(page)
+  await expect(footerButtons(page)).toHaveText(["Decide later", "Recover all"])
+  // One button on the screen is in the accent: the footer's, not the rows'.
+  const primary = await colour(page, "--primary")
+  const filled = await page
+    .getByRole("button")
+    .evaluateAll(
+      (buttons, fill) =>
+        buttons.filter((b) => getComputedStyle(b).backgroundColor === fill).map((b) => b.textContent),
+      primary
+    )
+  expect(filled).toEqual(["Recover all"])
+  const own = rows(page).getByRole("button", { name: /^Recover/ })
+  await expect(own).toHaveCount(3)
+  for (const button of await own.all()) await expect(button).toHaveAttribute("data-variant", "outline")
+
+  // Two discarded, one is left: the footer says Recover, and the row has
+  // Discard alone.
+  await page.getByRole("button", { name: "Discard Tuesday jam, 4:12", exact: true }).click()
+  await expect(rows(page)).toHaveCount(2)
+  await expect(footerButtons(page)).toHaveText(["Decide later", "Recover all"])
+  await page.getByRole("button", { name: "Discard Tuesday jam, 0:41", exact: true }).click()
+  await expect(rows(page)).toHaveCount(1)
+  await expect(footerButtons(page)).toHaveText(["Decide later", "Recover"])
+  await expect(rows(page).getByRole("button")).toHaveText(["Discard"])
+})
+
+test("Recover all recovers the takes one after another, each showing its progress", async ({ page }) => {
+  await openDrafts(page)
+  // The first take held where it is, and the last one held on its own after.
+  await holdFor(page, "recover_draft", EIGHT.dir)
+  await hold(page, "recover_draft")
+  await setFake(page, "__ACTIVITY__", [recovering(SEVEN.dir, 0.3)])
+  await mainButton(page).click()
+  await expect(rowOf(page, SEVEN)).toContainText("Recovering… 30%")
+  expect(await callCount(page, "recover_draft")).toBe(1)
+  // Of the screen's buttons only Decide later works while it runs, and the
+  // footer still says Recover all.
+  await expect(working(page)).toHaveText(["Decide later"])
+  await expect(mainButton(page)).toHaveText("Recover all")
+
+  // The first two done, the last one in hand: one take is listed, and the
+  // buttons stay as they were for the run.
+  await letGo(page, "recover_draft")
+  await expect.poll(() => waitingFor(page)).toBe(1)
+  await setFake(page, "__ACTIVITY__", [recovering(EIGHT.dir, 0.6)])
+  await expect(rows(page)).toHaveCount(1)
+  await expect(rowOf(page, EIGHT)).toContainText("Recovering… 60%")
+  await expect(mainButton(page)).toHaveText("Recover all")
+  await expect(rowOf(page, EIGHT).getByRole("button", { name: /^Recover/ })).toBeDisabled()
+  await expect(working(page)).toHaveText(["Decide later"])
+
+  await letThrough(page)
+  await expect(startButton(page)).toBeVisible()
+  expect((await calls(page, "recover_draft")).map((c) => c.args)).toEqual([
+    [SEVEN.dir],
+    [TWELVE.dir],
+    [EIGHT.dir],
+  ])
+})
+
+test("Recover all stops at a take that fails and says so", async ({ page }) => {
+  await openDrafts(page, [SEVEN, TWELVE, EIGHT], `window.__RECOVER_FAILS__ = ${JSON.stringify(TWELVE.dir)};`)
+  await mainButton(page).click()
+  // The first is recovered, the second fails, the third is not tried.
+  await expect(notices(page)).toHaveCount(1)
+  await expect(notices(page, "error").locator("p")).toHaveText(
+    `Recover all stopped at “${LONG}”: Could not recover the take: its folder is read-only`
+  )
+  await expect(rows(page)).toHaveCount(2)
+  expect(await rows(page).evaluateAll((els) => els.map((e) => e.getAttribute("data-draft")))).toEqual([
+    TWELVE.dir,
+    EIGHT.dir,
+  ])
+  // The buttons work again.
+  await expect(page.locator("main button:disabled, footer button:disabled")).toHaveCount(0)
+  await expect(mainButton(page)).toHaveText("Recover all")
+  expect((await calls(page, "recover_draft")).map((c) => c.args)).toEqual([[SEVEN.dir], [TWELVE.dir]])
+})
+
+test("an Undo during Recover all brings its take back, and it stays once the run is done", async ({
+  page,
+}) => {
+  await openDrafts(page)
+  await page.getByRole("button", { name: "Discard Tuesday jam, 0:41", exact: true }).click()
+  await expect(rows(page)).toHaveCount(2)
+  await hold(page, "recover_draft")
+  await mainButton(page).click()
+  await expect.poll(() => callCount(page, "recover_draft")).toBe(1)
+
+  await notices(page)
+    .filter({ hasText: "“Tuesday jam” went to the Trash." })
+    .getByRole("button", { name: "Undo" })
+    .click()
+  await expect(rows(page)).toHaveCount(3)
+  // Back in the list while the run goes on, and it cannot be discarded
+  // meanwhile.
+  await expect(rowOf(page, EIGHT).getByRole("button", { name: /^Discard/ })).toBeDisabled()
+
+  // The run was the two takes listed when it was pressed; the one brought
+  // back stays, with Recover in the footer.
+  await letGo(page, "recover_draft")
+  await expect(rows(page)).toHaveCount(1)
+  await expect(rowOf(page, EIGHT)).toHaveCount(1)
+  await expect(page.locator("main button:disabled, footer button:disabled")).toHaveCount(0)
+  expect((await calls(page, "recover_draft")).map((c) => c.args)).toEqual([[SEVEN.dir], [TWELVE.dir]])
+  await expect(footerButtons(page)).toHaveText(["Decide later", "Recover"])
+  await expect(rows(page).getByRole("button")).toHaveText(["Discard"])
+})
+
+test("Decide later during Recover all leaves the takes not reached for next time", async ({ page }) => {
+  await openDrafts(page)
+  await hold(page, "recover_draft")
+  await mainButton(page).click()
+  await expect.poll(() => callCount(page, "recover_draft")).toBe(1)
+  await page.getByRole("button", { name: "Decide later" }).click()
+  await expect(startButton(page)).toBeVisible()
+
+  // The take in hand is recovered, and the run stops there.
+  await letGo(page, "recover_draft")
+  await expect.poll(() => onDisk(page)).toEqual([TWELVE.dir, EIGHT.dir])
+  await page.waitForTimeout(200)
+  expect(await callCount(page, "recover_draft")).toBe(1)
+  await expect(startButton(page)).toBeVisible()
+})
+
+test("a recovery that ends after Decide later leaves the app where it is", async ({ page }) => {
+  await openDrafts(page, [SEVEN])
+  await hold(page, "recover_draft")
+  await page.locator("footer").getByRole("button", { name: "Recover", exact: true }).click()
+  await expect.poll(() => callCount(page, "recover_draft")).toBe(1)
+  await page.getByRole("button", { name: "Decide later" }).click()
+  await page.getByRole("button", { name: "Settings" }).click()
+  const settings = page.getByRole("heading", { name: "Settings" })
+  await expect(settings).toBeVisible()
+
+  await letGo(page, "recover_draft")
+  await expect.poll(() => onDisk(page)).toEqual([])
+  await page.waitForTimeout(200)
+  expect(await callCount(page, "recover_draft")).toBe(1)
+  await expect(settings).toBeVisible()
+})
+
+test("an Undo after Recover closed the list opens it again, Recover in the footer", async ({ page }) => {
+  await openDrafts(page, [SEVEN, EIGHT])
+  await page.getByRole("button", { name: "Discard Tuesday jam, 4:12", exact: true }).click()
+  await expect(rows(page)).toHaveCount(1)
+  await page.locator("footer").getByRole("button", { name: "Recover", exact: true }).click()
+  await expect(startButton(page)).toBeVisible()
+  expect((await calls(page, "recover_draft")).map((c) => c.args)).toEqual([[EIGHT.dir]])
+
+  await notices(page)
+    .filter({ hasText: "“Tuesday jam” went to the Trash." })
+    .getByRole("button", { name: "Undo" })
+    .click()
+  await expect(page.getByRole("heading", { name: "Unsaved takes found" })).toBeVisible()
+  await expect(rows(page)).toHaveCount(1)
+  await expect(rowOf(page, SEVEN)).toHaveCount(1)
+  await expect(footerButtons(page)).toHaveText(["Decide later", "Recover"])
+  await expect(rows(page).getByRole("button")).toHaveText(["Discard"])
+})
+
+// B5, as the start screen's Start: a press that takes a second shows a
+// spinner in its icon's place, and nothing round it moves.
+for (const where of ["the footer", "a row"] as const) {
+  test(`Recover turns a spinner in its icon's place after a second, its words and box kept, in ${where}`, async ({
+    page,
+  }) => {
+    const inFooter = where === "the footer"
+    await openDrafts(page, inFooter ? [SEVEN] : [SEVEN, EIGHT])
+    const recover = inFooter
+      ? mainButton(page)
+      : rowOf(page, SEVEN).getByRole("button", { name: /^Recover/ })
+    const beside = inFooter
+      ? page.getByRole("button", { name: "Decide later" })
+      : rowOf(page, SEVEN).getByRole("button", { name: /^Discard/ })
+    await expect(recover).toHaveText("Recover")
+    const boxes = async () => [await recover.boundingBox(), await beside.boundingBox()]
+    const before = await boxes()
+    await hold(page, "recover_draft")
+    const spinner = recover.getByRole("status", { name: "Loading" })
+    const since = Date.now()
+    const at = (ms: number) => page.waitForTimeout(Math.max(0, ms - (Date.now() - since)))
+    await recover.click()
+    await at(500)
+    expect(await spinner.isVisible(), "a spinner at 0.5 s").toBe(false)
+    await at(900)
+    expect(await spinner.isVisible(), "a spinner at 0.9 s").toBe(false)
+    await expect(spinner, "a spinner by 2 s").toBeVisible({ timeout: 2000 })
+    // In the icon's place: one icon, the words kept, the boxes as they were.
+    await expect(recover.locator("svg")).toHaveCount(1)
+    await expect(recover).toHaveText("Recover")
+    expect(await boxes()).toEqual(before)
+    // Only the button pressed turns one.
+    await expect(page.getByRole("status", { name: "Loading" })).toHaveCount(1)
+
+    await letGo(page, "recover_draft")
+    if (inFooter) await expect(startButton(page)).toBeVisible()
+    else await expect(rows(page)).toHaveCount(1)
+    await expect(page.getByRole("status", { name: "Loading" })).toHaveCount(0)
+  })
+}
+
+test("at 960x680 and 150 % the footer keeps Decide later and Recover all whole on one row", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 960, height: 680 })
+  await openDrafts(page, [SEVEN, TWELVE, EIGHT], scaled(1.5))
+  const buttons = footerButtons(page)
+  await expect(buttons).toHaveText(["Decide later", "Recover all"])
+  const [later, all] = [await box(buttons.nth(0)), await box(buttons.nth(1))]
+  // One vertical centre, and the main one at 56 px times the scale.
+  expect(later.y + later.height / 2).toBeCloseTo(all.y + all.height / 2, 0)
+  expect(all.height).toBeCloseTo(56 * 1.5, 0)
+  // Their words whole, the buttons in the window, nothing scrolls sideways.
+  for (const button of await buttons.all()) {
+    expect(await button.evaluate((b) => b.scrollWidth <= b.clientWidth), await button.innerText()).toBe(true)
+  }
+  expect(all.x + all.width).toBeLessThanOrEqual(960)
+  expect(
+    await page.evaluate(() => {
+      const footer = document.querySelector("footer")!
+      return document.documentElement.scrollWidth > window.innerWidth || footer.scrollWidth > footer.clientWidth
+    })
+  ).toBe(false)
 })
