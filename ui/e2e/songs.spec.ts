@@ -1,17 +1,22 @@
 import {
+  callCount,
   calls,
+  colour,
   expect,
   notices,
   openApp,
+  openBandApp,
   openHistory,
   recordTake,
+  scaled,
   setFake,
+  settled,
   startButton,
   startRehearsal,
   style,
   test,
 } from "./app.ts"
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 
 // History's Songs view, against the fake's library: Tuesday jam (Pałyn),
 // Wednesday jam (nothing named), First rehearsal (Daroha ×2) and Missing
@@ -266,7 +271,7 @@ test.describe("Songs in History", () => {
     await openApp(page)
     await openSongs(page)
     await chooseSong(page, "Pałyn")
-    await expect(rung(page, "/rec/gone")).toContainText("not on disk")
+    await expect(rung(page, "/rec/gone")).toContainText("Not found on disk")
     await rung(page, "/rec/gone").click()
     const gone = rungGroup(page, "/rec/gone")
     await expect(gone.locator("[data-take]")).toHaveCount(2)
@@ -321,7 +326,7 @@ test.describe("Songs in History", () => {
 
     const last = page.getByRole("region", { name: "From last time" })
     await expect(last).toContainText("From last time · Thu 10 Sep")
-    await expect(last.locator("[data-note]")).toHaveCount(1)
+    await expect(last.locator("button[data-note]")).toHaveCount(1)
     await last.getByRole("button", { name: /this one is the take/ }).click()
     await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
     await expect
@@ -778,4 +783,341 @@ test.describe("Songs in History", () => {
       })
     expect(fit).toBe(true)
   })
+})
+
+// ---------- the song's page on the shared pieces ----------
+
+/** The stress band's long title: more than two lines of the head at 960 px
+ *  and 150 %. */
+const KALYCHANKA =
+  "Kalychanka (slow version for the wedding, with the long intro the bride asked for)"
+
+/** The song's page as History scrolls it: the region named after the song. */
+const pane = (page: Page, title: string) => page.getByRole("region", { name: title, exact: true })
+
+/** Whether the page's own scrolling pane, or the window, scrolls sideways. */
+const sideways = (it: Locator) =>
+  it.evaluate(
+    (el) =>
+      el.scrollWidth > el.clientWidth + 1 ||
+      document.documentElement.scrollWidth > window.innerWidth
+  )
+
+/** The page's one group, and its parts in order. */
+const group = (page: Page) => page.locator("[data-song-parts]")
+const parts = (page: Page) => group(page).locator(":scope > section")
+
+test("the song page's head: play 48 px, the title on two lines then cut, the pencil after it", async ({
+  page,
+}) => {
+  const scale = 1.5
+  await page.setViewportSize({ width: 960, height: 680 })
+  await page.addInitScript(scaled(scale))
+  await openBandApp(page, { stress: true })
+  await openSongs(page)
+  await rows(page).and(page.locator(`[data-song="${KALYCHANKA}"]`)).click()
+  const h = head(page)
+  await expect(h.locator("h2 .sr-only")).toHaveText(KALYCHANKA)
+  await settled(page)
+  // The shared pane head, as a rehearsal's page has it.
+  await expect(h).toHaveAttribute("data-pane-head")
+
+  // The shared play button at its head size, before the title.
+  const play = h.getByRole("button", { name: `Play ${KALYCHANKA}`, exact: true })
+  await expect(play).toHaveAttribute("data-look", "idle")
+  const ring = (await play.boundingBox())!
+  expect(ring.width).toBeCloseTo(48 * scale, 0)
+  expect(ring.height).toBeCloseTo(48 * scale, 0)
+  const title = h.getByRole("heading", { level: 2 })
+  expect(ring.x + ring.width).toBeLessThanOrEqual((await title.boundingBox())!.x)
+
+  // 20 px, on two lines, then cut: whole to a screen reader and in the
+  // shared tip.
+  expect((await style(title, "font-size"))["font-size"]).toBe(`${20 * scale}px`)
+  const name = h.locator("[data-go-title]")
+  await expect(name).toHaveAttribute("data-lines", "2")
+  await expect(name).toHaveAttribute("data-cut")
+  await name.hover()
+  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(KALYCHANKA)
+  await page.mouse.move(0, 0, { steps: 8 })
+
+  // The pencil right after the last word drawn, on its line.
+  const pen = (await h
+    .getByRole("button", { name: `Rename song ${KALYCHANKA}`, exact: true })
+    .boundingBox())!
+  const end = await name.evaluate((el) => {
+    const tail = el.querySelector(":scope > .whitespace-nowrap")!
+    const range = document.createRange()
+    range.selectNodeContents(tail.firstChild!)
+    const r = range.getBoundingClientRect()
+    return { right: r.right, middle: r.top + r.height / 2 }
+  })
+  expect(pen.x - end.right, "the pencil after the last word").toBeGreaterThanOrEqual(0)
+  expect(pen.x - end.right, "the pencil right after it").toBeLessThan(12 * scale)
+  expect(Math.abs(pen.y + pen.height / 2 - end.middle), "on its line").toBeLessThan(4 * scale)
+
+  // Under it, the takes in 14 px and what ▶ plays in 12.
+  expect((await style(h.getByText(/^1 take in 1 rehearsal/), "font-size"))["font-size"]).toBe(
+    `${14 * scale}px`
+  )
+  expect((await style(h.getByText(/^▶ plays/), "font-size"))["font-size"]).toBe(`${12 * scale}px`)
+  // Nothing scrolls sideways, the open rung of the long rehearsal included.
+  const tue = rung(page, "/rec/tue")
+  await expect(tue).toHaveAttribute("aria-expanded", "true")
+  expect(await sideways(pane(page, KALYCHANKA))).toBe(false)
+  // The rehearsal's name is cut on its rung, and whole in the rung's tip.
+  const rehearsal = "Tuesday jam at the old brewery, with the horn section and the choir from upstairs"
+  expect(await tue.getByText(rehearsal).evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+  await tue.hover()
+  await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(rehearsal)
+})
+
+test("the song page is one group: Starred, From last time and Every take split by lines", async ({
+  page,
+}) => {
+  await openApp(page, {
+    before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#2'];",
+  })
+  await openSongs(page)
+  await chooseSong(page, "Pałyn")
+  await settled(page)
+  expect(
+    await parts(page).evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))
+  ).toEqual(["Starred", "From last time", "Every take"])
+
+  // One group on the card's fill, with its 12 px corners and no frame,
+  // 32 px under the head.
+  expect(
+    await style(group(page), "background-color", "border-top-left-radius", "border-top-width")
+  ).toEqual({
+    "background-color": await colour(page, "--card"),
+    "border-top-left-radius": "12px",
+    "border-top-width": "0px",
+  })
+  const top = (await head(page).boundingBox())!
+  const all = (await group(page).boundingBox())!
+  expect(all.y - (top.y + top.height)).toBeCloseTo(32, 0)
+
+  // 24 px inside each part, and a 1 px line across the whole group above
+  // each but the first.
+  for (const [i, part] of (await parts(page).all()).entries()) {
+    expect(
+      await style(part, "padding-top", "padding-right", "padding-bottom", "padding-left", "border-top-width")
+    ).toEqual({
+      "padding-top": "24px",
+      "padding-right": "24px",
+      "padding-bottom": "24px",
+      "padding-left": "24px",
+      "border-top-width": i === 0 ? "0px" : "1px",
+    })
+    expect((await part.boundingBox())!.width).toBeCloseTo(all.width, 0)
+    expect(await style(part.locator("h3"), "font-size", "font-weight")).toEqual({
+      "font-size": "14px",
+      "font-weight": "600",
+    })
+  }
+  await expect(parts(page).nth(1).locator("h3")).toHaveText("From last time · Thu 10 Sep")
+  const star = parts(page).first().locator("h3").getByText("★")
+  expect((await style(star, "color")).color).toBe(await colour(page, "--signal"))
+
+  // A note is the shared button, in 14 px and the regular weight, naming its
+  // take.
+  const note = parts(page).nth(1).locator("button[data-note]")
+  await expect(note).toHaveCount(1)
+  await expect(note).toHaveAttribute("data-variant", "ghost")
+  expect(await style(note, "font-size", "font-weight")).toEqual({
+    "font-size": "14px",
+    "font-weight": "400",
+  })
+  await expect(note).toContainText("Pałyn 2 · ")
+
+  // A song with no star and no marks: Every take alone, with no line above.
+  await chooseSong(page, "Daroha")
+  await expect(parts(page)).toHaveCount(1)
+  await expect(parts(page).first()).toHaveAttribute("aria-label", "Every take")
+  expect((await style(parts(page).first(), "border-top-width"))["border-top-width"]).toBe("0px")
+})
+
+/** Daroha 2 of First rehearsal, its tracks where no file is: the fake
+ *  answers a file under /gone/ as Python does one that is not on disk. It is
+ *  the take Daroha's ▶ plays. */
+const DAROHA_2_GONE = `
+  const api = window.pywebview.api; const get = api.get_song;
+  const gone = (t) => ({...t, tracks: t.tracks.map((x) => ({...x, file: '/gone/' + x.file.split('/').pop()}))});
+  const it = (folder, t) => folder === '/rec/older' && t.take_number === 2;
+  api.get_song = async (id) => {
+    const r = await get(id);
+    r.goes = (r.goes || []).map((g) => (it(g.folder, g.take) ? {...g, take: gone(g.take)} : g));
+    if (r.plays && it(r.plays.folder, r.plays.take)) r.plays = {...r.plays, take: gone(r.plays.take)};
+    return r;
+  };
+`
+
+test("a take that cannot be loaded says so on the song's play button and on its rung", async ({
+  page,
+}) => {
+  await openApp(page, { after: DAROHA_2_GONE })
+  await openSongs(page)
+  await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
+  const play = head(page).locator("[data-look]")
+  const onRung = rungGroup(page, "/rec/older").locator("[data-take='2'] [data-look]")
+  await expect(play).toHaveAttribute("data-look", "idle")
+  await play.click()
+  await expect(play).toHaveAttribute("data-look", "failed")
+  await expect(play).toHaveAccessibleName("Could not load Daroha 2. Try again")
+  await expect(play).toBeEnabled()
+  await expect(onRung).toHaveAttribute("data-look", "failed")
+
+  // The files are back where they were: pressing it again opens the take
+  // once more, and it plays.
+  await page.evaluate(() => {
+    const bridge = (
+      window as unknown as { pywebview: { api: Record<string, (...a: unknown[]) => Promise<unknown>> } }
+    ).pywebview.api
+    const media = bridge.take_media
+    bridge.take_media = (tracks, ...rest) =>
+      media(
+        (tracks as { file: string }[]).map((t) => ({ ...t, file: t.file.replace("/gone/", "/rec/back/") })),
+        ...rest
+      )
+  })
+  const opens = await callCount(page, "player_open")
+  await play.click()
+  await expect(play).toHaveAttribute("data-look", "playing")
+  await expect(onRung).toHaveAttribute("data-look", "playing")
+  expect(await callCount(page, "player_open")).toBe(opens + 1)
+})
+
+/** Pałyn's takes in Tuesday jam made thirty, from 5 s to 300 s long. */
+const THIRTY_PALYN = `
+  const api = window.pywebview.api; const get = api.get_song;
+  api.get_song = async (id) => {
+    const r = await get(id);
+    if (r.title !== 'Pałyn') return r;
+    const one = r.goes.find((g) => g.folder === '/rec/old');
+    const thirty = Array.from({length: 30}, (_, i) => ({...one, take: {...one.take,
+      take_number: i + 1, name: 'Pałyn ' + (i + 1), go: i + 1, starred: false, markers: [],
+      duration_sec: Math.round(5 + (295 * i) / 29),
+      tracks: [{name: 'Guitar', file: '/rec/old/z' + (i + 1) + '.wav'}]}}));
+    r.goes = [...thirty, ...r.goes.filter((g) => g.folder !== '/rec/old')];
+    return r;
+  };
+`
+
+test("a rung opens with Enter, and a 30-take evening's bars wrap, none under 6 px", async ({
+  page,
+}) => {
+  await openApp(page, { after: THIRTY_PALYN })
+  await openSongs(page)
+  await chooseSong(page, "Pałyn")
+
+  // Enter on a rung opens it, and again closes it.
+  const gone = rung(page, "/rec/gone")
+  await gone.focus()
+  await page.keyboard.press("Enter")
+  await expect(gone).toHaveAttribute("aria-expanded", "true")
+  await expect(rungGroup(page, "/rec/gone").locator("[data-take]")).toHaveCount(2)
+  await page.keyboard.press("Enter")
+  await expect(gone).toHaveAttribute("aria-expanded", "false")
+  await expect(rungGroup(page, "/rec/gone").locator("[data-take]")).toHaveCount(0)
+
+  for (const [width, height, scale] of [
+    [1180, 820, 1],
+    [960, 680, 1],
+    [960, 680, 1.5],
+  ] as const) {
+    if (scale !== 1) {
+      // The stored scale is the whole stored config, so History comes back
+      // on Rehearsals.
+      await page.addInitScript(scaled(scale))
+      await page.reload()
+      await openSongs(page)
+      await chooseSong(page, "Pałyn")
+    }
+    await page.setViewportSize({ width, height })
+    await settled(page)
+    const where = `${width} px at ${scale * 100} %`
+    const bars = rung(page, "/rec/old").locator("[data-bars]")
+    await expect(bars.locator(":scope > span"), where).toHaveCount(30)
+    const drawn = await bars.evaluate((row) => {
+      const edge = row.getBoundingClientRect()
+      const boxes = [...row.children].map((b) => b.getBoundingClientRect())
+      return {
+        least: Math.min(...boxes.map((b) => b.width)),
+        lines: new Set(boxes.map((b) => Math.round(b.top))).size,
+        inside: boxes.every((b) => b.left >= edge.left - 0.5 && b.right <= edge.right + 0.5),
+      }
+    })
+    // Every take in its place: none under 6 px, onto more lines where they
+    // do not fit on one, and none out past the rung's edge.
+    expect(drawn.least, where).toBeGreaterThanOrEqual(6)
+    expect(drawn.lines, where).toBeGreaterThan(1)
+    expect(drawn.inside, where).toBe(true)
+    // No native title on a bar: the open rung names each take.
+    await expect(bars.locator("[title]"), where).toHaveCount(0)
+    expect(await sideways(pane(page, "Pałyn")), where).toBe(false)
+  }
+})
+
+test("the ladder's labels and part titles have no capitals", async ({ page }) => {
+  await openApp(page, {
+    before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#2'];",
+  })
+  await openSongs(page)
+  await chooseSong(page, "Pałyn")
+  const ladder = page.getByRole("region", { name: "Every take" })
+  // F7: as written, at one of the five sizes (F5).
+  for (const label of ["Rehearsal", "Takes, to scale", "Takes"]) {
+    expect(
+      await style(
+        ladder.getByText(label, { exact: true }),
+        "text-transform",
+        "letter-spacing",
+        "font-size",
+        "font-weight"
+      ),
+      label
+    ).toEqual({
+      "text-transform": "none",
+      "letter-spacing": "normal",
+      "font-size": "12px",
+      "font-weight": "400",
+    })
+  }
+  for (const part of await parts(page).all()) {
+    const title = part.locator("h3")
+    expect(await style(title, "text-transform", "letter-spacing")).toEqual({
+      "text-transform": "none",
+      "letter-spacing": "normal",
+    })
+    // Drawn as written: the words drawn are the words in the page.
+    const flat = (text: string | null) => (text ?? "").replace(/\s+/g, " ").trim()
+    expect(flat(await title.innerText())).toBe(flat(await title.evaluate((el) => el.textContent)))
+  }
+  await expect(parts(page).locator("h3")).toHaveText([
+    "★ Starred",
+    "From last time · Thu 10 Sep",
+    "Every take",
+  ])
+})
+
+test("a rehearsal not on disk on the ladder says Not found on disk in red", async ({ page }) => {
+  await openApp(page)
+  await openSongs(page)
+  await chooseSong(page, "Pałyn")
+  const gone = rung(page, "/rec/gone")
+  await expect(gone).toHaveAttribute("data-missing", "true")
+  const said = gone.getByText("Not found on disk", { exact: true })
+  await expect(said).toBeVisible()
+  expect((await style(said, "color")).color).toBe(await colour(page, "--destructive"))
+  // Its takes' bars are the quiet ones: the card's fill in a dashed frame.
+  const bars = gone.locator("[data-bars] > span")
+  await expect(bars).toHaveCount(2)
+  for (const bar of await bars.all())
+    expect(await style(bar, "border-top-style", "background-color")).toEqual({
+      "border-top-style": "dashed",
+      "background-color": await colour(page, "--card"),
+    })
+  // A rehearsal on disk says nothing of the kind.
+  await expect(rung(page, "/rec/old")).not.toContainText("Not found on disk")
 })

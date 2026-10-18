@@ -6,6 +6,7 @@ import {
   notices,
   openApp,
   openHistory,
+  style,
   test,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
@@ -23,10 +24,15 @@ async function openSong(page: Page, title: string) {
   await openHistory(page)
   await page.getByRole("radio", { name: "Songs", exact: true }).click()
   await page.getByRole("navigation", { name: "Songs" }).locator(`[data-song='${title}']`).click()
-  await expect(head(page).getByRole("heading", { name: title, exact: true })).toBeVisible()
+  await expect(shownTitle(page)).toHaveText(title)
 }
 
 const head = (page: Page) => page.locator("[data-song-head]")
+/** The song's title as its head draws it: the heading also holds the
+ *  pencil after its last word, whose name a heading's name takes in. */
+const shownTitle = (page: Page) => head(page).locator("h2 [data-go-title]")
+/** A tip open on the page, as drawn. */
+const tipShown = (page: Page) => page.locator("[data-slot='tooltip-content'][data-state$='open']")
 const dialog = (page: Page) => page.getByRole("dialog", { name: "Rename song" })
 const titleField = (page: Page) => dialog(page).getByRole("textbox", { name: "Song title" })
 const question = (page: Page) => page.getByRole("dialog", { name: /^Merge / })
@@ -83,7 +89,7 @@ test.describe("Rename song, from a song's page", () => {
     await expect(dialog(page).getByText("3 takes become Polyn.")).toBeVisible()
     await dialog(page).getByRole("button", { name: "Rename", exact: true }).click()
     await expect(dialog(page)).toBeHidden()
-    await expect(head(page).getByRole("heading", { name: "Polyn", exact: true })).toBeVisible()
+    await expect(shownTitle(page)).toHaveText("Polyn")
     const list = page.getByRole("navigation", { name: "Songs" })
     await expect(list.locator("[data-song='Polyn']")).toBeVisible()
     await expect(list.locator("[data-song='Pałyn']")).toHaveCount(0)
@@ -104,7 +110,7 @@ test.describe("Rename song, from a song's page", () => {
       await openRename(page, "Pałyn")
       await titleField(page).fill("Polyn")
       await dialog(page).getByRole("button", { name: "Rename", exact: true }).click()
-      await expect(head(page).getByRole("heading", { name: "Polyn", exact: true })).toBeVisible()
+      await expect(shownTitle(page)).toHaveText("Polyn")
       // Past what the rename itself set off; then the pass, finishing later.
       const polls = await activityPolls(page)
       await expect.poll(() => activityPolls(page)).toBeGreaterThanOrEqual(polls + 2)
@@ -148,7 +154,7 @@ test.describe("Rename song, from a song's page", () => {
     await page.mouse.down()
     expect((await rename.boundingBox())!.y).toBeCloseTo(at.y, 0)
     await page.mouse.up()
-    await expect(head(page).getByRole("heading", { name: "Polyn", exact: true })).toBeVisible()
+    await expect(shownTitle(page)).toHaveText("Polyn")
   })
 
   test("Enter in the field renames, as Rename does", async ({ page }) => {
@@ -157,7 +163,7 @@ test.describe("Rename song, from a song's page", () => {
     await openRename(page, "Palyn")
     await titleField(page).fill("Polyn")
     await titleField(page).press("Enter")
-    await expect(head(page).getByRole("heading", { name: "Polyn", exact: true })).toBeVisible()
+    await expect(shownTitle(page)).toHaveText("Polyn")
     expect((await calls(page, "rename_song")).map((c) => c.args[1])).toEqual(["Polyn"])
   })
 
@@ -168,7 +174,7 @@ test.describe("Rename song, from a song's page", () => {
     await titleField(page).fill("palyn")
     await expect(dialog(page).getByText("Spelled anew: the same song.")).toBeVisible()
     await dialog(page).getByRole("button", { name: "Rename", exact: true }).click()
-    await expect(head(page).getByRole("heading", { name: "palyn", exact: true })).toBeVisible()
+    await expect(shownTitle(page)).toHaveText("palyn")
     expect(await callCount(page, "merge_songs")).toBe(0)
     // A respelling remembers nothing.
     await expect(head(page).locator("[data-old-names]")).toHaveCount(0)
@@ -227,7 +233,7 @@ test.describe("Rename song, from a song's page", () => {
     await dialog(page).getByRole("button", { name: "Merge…", exact: true }).click()
     await question(page).getByRole("button", { name: "Merge", exact: true }).click()
     await expect(question(page)).toBeHidden()
-    await expect(head(page).getByRole("heading", { name: "Pałyn", exact: true })).toBeVisible()
+    await expect(shownTitle(page)).toHaveText("Pałyn")
     await expect(head(page)).toContainText("5 takes in 3 rehearsals")
     const list = page.getByRole("navigation", { name: "Songs" })
     await expect(list.locator("[data-song='Palyn']")).toHaveCount(0)
@@ -248,7 +254,7 @@ test.describe("Rename song, from a song's page", () => {
     await dialog(page).getByRole("button", { name: "Merge…", exact: true }).click()
     await question(page).getByRole("button", { name: "Cancel", exact: true }).click()
     await expect(question(page)).toBeHidden()
-    await expect(head(page).getByRole("heading", { name: "Palyn", exact: true })).toBeVisible()
+    await expect(shownTitle(page)).toHaveText("Palyn")
     expect((await calls(page, "merge_songs")).every((c) => c.args[2] === true)).toBe(true)
     expect(await callCount(page, "rename_song")).toBe(0)
   })
@@ -265,7 +271,7 @@ test.describe("Rename song, from a song's page", () => {
     await expect(question(page)).toContainText("3 takes in 2 rehearsals become Old 1–3")
     expect((await calls(page, "merge_songs")).map((c) => Boolean(c.args[2]))).toEqual([true])
     await question(page).getByRole("button", { name: "Merge", exact: true }).click()
-    await expect(head(page).getByRole("heading", { name: "Old", exact: true })).toBeVisible()
+    await expect(shownTitle(page)).toHaveText("Old")
   })
 
   test("Take 4 is refused with its reason", async ({ page }) => {
@@ -316,7 +322,7 @@ test.describe("Rename song, from a song's page", () => {
     await dialog(page).locator("[data-song-choice='Daroha']").click()
     await dialog(page).getByRole("button", { name: "Merge…", exact: true }).click()
     await question(page).getByRole("button", { name: "Merge", exact: true }).click()
-    await expect(head(page).getByRole("heading", { name: "Daroha", exact: true })).toBeVisible()
+    await expect(shownTitle(page)).toHaveText("Daroha")
     const all = await page.evaluate(() =>
       (window as unknown as { __CALLS__: { name: string; args: unknown[] }[] }).__CALLS__.map(
         (c) => `${c.name}${c.name === "merge_songs" && c.args[2] ? ":asked" : ""}`
@@ -344,14 +350,36 @@ test.describe("Rename song, from a song's page", () => {
     await openSong(page, "Pałyn")
     const old = head(page).locator("[data-old-names]")
     await expect(old).toHaveText(/Also typed as\s*Palyn\s*Polyn/)
-    const forget = old.getByRole("button", { name: "Forget Palyn", exact: true })
-    await expect(forget).toHaveAttribute("title", "Forget Palyn: typed again, it is a new song")
-    await forget.click()
+    await old.getByRole("button", { name: "Forget Palyn", exact: true }).click()
     await expect(old.getByRole("button", { name: "Forget Palyn", exact: true })).toHaveCount(0)
     await expect(old).toContainText("Polyn")
     expect((await calls(page, "forget_song_name")).map((c) => c.args[0])).toEqual(["Palyn"])
     await old.getByRole("button", { name: "Forget Polyn", exact: true }).click()
     await expect(old).toHaveCount(0)
+  })
+
+  test("the cross on an old name is the shared button with its tip", async ({ page }) => {
+    await openApp(page, { before: "window.__OLD_NAMES__ = [['Palyn', 'Pałyn']];" })
+    await openSong(page, "Pałyn")
+    const old = head(page).locator("[data-old-names]")
+    // The name on the shared badge, in the regular weight.
+    const badge = old.locator("[data-slot='badge']")
+    await expect(badge).toHaveCount(1)
+    await expect(badge).toHaveAttribute("data-variant", "outline")
+    await expect(badge).toContainText("Palyn")
+    expect((await style(badge, "font-weight"))["font-weight"]).toBe("400")
+
+    // The cross: the shared tiny icon button, round, with no native title.
+    const forget = old.getByRole("button", { name: "Forget Palyn", exact: true })
+    await expect(forget).toHaveAttribute("data-variant", "ghost")
+    await expect(forget).toHaveAttribute("data-size", "icon-tiny")
+    await expect(forget).not.toHaveAttribute("title")
+    const box = (await forget.boundingBox())!
+    const corner = parseFloat((await style(forget, "border-top-left-radius"))["border-top-left-radius"])
+    expect(corner).toBeGreaterThanOrEqual(box.height / 2)
+    // Its tip says what forgetting does.
+    await forget.hover()
+    await expect(tipShown(page)).toHaveText("Forget Palyn: typed again, it is a new song")
   })
 
   test("a 960 px window with a 60-character title and twelve old names scrolls nothing sideways", async ({
@@ -394,6 +422,6 @@ test.describe("Rename song, from a song's page", () => {
     expect(await callCount(page, "get_song")).toBe(songs)
     await page.keyboard.press("Escape")
     await expect(dialog(page)).toBeHidden()
-    await expect(head(page).getByRole("heading", { name: "Pałyn", exact: true })).toBeVisible()
+    await expect(shownTitle(page)).toHaveText("Pałyn")
   })
 })

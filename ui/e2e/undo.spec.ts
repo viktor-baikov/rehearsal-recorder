@@ -880,9 +880,9 @@ async function openSong(page: Page, title: string) {
   await openHistory(page)
   await page.getByRole("radiogroup", { name: "History view" }).getByRole("radio", { name: "Songs" }).click()
   await page.getByRole("navigation", { name: "Songs" }).locator(`[data-song='${title}']`).click()
-  await expect(
-    page.locator("[data-song-head]").getByRole("heading", { name: title, exact: true })
-  ).toBeVisible()
+  // The title as the head draws it: the heading also holds the pencil after
+  // its last word, whose name a heading's name takes in.
+  await expect(page.locator("[data-song-head] h2 [data-go-title]")).toHaveText(title)
 }
 
 const forgetPalyn = (page: Page) =>
