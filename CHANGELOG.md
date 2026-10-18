@@ -171,6 +171,11 @@ opening.
   evening's buttons. It stays until you close it or leave the screen, and
   trying again puts it away. A notice is drawn over the screen, so nothing
   under it moves.
+- **A screen that cannot open no longer leaves the window empty.** Before,
+  one problem while a screen opened took the whole window with it, the
+  red bar too, and nothing was left to press. Now the screen says it could
+  not open, the red bar at the top says what went wrong and where it is
+  written down, and **Try again** opens the app again.
 
 ## 0.11.1
 
