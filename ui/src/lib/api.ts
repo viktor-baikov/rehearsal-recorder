@@ -1284,6 +1284,7 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "list_sets",
   "get_settings",
   "startup_problems",
+  "under_the_hood",
 ])
 
 let guarded: { raw: PyApi; proxy: PyApi } | null = null

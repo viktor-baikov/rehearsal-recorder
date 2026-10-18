@@ -251,19 +251,30 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
  */
 export function UnderTheHood() {
   const [hood, setHood] = useState<Hood | null>(null)
+  // Python did not answer: the bar says why, and the page stops waiting.
+  const [failed, setFailed] = useState(false)
   const update = useUpdate()
   const { trash } = words(useSystem())
-  const slow = useAfter(hood === null, SAY_AFTER_MS)
+  const slow = useAfter(hood === null && !failed, SAY_AFTER_MS)
 
   useEffect(() => {
     let alive = true
-    void api()
+    api()
       .under_the_hood()
       .then((h) => alive && setHood(h))
+      .catch(() => alive && setFailed(true))
     return () => {
       alive = false
     }
   }, [])
+
+  if (failed) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        This page could not open. Open it again to try once more.
+      </p>
+    )
+  }
 
   // The spinner from the first second, the words beside it from the tenth.
   // The row is as tall with them as without, so neither moves the other.
@@ -518,6 +529,9 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
   const [check, setCheck] = useState<InterfaceCheck | null>(null)
   const timer = useRef(0)
   const cannot = useErrorNotice(HOOD)
+  // From the click until Python answers, so a quick second click starts
+  // nothing more.
+  const [starting, setStarting] = useState(false)
 
   // A check left running from before this page opened is picked up again.
   useEffect(() => {
@@ -543,13 +557,18 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
   // it was.
   const start = async () => {
     dismiss(HOOD)
-    const res = await api().start_interface_check()
-    if (!res.ok) {
-      cannot(res.error ?? "Could not start the check")
-      return
+    setStarting(true)
+    try {
+      const res = await api().start_interface_check()
+      if (!res.ok) {
+        cannot(res.error ?? "Could not start the check")
+        return
+      }
+      setCheck(await api().interface_check())
+      follow()
+    } finally {
+      setStarting(false)
     }
-    setCheck(await api().interface_check())
-    follow()
   }
 
   const running = !!check?.running
@@ -588,7 +607,7 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
             another way and says what made the difference.
           </p>
         </div>
-        <Button variant="outline" onClick={() => void start()} disabled={disabled || running}>
+        <Button variant="outline" onClick={() => void start()} disabled={disabled || running || starting}>
           {slow ? <Spinner after={0} /> : <Activity />}
           Check the interface
         </Button>

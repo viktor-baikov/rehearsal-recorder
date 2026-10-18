@@ -1203,7 +1203,7 @@ class Api:
             return {"ok": False, "error": f"Could not ask the interface: {e}"}
         if asked is None:
             return {"ok": False, "error":
-                    "No recording interface is chosen — pick one in Settings › Audio."}
+                    "Nothing chosen yet: pick an interface in Audio"}
         if not self._check.start(sd, asked):
             return {"ok": False, "error": "A check is already running"}
         return {"ok": True}

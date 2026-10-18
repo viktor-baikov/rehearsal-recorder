@@ -5,6 +5,7 @@ import {
   DASH,
   EDGE,
   expect,
+  expectedError,
   hold,
   keyOn,
   letGo,
@@ -1102,6 +1103,28 @@ test.describe("Under the hood", () => {
     expect(await region(page, "Sound").evaluate((e) => (e as HTMLElement).innerText)).not.toMatch(DASH)
   })
 
+  test("an Under the hood Python cannot answer says so, and stops waiting", async ({ page, pageErrors }) => {
+    await openApp(page, { before: "window.__FAIL__ = {under_the_hood: 'no answer'};" })
+    await page.getByRole("button", { name: "Settings" }).click()
+    await page.getByRole("button", { name: "Under the hood", exact: true }).first().click()
+    await expect(tabBody(page)).toContainText("This page could not open. Open it again to try once more.")
+    await expect(tabBody(page).getByRole("status")).toHaveCount(0)
+    expectedError(pageErrors, /under_the_hood failed/)
+  })
+
+  test("a second click while the check starts starts nothing more", async ({ page }) => {
+    await underTheHood(page)
+    await hold(page, "start_interface_check")
+    const start = checkButton(page)
+    await start.click()
+    await expect(start).toBeDisabled()
+    await start.click({ force: true })
+    await letGo(page, "start_interface_check")
+    await expect(check(page)).toContainText("Listening to X32 USB")
+    expect(await callCount(page, "start_interface_check")).toBe(1)
+    await expect(notices(page, "error")).toHaveCount(0)
+  })
+
   test("a check that cannot start says so in a notice", async ({ page }) => {
     await underTheHood(page)
     const start = checkButton(page)
@@ -1163,43 +1186,50 @@ test.describe("Under the hood", () => {
       return new Set(tops).size
     }, text)
 
-  test("a long interface name wraps, no figure breaks across two lines, and a cut path is whole in its tip", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 960, height: 680 })
-    await page.addInitScript(scaled(1.5))
-    await openBandApp(page, { stress: true })
-    await page.getByRole("button", { name: "Settings" }).click()
-    await sections(page).getByRole("button", { name: "Under the hood" }).click()
-    const name = "Universal Audio Apollo Twin X DUO Heritage Edition"
-    const recording = valueOf(page, "Recording with")
-    await expect(recording).toContainText(name)
-    // The name whole, on more than one line, and nothing pushed sideways.
-    const shape = await recording.evaluate((e) => ({
-      height: e.getBoundingClientRect().height,
-      line: parseFloat(getComputedStyle(e).lineHeight),
-      fits: e.scrollWidth <= e.clientWidth,
-    }))
-    expect(shape.height).toBeGreaterThan(shape.line * 1.5)
-    expect(shape.fits).toBe(true)
-    expect(await tabBody(page).evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
-    // Each figure after it on one line, wherever the line breaks.
-    for (const figure of ["ASIO", "16 inputs", "48 kHz", "24 bit"]) {
-      expect(await linesOf(recording, figure), figure).toBe(1)
-    }
-    const files = region(page, "Files")
-    for (const size of ["2.1 kB", "98 kB", "5.1 kB"]) {
-      expect(await linesOf(files, size), size).toBe(1)
-    }
+  // 1180x820 is where "48 kHz" was seen broken across two lines.
+  for (const [width, height, zoom] of [
+    [960, 680, 1.5],
+    [1180, 820, 1],
+  ] as const) {
+    test(`a long interface name wraps, no figure breaks across two lines, and a cut path is whole in its tip, at ${width}x${height} and ${zoom * 100} %`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height })
+      if (zoom !== 1) await page.addInitScript(scaled(zoom))
+      await openBandApp(page, { stress: true })
+      await page.getByRole("button", { name: "Settings" }).click()
+      await sections(page).getByRole("button", { name: "Under the hood" }).click()
+      const name = "Universal Audio Apollo Twin X DUO Heritage Edition"
+      const recording = valueOf(page, "Recording with")
+      await expect(recording).toContainText(name)
+      // The name whole, on more than one line, and nothing pushed sideways.
+      const shape = await recording.evaluate((e) => ({
+        height: e.getBoundingClientRect().height,
+        line: parseFloat(getComputedStyle(e).lineHeight),
+        fits: e.scrollWidth <= e.clientWidth,
+      }))
+      expect(shape.height).toBeGreaterThan(shape.line * 1.5)
+      expect(shape.fits).toBe(true)
+      expect(await tabBody(page).evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
+      // Each figure after it on one line, wherever the line breaks.
+      for (const figure of ["ASIO", "16 inputs", "48 kHz", "24 bit"]) {
+        expect(await linesOf(recording, figure), figure).toBe(1)
+      }
+      const files = region(page, "Files")
+      for (const size of ["2.1 kB", "98 kB", "5.1 kB"]) {
+        expect(await linesOf(files, size), size).toBe(1)
+      }
 
-    // The paths have less room than they need: each is cut, and whole in
-    // the shared tip, never the system's.
-    await expect(tabBody(page).locator("[title]")).toHaveCount(0)
-    const path = files.getByText("C:\\Users\\alex\\RehearsalRecordings\\library.sqlite", { exact: true })
-    await expect(path).toHaveAttribute("data-cut")
-    await path.hover()
-    await expect(tooltip(page)).toHaveText("C:\\Users\\alex\\RehearsalRecordings\\library.sqlite")
-  })
+      // No system tip anywhere. At 150 % the paths have less room than they
+      // need: each is cut, and whole in the shared tip. At 100 % they fit.
+      await expect(tabBody(page).locator("[title]")).toHaveCount(0)
+      if (zoom === 1) return
+      const path = files.getByText("C:\\Users\\alex\\RehearsalRecordings\\library.sqlite", { exact: true })
+      await expect(path).toHaveAttribute("data-cut")
+      await path.hover()
+      await expect(tooltip(page)).toHaveText("C:\\Users\\alex\\RehearsalRecordings\\library.sqlite")
+    })
+  }
 })
 
 test("an open dropdown keeps its keys", async ({ page }) => {

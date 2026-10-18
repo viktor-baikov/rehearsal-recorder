@@ -1933,6 +1933,7 @@ window.__MAKE_API__ = () => ({
     return {ok:true, check_updates: !!on};
   }),
   start_interface_check: track('start_interface_check', async () => {
+    await held('start_interface_check');
     const result = window.__CHECK_RESULT__ || 'works';
     const works = result !== 'no_sound';
     const first = {label:'the settings in force', opened:true, flowing:works,

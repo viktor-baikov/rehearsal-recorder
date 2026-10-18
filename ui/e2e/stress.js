@@ -75,6 +75,6 @@
   const hood = api.under_the_hood;
   api.under_the_hood = async () => {
     const h = await hood();
-    return {...h, audio: {...h.audio, recording: {...h.audio.recording, name: LONG_CARD}}};
+    return {...h, audio: {...h.audio, recording: h.audio.recording && {...h.audio.recording, name: LONG_CARD}}};
   };
 }
