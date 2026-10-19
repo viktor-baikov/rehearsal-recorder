@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PickRow, SAID, SettingsGroup } from "@/components/SettingsGroup"
+import { useNoticesGoWithPage } from "@/hooks/useErrorNotice"
 import { dismiss, notify } from "@/lib/notices"
 import { loadLabels } from "@/lib/labels"
 import { SHARE_OPTIONS } from "@/lib/share"
@@ -18,6 +19,7 @@ import { api, type CloudFormat, type Settings, type ShareWhat } from "@/lib/api"
  * settings when it opens.
  */
 export function FoldersSettings() {
+  useNoticesGoWithPage(SAID)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [dir, setDir] = useState("")
   const [cloudDir, setCloudDir] = useState("")
@@ -67,6 +69,9 @@ export function FoldersSettings() {
       return
     }
     setDir(res.recordings_dir ?? path)
+    // Its path warning, and what the field is saved against, are the new
+    // folder's.
+    setSettings(await api().get_settings())
     // Another library: other labels.
     void loadLabels()
     notify({ key: SAID, kind: "done", text: "Folder saved" })
@@ -136,6 +141,7 @@ export function FoldersSettings() {
       return
     }
     setDir(res.recordings_dir ?? dir)
+    setSettings(await api().get_settings())
     // Another library: other labels.
     void loadLabels()
     notify({ key: SAID, kind: "done", text: "Folder saved" })
@@ -195,7 +201,9 @@ export function FoldersSettings() {
 
           {settings?.path_warning && <Warning>{settings.path_warning}</Warning>}
 
-          {settings && dir !== settings.default_recordings_dir && (
+          {/* By the folder saved, not the one being typed, so it does not
+              come and go under the cursor. */}
+          {settings && settings.recordings_dir !== settings.default_recordings_dir && (
             <Button
               variant="ghost"
               size="row"

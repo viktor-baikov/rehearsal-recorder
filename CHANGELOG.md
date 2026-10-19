@@ -237,9 +237,8 @@ opening.
   the rehearsal screen and in History. Both are on until you turn them off,
   and the app keeps the choice for next time. When a switch is off, its keys
   do nothing and no longer show on the buttons. With **Space and Esc** off,
-  Space presses the last button you clicked or moved to with Tab, as in any
-  other program. ⌘Z / Ctrl+Z, and Esc in a dialog or a text field, work
-  either way.
+  Space presses the button you moved to with Tab. ⌘Z / Ctrl+Z, and Esc in a
+  dialog or a text field, work either way.
 - **Settings is calmer, in groups, with its sections always in view.** Each
   section is laid out in groups, with more room between them and no lines.
   The list of sections on the left stays where it is while the open one

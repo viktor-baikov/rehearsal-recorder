@@ -26,3 +26,12 @@ export function useErrorNotice(key: string): (text: string) => void {
     [key]
   )
 }
+
+/**
+ * For a page that says its successes in the same slot as its errors, so
+ * cannot take `useErrorNotice`: what it said in slot `key` goes when the
+ * page goes (C4).
+ */
+export function useNoticesGoWithPage(key: string) {
+  useEffect(() => () => dismiss(key), [key])
+}

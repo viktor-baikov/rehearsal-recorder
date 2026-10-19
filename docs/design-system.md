@@ -375,7 +375,7 @@ The other shared components, each with its stories:
   with a check on the chosen one. The set picker beside **Start rehearsal**
   is its one use so far.
 - **Separator**, `separator.tsx`: a 1 px line in the border colour, across
-  or down. Nothing uses it yet; the dividers made by hand move onto it.
+  or down. Under the hood's line over the interface check is its one use.
 - **Badge**, `badge.tsx`: a small pill for a word or a count, in the accent,
   a neutral grey, the danger red (full in both themes, as a destructive
   Button is), the signal green or the warning yellow, its word at 600. The
@@ -384,7 +384,8 @@ The other shared components, each with its stories:
   made by hand move onto it.
 - **Progress**, `progress.tsx`: a thin bar in the accent for how far along a
   job is, where it was started (the take being saved under Stop, a crop, a
-  draft) and in the background work list.
+  draft, a new version downloading in Under the hood) and in the background
+  work list.
 - **Tooltip**, `tooltip.tsx`: a small tip in the text's colour. On hover it
   comes after 400 ms, so a pointer on its way across the screen is not
   asking; on keyboard focus it comes at once. Focus the mouse left opens
@@ -509,8 +510,9 @@ The other shared components, each with its stories:
   colour, never the accent (F2), with the shared focus ring. It is Radix's
   checkbox, a button, so Space on it ticks it; on a screen where Space does
   the main thing, as Review's does, the box gives up its focus after a
-  change, so the next Space is the screen's. Review's cloud line is its one
-  use so far.
+  change, so the next Space is the screen's. Review's cloud line, Folders'
+  **Send saved takes automatically** and Under the hood's **Check for new
+  versions** use it.
 - **TakeColumns**, `take-columns.tsx`: a song's takes as columns, C8's
   columns, each as tall as the take ran (`drawnLength`, so none is under a
   few pixels), the longest filling `height`. `numbers` puts each take's
@@ -652,6 +654,9 @@ as the `cn` import.
   Settings › Keys (B9), a key chip is not drawn and keeps no room. The
   unseen chips above hold theirs because they come back while their screen
   is up; keys turned off come back only from Settings, another screen.
+  Settings' own **Back** is the one exception: its Esc chip keeps its room
+  unseen (`Shell`'s `backKeyRoom`), because the switch is on that screen
+  and the title would jump 36 px each time it is turned.
   These are the model; the rest as each screen is redone.
 - **B5. Loading.** Under 1 s nothing shows, so a quick answer does not
   flash; from 1 s a spinner takes the place of what is loading; past 10 s it
@@ -735,8 +740,10 @@ as the `cn` import.
   Python keeps them (`save_keys`, as `space_keys` and `player_keys`).
   Anything there but `false` is on, so a config edited by hand never turns
   keys off. Off, the key hooks (`hooks/useSpacebar.ts`) leave those keys to
-  the browser: Space presses the focused button, even one the mouse left
-  focused, and ↑ and ↓ in the Next take field are the field's. Their chips
+  the browser: Space presses the focused button, and ↑ and ↓ in the Next
+  take field are the field's. A click leaves a button focused on Windows
+  (Chromium) but not on the Mac (WebKit), so the words for musicians say
+  only Tab. Their chips
   (`Kbd`) are not drawn (B4), and their keys leave the buttons'
   `aria-keyshortcuts`. The player's keys button stays, and its list names
   only the keys that work. ⌘Z or Ctrl+Z, and Esc in a dialog or a text

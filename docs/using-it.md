@@ -908,9 +908,9 @@ is a list of what its keys do on each screen. A change applies at once,
 and the app keeps it for next time.
 
 When a switch is off, its keys do nothing and no longer show on the
-buttons. With **Space and Esc** off, Space presses the last button you
-clicked or moved to with Tab, as in any other program. ⌘Z or Ctrl+Z still
-undoes, and Esc still closes a dialog and leaves a text field.
+buttons. With **Space and Esc** off, Space presses the button you moved to
+with Tab. ⌘Z or Ctrl+Z still undoes, and Esc still closes a dialog and
+leaves a text field.
 
 ## Undo
 

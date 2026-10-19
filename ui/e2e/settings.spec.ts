@@ -1595,6 +1595,32 @@ test("the share dialog says the same about the original tracks", async ({ page }
   await expect(dialog.getByRole("button", { name: "Both", exact: true })).not.toContainText(".mid")
 })
 
+test("the folder's warning and Back to the default folder follow the folder saved", async ({ page }) => {
+  await openSettings(page)
+  await group(page, "Folders").click()
+  const field = page.getByRole("textbox", { name: "Recordings folder" })
+  const back = page.getByRole("button", { name: "Back to the default folder" })
+  const below = tabBody(page).getByRole("region", { name: "False starts" })
+  await expect(field).toHaveValue("/Users/alex/RehearsalRecordings")
+  await expect(back).toHaveCount(0)
+  const at = await below.boundingBox()
+  // Typing moves nothing: the button waits for the folder to be saved.
+  await field.pressSequentially("x")
+  await expect(back).toHaveCount(0)
+  expect(await below.boundingBox()).toEqual(at)
+  await field.press("Backspace")
+
+  // A folder picked whose path is too long for Windows is warned of at once.
+  await page.evaluate(() => {
+    ;(window as unknown as { __PATH_WARNING__: string }).__PATH_WARNING__ =
+      "This folder's path is already 214 characters long."
+  })
+  await page.getByRole("button", { name: "Choose recordings folder" }).click()
+  await expect(field).toHaveValue("/Users/alex/Dropbox/Band")
+  await expect(tabBody(page).locator("[data-slot=alert]")).toContainText("214 characters long")
+  await expect(back).toBeVisible()
+})
+
 test("the false-start limit is on the Folders page, saved when the field is left", async ({
   page,
 }) => {
@@ -1602,6 +1628,8 @@ test("the false-start limit is on the Folders page, saved when the field is left
   await group(page, "Folders").click()
   const field = page.locator("#false-start")
   await expect(field).toHaveValue("30")
+  // Its unit, said after its name.
+  await expect(field).toHaveAccessibleDescription("seconds")
   await field.fill("45")
   await field.press("Tab")
   await expect.poll(async () => (await calls(page, "set_false_start")).at(-1)?.args).toEqual([45])

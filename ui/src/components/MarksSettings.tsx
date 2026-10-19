@@ -16,6 +16,7 @@ import { WholeTip, useCut } from "@/components/ui/whole"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { SettingsGroup } from "@/components/SettingsGroup"
 import { SortableList } from "@/components/SortableList"
+import { useNoticesGoWithPage } from "@/hooks/useErrorNotice"
 import { marksLabel } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
 import {
@@ -40,6 +41,7 @@ const SAID = "labels"
  * mark always has a label.
  */
 export function MarksSettings() {
+  useNoticesGoWithPage(SAID)
   const labels = useLabels()
   const [draft, setDraft] = useState<{ name: string; colour: LabelColour } | null>(null)
   const [deleting, setDeleting] = useState<Label | null>(null)

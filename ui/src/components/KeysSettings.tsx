@@ -2,8 +2,9 @@ import { Fragment, type ReactNode } from "react"
 import { SettingsGroup } from "@/components/SettingsGroup"
 import { Kbd } from "@/components/ui/kbd"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { useNoticesGoWithPage } from "@/hooks/useErrorNotice"
 import type { KeyKind } from "@/lib/api"
-import { switchKeys, useKeysOn } from "@/lib/keys"
+import { KEYS_SAID, switchKeys, useKeysOn } from "@/lib/keys"
 import { rise as riseAt } from "@/lib/motion"
 import { useSystem, words } from "@/lib/platform"
 
@@ -62,6 +63,7 @@ const PLAYER_ROWS: Row[] = [
  */
 export function KeysSettings() {
   const { undoKey } = words(useSystem())
+  useNoticesGoWithPage(KEYS_SAID)
   return (
     <>
       <KeysGroup

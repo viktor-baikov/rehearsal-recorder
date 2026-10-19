@@ -1971,7 +1971,7 @@ window.__MAKE_API__ = () => ({
     }
     return {ok:true};
   }),
-  get_settings: async () => ({recordings_dir:'/Users/alex/RehearsalRecordings',
+  get_settings: async () => ({recordings_dir:recordingsNow,
     default_recordings_dir:'/Users/alex/RehearsalRecordings',
     device_index: window.__PLUGGED_IN_LATE__ ? (pluggedIn ? 1 : null)
       : recording.device_index,

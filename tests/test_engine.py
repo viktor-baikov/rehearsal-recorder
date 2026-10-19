@@ -5330,7 +5330,7 @@ def main():
         h46._config.pop("device", None)
         nothing = h46.start_interface_check()
         ok("with no interface chosen it says to choose one",
-           nothing.get("ok") is False and "Settings" in (nothing.get("error") or ""))
+           nothing.get("ok") is False and "pick an interface in Audio" in (nothing.get("error") or ""))
     finally:
         _sd.InputStream = real_streams[0]
         if real_streams[1] is not None:

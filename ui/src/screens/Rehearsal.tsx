@@ -584,7 +584,7 @@ export function Rehearsal({
           onDelete={(take) => void deleteTake(take)}
           onStar={starTake}
           cloudStates={session.cloud_queue}
-          emptyHint={`Hit Record${spaceKeys ? " or press Space" : ""} — takes show up here and can be played straight away.`}
+          emptyHint={`Press Record take${spaceKeys ? " or Space" : ""}. Each take shows up here, ready to play.`}
         />
         )}
 

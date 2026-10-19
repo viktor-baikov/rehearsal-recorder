@@ -32,8 +32,13 @@ export function PlayerKeys({ spaceKey, goKeys }: { spaceKey: boolean; goKeys?: b
   const { mod } = words(useSystem())
   const playerKeys = useKeysOn("player")
   const spaceKeys = useKeysOn("space")
-  // With both off only the wheel is left, which works while typing too.
-  const allOff = !playerKeys && !spaceKeys
+  // With both off only the wheel is left, which works while typing too;
+  // with the player's off, the list says where its keys went.
+  const off = !playerKeys
+    ? spaceKeys
+      ? "The player's keys are off in Settings › Keys."
+      : "Space, Esc and the player's keys are off in Settings › Keys."
+    : null
   useKey("?", () => setOpen(true), !open)
 
   const playerRows: [string[], string][] = [
@@ -76,9 +81,7 @@ export function PlayerKeys({ spaceKey, goKeys }: { spaceKey: boolean; goKeys?: b
         <DialogHeader>
           <DialogTitle>Keys in the player</DialogTitle>
           <DialogDescription>
-            {allOff
-              ? "Space, Esc and the player's keys are off in Settings › Keys."
-              : "Not while typing a name."}
+            {off ?? "Not while typing a name."}
           </DialogDescription>
         </DialogHeader>
         <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">

@@ -5,6 +5,7 @@ import {
   dragRegion,
   expect,
   keyOn,
+  notices,
   openApp,
   openEvening,
   openHistory,
@@ -84,7 +85,7 @@ test("with Space and Esc off, they do nothing on the start, rehearsal, recording
   await expect(dialog).toHaveCount(0)
   // Nor does the empty strip tell anyone to press Space.
   await expect(page.locator("[data-slot='empty-description']")).toHaveText(
-    "Hit Record — takes show up here and can be played straight away."
+    "Press Record take. Each take shows up here, ready to play."
   )
 
   // Recording: Space would stop the take.
@@ -296,6 +297,24 @@ test("Keys is a tab between Appearance and Under the hood, two switches over the
   expect((await style(note, "font-size"))["font-size"]).toBe("12px")
 })
 
+test("a switch Python refuses goes back and says why, and the notice goes with Settings", async ({ page }) => {
+  await openApp(page, {
+    after: "window.pywebview.api.save_keys = async () => ({ok: false, error: 'The settings file is read-only'});",
+  })
+  await openKeys(page)
+  const off = keysSwitch(page, "Space and Esc").getByRole("radio", { name: "Off" })
+  await off.click()
+  const said = notices(page, "error").filter({ hasText: "The settings file is read-only" })
+  await expect(said).toHaveCount(1)
+  await expect(keysSwitch(page, "Space and Esc").getByRole("radio", { name: "On" })).toHaveAttribute(
+    "aria-checked",
+    "true"
+  )
+  await page.getByRole("button", { name: "Back", exact: true }).click()
+  await expect(startButton(page)).toBeVisible()
+  await expect(said).toHaveCount(0)
+})
+
 test("Space and Esc switched off is kept after a reload, and Start loses its chip", async ({
   page,
 }) => {
@@ -458,6 +477,7 @@ test("with the player's keys off, the player's key list keeps only what still wo
   const list = page.getByRole("dialog", { name: "Keys in the player" })
   await expect(list.locator("dt")).toHaveText(["Space", "Ctrl + wheel", "Shift + wheel"])
   await expect(list.locator("dd")).toHaveText(["Play / pause", "Zoom in / out", "Along the take"])
+  await expect(list).toHaveAccessibleDescription("The player's keys are off in Settings › Keys.")
 
   // Space and Esc keep their chips through a take: Stop, then Discard and
   // Save take.

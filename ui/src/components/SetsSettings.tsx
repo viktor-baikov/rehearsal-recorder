@@ -17,6 +17,7 @@ import { SetSongsEditor, type SongOut } from "@/components/SetEditor"
 import { SettingsGroup } from "@/components/SettingsGroup"
 import { putSongBack, useSets } from "@/hooks/useSets"
 import { useSongChoices } from "@/hooks/useSongChoices"
+import { useNoticesGoWithPage } from "@/hooks/useErrorNotice"
 import { api, type SetsAnswer, type SongChoices, type SongSet } from "@/lib/api"
 import { reportPageError } from "@/lib/bridgeErrors"
 import { songsLabel } from "@/lib/format"
@@ -73,6 +74,7 @@ function freeName(sets: SongSet[]) {
  * Which set Start plays by is chosen beside Start rehearsal, not here.
  */
 export function SetsSettings() {
+  useNoticesGoWithPage(SAID)
   const { sets, chosen, replace } = useSets()
   const [picked, setPicked] = useState<number | null>(null)
   // The set just made: its name is selected, to be typed over.

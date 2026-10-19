@@ -314,9 +314,9 @@ test("with no takes the strip says how they get there on the shared Empty", asyn
   await expect(empty).toHaveCount(1)
   await expect(empty.locator("[data-slot='empty-title']")).toHaveText("No takes yet")
   await expect(empty.locator("[data-slot='empty-description']")).toContainText(
-    "Hit Record or press Space"
+    "Press Record take or Space"
   )
   await expect(empty.locator("[data-slot='empty-description']")).toContainText(
-    "can be played straight away"
+    "ready to play"
   )
 })

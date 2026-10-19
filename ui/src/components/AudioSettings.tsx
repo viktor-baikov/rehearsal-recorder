@@ -8,6 +8,7 @@ import { PickRow, SAID, SettingsGroup } from "@/components/SettingsGroup"
 import { DevicePicker } from "@/components/DevicePicker"
 import { OutputChannels } from "@/components/OutputChannels"
 import { useAfter } from "@/hooks/useAfter"
+import { useNoticesGoWithPage } from "@/hooks/useErrorNotice"
 import { countOf, describeRescan, notConnected } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
 import { SPINNER_AFTER_MS } from "@/lib/playLook"
@@ -23,6 +24,7 @@ const PLAYBACK = "playback"
  * it opens.
  */
 export function AudioSettings() {
+  useNoticesGoWithPage(SAID)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [outputs, setOutputs] = useState<OutputDevice[]>([])
   const [inputs, setInputs] = useState<Device[]>([])

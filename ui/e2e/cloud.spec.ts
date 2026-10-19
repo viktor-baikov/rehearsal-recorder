@@ -29,13 +29,14 @@ const OPTIONS = [
 
 /** From the start screen: a rehearsal with take 1, Pałyn, saved, and the
  *  take's share dialog open. */
-async function openShare(page: Page) {
+async function openShare(page: Page, justBefore?: () => Promise<unknown>) {
   await startRehearsal(page)
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
   await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
   await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await justBefore?.()
   await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog).toBeVisible()
@@ -177,6 +178,28 @@ test("a copy the cloud folder refuses is said in a notice, and the dialog stays"
   await dialog.getByRole("button", { name: "Both", exact: true }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(said).toHaveCount(0)
+})
+
+test("until the cloud folder is read, the dialog says nothing about it either way", async ({ page }) => {
+  await openApp(page)
+  // Python is slow to say which folder is set.
+  const dialog = await openShare(page, () =>
+    page.evaluate(() => {
+      const w = window as unknown as {
+        pywebview: { api: Record<string, () => Promise<unknown>> }
+        __ANSWER__: () => void
+      }
+      const read = w.pywebview.api.get_settings
+      w.pywebview.api.get_settings = () => new Promise((r) => (w.__ANSWER__ = () => r(read())))
+    })
+  )
+  await expect(dialog.locator("svg.lucide-folder-open")).toHaveCount(1)
+  await expect(dialog.locator("svg.lucide-triangle-alert")).toHaveCount(0)
+  await expect(dialog.getByText("No cloud folder chosen yet")).toHaveCount(0)
+  await expect(dialog.getByRole("button", { name: "Choose", exact: true })).toBeHidden()
+  await page.evaluate(() => (window as unknown as { __ANSWER__: () => void }).__ANSWER__())
+  await expect(dialog.getByText("No cloud folder chosen yet", { exact: true })).toBeVisible()
+  await expect(dialog.getByRole("button", { name: "Choose", exact: true })).toBeVisible()
 })
 
 test("with no cloud folder the dialog warns with the icon, its words in the text's colour", async ({

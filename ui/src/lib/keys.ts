@@ -18,7 +18,7 @@ let on: Record<KeyKind, boolean> = { space: true, player: true }
 const listeners = new Set<() => void>()
 
 /** The notice a switch that could not be saved leaves. */
-const SAID = "keys"
+export const KEYS_SAID = "keys"
 
 function set(next: Record<KeyKind, boolean>) {
   on = next
@@ -52,11 +52,11 @@ export function loadKeys(settings: Partial<Pick<Settings, "space_keys" | "player
  * refuses, the keys are put back as they were and an error notice says why.
  */
 export async function switchKeys(kind: KeyKind, value: boolean) {
-  dismiss(SAID)
+  dismiss(KEYS_SAID)
   const was = on[kind]
   set({ ...on, [kind]: value })
   const res = await api().save_keys(kind, value)
   if (res.ok) return
   set({ ...on, [kind]: was })
-  notify({ key: SAID, kind: "error", text: res.error ?? "Could not change the keys" })
+  notify({ key: KEYS_SAID, kind: "error", text: res.error ?? "Could not change the keys" })
 }
