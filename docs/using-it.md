@@ -117,7 +117,9 @@ you pick another.
 name or its songs beside the list, which is saved as you go, or to delete
 it with **Delete set**. A rehearsal already played by it keeps its takes and
 their names, and History still shows the set as it was that evening. **New
-set** under the list makes another.
+set** under the list makes another. ✕ beside a song in the set takes it out
+at once. For 10 seconds, **Undo** in the notice that says so, or ⌘Z on a
+Mac (Ctrl+Z elsewhere), puts it back where it was.
 
 ## Recording takes
 
@@ -153,7 +155,7 @@ which take was the good one. None of it has to be done:
   [Undo](#undo). How short a false start is
   can be changed in **Settings → Folders**, from 5 to 120 seconds.
 - **Send starred**, beside it, sends every ★ take that is not in the
-  cloud folder yet, as **What gets published** in Settings says. See
+  cloud folder yet, as **What gets sent** in Settings says. See
   [Sending takes to the cloud](#sending-takes-to-the-cloud).
 
 The two buttons sit at the head of the songs, beside the evening's marks
@@ -633,7 +635,7 @@ There are three ways to send takes:
 
 You can send one of three things. By hand you choose each time; for
 **Send starred** and for automatic sending you choose once in Settings,
-under **What gets published**. Choosing there does not turn automatic
+under **What gets sent**. Choosing there does not turn automatic
 sending on.
 
 - **The mix:** one stereo file, mixed with the balance you set in the player.
@@ -643,7 +645,8 @@ sending on.
   track that records MIDI as `.mid`, for editing later in a DAW.
 - **Both.**
 
-In Settings you also choose the format of the copies:
+You also choose the format of the copies, under **Copies are written as**
+in **Settings → Folders**:
 
 - **As recorded:** WAV, the same as the files on disk.
 - **Lossless (FLAC):** about half the size, and it sounds exactly the same.
@@ -886,8 +889,8 @@ discards the take, and **Undo** brings it back. Esc never stops a recording;
 press **Stop** for that.
 
 ⌘Z on a Mac, Ctrl+Z elsewhere, is **Undo** for the last thing deleted,
-discarded or cropped, or the last old name forgotten on a song's page, while
-its notice is up. See [Undo](#undo).
+discarded or cropped, the last old name forgotten on a song's page, or the
+last song taken out of a set, while its notice is up. See [Undo](#undo).
 
 While you are typing in a text field, the keys type. Press Esc to leave the
 field, and the keys work again.
@@ -895,6 +898,19 @@ field, and the keys work again.
 Clicking a button or moving a fader with the mouse does not take the keys
 away. Space still does the main thing, and the other keys still work. To
 press a button with Space, move to it with Tab.
+
+To turn off the keys that work with one press, open **Settings → Keys**. It
+has two switches, each **On** or **Off**, and both are on until you change
+them. **Space and Esc** is for Space and Esc on every screen, as above.
+**The player's keys** is for the arrows, Home, M, R and ? while listening,
+and for ↑ and ↓ on the rehearsal screen and in History. Under each switch
+is a list of what its keys do on each screen. A change applies at once,
+and the app keeps it for next time.
+
+When a switch is off, its keys do nothing and no longer show on the
+buttons. With **Space and Esc** off, Space presses the button you moved to
+with Tab. ⌘Z or Ctrl+Z still undoes, and Esc still closes a dialog and
+leaves a text field.
 
 ## Undo
 
@@ -910,6 +926,10 @@ mouse over the notice keeps it up.
 Forgetting a song's old name on its page in History works the same way: the
 notice says "“Palyn” was forgotten.", and **Undo** gives the name back to
 its song. See [Names and songs](#names-and-songs).
+
+So does taking a song out of a set in **Settings → Sets**: the notice says
+"“Pałyn” was taken out of the set.", and **Undo** puts the song back where
+it was. See [Play by a set](#play-by-a-set).
 
 ⌘Z brings back the newest one first; an older notice keeps its own
 **Undo**. While you type in a field, ⌘Z is the field's own, and it does
@@ -1101,12 +1121,18 @@ called, and under which label History's **Marks** view lists them.
 In **Settings → Appearance** you can choose a dark or light theme, or follow
 the system. You can also scale the whole interface from 90% to 150%.
 
+At a large scale in a small window, the sections down the left of Settings
+(Audio, Folders and the rest) show as icons only, so the section you have
+open gets the room their names took. Point at an icon to see its name. This
+happens when the window is narrower than 900 px at 100%, or 1350 px at
+150%.
+
 ## A new version
 
 When a newer version is out, a dot appears on the gear on the setup screen,
-and another on **Under the hood** in Settings. There, the **Updates** section
-under the card with your version says which one is out, and **What's new**
-opens its page on GitHub. The dots stay until you run the new version. When
+and another on **Under the hood** in Settings. There, the group named
+**Updates** says which one is out, and **What's new** opens its page on
+GitHub. The dots stay until you run the new version. When
 there is nothing newer, the same place says so — once GitHub has answered;
 until then it says it has not checked yet.
 

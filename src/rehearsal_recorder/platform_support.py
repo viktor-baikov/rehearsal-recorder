@@ -343,9 +343,9 @@ def describe_path_limit(path):
     if length < 200:
         return None
     return (
-        f"This folder's path is already {length} characters. Windows stops at "
-        "260, and take and track names are added on top — a shorter "
-        "recordings folder would be safer."
+        f"This folder's path is already {length} characters long. Windows stops "
+        "at 260, and the names of takes and tracks are added to it. A recordings "
+        "folder with a shorter path would be safer."
     )
 
 

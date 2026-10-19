@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { LabelDot } from "@/components/ui/mark"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Whole, WholeTip, useCut } from "@/components/ui/whole"
+import { useKeysOn } from "@/lib/keys"
 import { labelOf, useLabels } from "@/lib/labels"
 import { formatMMSS } from "@/lib/format"
 import type { Take } from "@/lib/api"
@@ -54,6 +55,9 @@ function GoLine({
   ghost?: boolean
   toggle?: { song: string; expanded: boolean; onToggle: () => void }
 }) {
+  // ↑ and ↓ go through the song's takes while Settings › Keys has the
+  // player's keys on; off, the button and its tip do not say them.
+  const arrows = useKeysOn("player")
   const number = take.song ? (
     toggle && !ghost ? (
       <Tooltip>
@@ -64,7 +68,7 @@ function GoLine({
             size="icon-tiny"
             aria-label={`Every take of ${toggle.song}`}
             aria-expanded={toggle.expanded}
-            aria-keyshortcuts="ArrowUp ArrowDown"
+            aria-keyshortcuts={arrows ? "ArrowUp ArrowDown" : undefined}
             onClick={(e) => {
               toggle.onToggle()
               // Space would press it again rather than play.
@@ -84,7 +88,7 @@ function GoLine({
         {/* The button's name and its keys, which it says as its own: for
             the eyes, not read out twice. */}
         <TooltipContent>
-          <span aria-hidden>{`Every take of ${toggle.song} (↑ ↓)`}</span>
+          <span aria-hidden>{`Every take of ${toggle.song}${arrows ? " (↑ ↓)" : ""}`}</span>
         </TooltipContent>
       </Tooltip>
     ) : (

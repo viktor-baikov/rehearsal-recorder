@@ -4,6 +4,7 @@ import { ActivityButton } from "@/components/ActivityButton"
 import { ListeningVolume } from "@/components/ListeningVolume"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
+import { useKeysOn } from "@/lib/keys"
 import { cn } from "@/lib/utils"
 
 /**
@@ -19,6 +20,7 @@ export function Shell({
   subtitle,
   onBack,
   backKey = false,
+  backKeyRoom = false,
   headerAction,
   facts,
   factsGone = false,
@@ -40,8 +42,12 @@ export function Shell({
   titleLeast?: string
   subtitle?: ReactNode
   onBack?: () => void
-  /** Escape goes back right now, so the back button can say so. */
+  /** Escape goes back right now, so the back button can say so, while
+   *  Space and Esc are on in Settings › Keys. */
   backKey?: boolean
+  /** With Space and Esc off, Back keeps the Esc chip's room, unseen: on
+   *  Settings, where the switch is, so turning it moves nothing (B4). */
+  backKeyRoom?: boolean
   headerAction?: ReactNode
   /** What there is to know about what is on screen, right of its title:
    *  the rehearsal's figures (components/EveningFacts), or Review's columns
@@ -69,6 +75,9 @@ export function Shell({
    *  moves nothing. */
   air?: boolean
 }) {
+  const escBack = useKeysOn("space") && backKey
+  const backChip = escBack || (backKey && backKeyRoom)
+
   // Notices stack above the footer, never on it: the footer holds Start, Stop
   // and Save take, and at a larger scale or in a narrow window its button
   // reaches the corner. So its height is published for components/Notices,
@@ -108,13 +117,17 @@ export function Shell({
           {onBack && (
             <Button
               variant="ghost"
-              size={backKey ? "row" : "icon"}
+              size={backChip ? "row" : "icon"}
               onClick={onBack}
               aria-label="Back"
-              aria-keyshortcuts={backKey ? "Escape" : undefined}
+              aria-keyshortcuts={escBack ? "Escape" : undefined}
             >
               <ChevronLeft />
-              {backKey && <Kbd aria-hidden>Esc</Kbd>}
+              {backChip && (
+                <Kbd aria-hidden className={cn(!escBack && "invisible")}>
+                  Esc
+                </Kbd>
+              )}
             </Button>
           )}
           {/* With facts beside it the name keeps its width and the facts give

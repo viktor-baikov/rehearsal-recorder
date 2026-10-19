@@ -229,6 +229,40 @@ opening.
   second shows a spinner in its button. The take's progress shows in place
   of the line under the name, and the buttons keep their words until the
   recovery ends, so nothing moves.
+- **Single keys can be turned off, in Settings → Keys.** The new **Keys**
+  section has two switches, each **On** or **Off**. **Space and Esc** is for
+  those two keys on every screen, where they start and stop a take, save or
+  discard it, play and pause, and finish the rehearsal. **The player's
+  keys** is for the arrows, Home, M, R and ? while listening, and ↑ and ↓ on
+  the rehearsal screen and in History. Both are on until you turn them off,
+  and the app keeps the choice for next time. When a switch is off, its keys
+  do nothing and no longer show on the buttons. With **Space and Esc** off,
+  Space presses the button you moved to with Tab. ⌘Z / Ctrl+Z, and Esc in a
+  dialog or a text field, work either way.
+- **Settings is calmer, in groups, with its sections always in view.** Each
+  section is laid out in groups, with more room between them and no lines.
+  The list of sections on the left stays where it is while the open one
+  scrolls. At a large scale in a small window (narrower than 900 px at
+  100 %, or 1350 px at 150 %) the list shows the sections as icons only, so
+  the open one gets the room their names took. Point at an icon to see its
+  name. Where you pick one of a few,
+  such as the rate, the depth, the theme or the scale, there is now a grey
+  switch, as in History, in place of a row of buttons with the chosen one in
+  blue. **Sets** keeps its two columns at any size, and the list of sets and
+  the set you picked each scroll on their own. **Look again** keeps its
+  words while it looks, and shows a spinner if it takes more than a second.
+  *What gets published* is now **What gets sent**, and *What the copies are
+  written as* is now **Copies are written as**. Two hints were wrong. The
+  one under **False starts** now says that **Clear false starts** has
+  **Undo**, where it said the button asks first. The theme and the scale
+  apply as soon as you pick them, and the line that said they waited for the
+  next start is gone.
+- **A song taken out of a set has Undo.** In **Settings → Sets**, ✕ beside a
+  song still takes it out at once, and a notice now says "“Pałyn” was taken
+  out of the set.", with **Undo** for 10 seconds, or ⌘Z / Ctrl+Z. **Undo**
+  puts the song back where it was, even after you have picked another set
+  or left Settings. Each song taken out has its own notice. If its set has
+  been deleted since, **Undo** says so.
 
 ## 0.11.1
 

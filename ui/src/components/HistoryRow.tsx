@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
-import { Item } from "@/components/ui/item"
+import { ITEM_CHOSEN, Item } from "@/components/ui/item"
 import { FigureLine, Figures, WholeTip, useCut, type FigurePart } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
 
@@ -12,8 +12,6 @@ import { cn } from "@/lib/utils"
  *  a column has no use for. */
 const ROW =
   "h-auto w-full flex-col flex-nowrap items-stretch gap-1.5 px-3 py-2.5 text-left whitespace-normal"
-/** The chosen row: grey, with no frame (F2, F4). */
-const CHOSEN = "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected"
 
 /**
  * A row of History's lists, the rehearsals, the songs and the labels: the
@@ -60,7 +58,7 @@ export function HistoryRow({
           {...data}
           aria-current={current ? "true" : undefined}
           onClick={onClick}
-          className={cn(ROW, current && CHOSEN, className)}
+          className={cn(ROW, current && ITEM_CHOSEN, className)}
         >
           <span className="flex min-w-0 items-baseline gap-2">
             {lead}

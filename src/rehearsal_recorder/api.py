@@ -956,6 +956,10 @@ class Api:
             "master_volume": self._config.get("master_volume", 1.0),
             "theme": self._config.get("theme", "dark"),
             "ui_scale": self._config.get("ui_scale", 1),
+            # Settings › Keys: Space and Esc, and the player's keys. Only
+            # false turns them off; anything else written by hand reads as on.
+            "space_keys": self._config.get("space_keys") is not False,
+            "player_keys": self._config.get("player_keys") is not False,
             # Which of History's views it opens on: the one used last.
             "history_view": (self._config.get("history_view")
                              if self._config.get("history_view") in HISTORY_VIEWS
@@ -1199,7 +1203,7 @@ class Api:
             return {"ok": False, "error": f"Could not ask the interface: {e}"}
         if asked is None:
             return {"ok": False, "error":
-                    "No recording interface is chosen — pick one in Settings › Audio."}
+                    "Nothing chosen yet: pick an interface in Audio"}
         if not self._check.start(sd, asked):
             return {"ok": False, "error": "A check is already running"}
         return {"ok": True}
@@ -1345,6 +1349,15 @@ class Api:
         if not 0.5 <= scale <= 3:
             return {"ok": False, "error": "Scale out of range"}
         self._config["ui_scale"] = scale
+        self._write_config()
+        return {"ok": True}
+
+    def save_keys(self, kind, on):
+        """Settings › Keys: Space and Esc ("space") or the player's keys
+        ("player") turned on or off, kept as space_keys or player_keys."""
+        if kind not in ("space", "player"):
+            return {"ok": False, "error": "Unknown keys"}
+        self._config[f"{kind}_keys"] = bool(on)
         self._write_config()
         return {"ok": True}
 
@@ -5528,7 +5541,7 @@ class Api:
     def send_starred(self, folder):
         """
         Send starred: every ★ take of a rehearsal with nothing of it in the
-        cloud folder and no copy waiting, queued as What gets published says.
+        cloud folder and no copy waiting, queued as What gets sent says.
         A take already there is not sent again, even if the setting has
         changed since; its share dialog is there for that. A take that cannot
         be sent (its files gone) is in `failed`, with why.

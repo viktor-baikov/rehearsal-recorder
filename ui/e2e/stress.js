@@ -67,8 +67,14 @@
     {name: 'Lead and backing vocals (Hanna)', channel: 4, icon: 'vocals', stereo: false},
     {name: 'Keys', channel: null, icon: 'keys', stereo: false, mode: 'midi', midi_port: {name: 'Launchkey Mini MK3'}}]});
 
-  // An interface with a long name.
+  // An interface with a long name, and Under the hood records with it.
+  const LONG_CARD = 'Universal Audio Apollo Twin X DUO Heritage Edition';
   const devices = api.list_input_devices;
   api.list_input_devices = async () => (await devices()).map(d =>
-    d.index === 3 ? {...d, name: 'Universal Audio Apollo Twin X DUO Heritage Edition'} : d);
+    d.index === 3 ? {...d, name: LONG_CARD} : d);
+  const hood = api.under_the_hood;
+  api.under_the_hood = async () => {
+    const h = await hood();
+    return {...h, audio: {...h.audio, recording: h.audio.recording && {...h.audio.recording, name: LONG_CARD}}};
+  };
 }

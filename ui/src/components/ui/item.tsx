@@ -38,6 +38,11 @@ function ItemSeparator({
   )
 }
 
+/** The chosen row's look, for a row that goes somewhere: grey, with no
+ *  frame (F2, F4), and the same grey under the pointer in both themes, over
+ *  the hover of the ghost Button it is drawn on. */
+const ITEM_CHOSEN = "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected"
+
 const itemVariants = cva(
   "group/item flex flex-wrap items-center rounded-md border border-transparent text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [a]:transition-colors [a]:hover:bg-accent/50",
   {
@@ -175,6 +180,7 @@ function ItemFooter({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 export {
+  ITEM_CHOSEN,
   Item,
   ItemActions,
   ItemContent,

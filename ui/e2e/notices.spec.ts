@@ -135,10 +135,18 @@ test("a failure stays until it is closed, and is one notice however often it hap
   await expect(notices(page, "error")).toHaveCount(1)
 
   // Focus is on Browse after the Tab, so Escape is not typing: it leaves
-  // Settings in one press, and the notice stays.
+  // Settings in one press, and the notice goes with its screen (C4).
   await page.keyboard.press("Escape")
   await expect(startButton(page)).toBeVisible()
   await expect(page.locator("#recordings-dir")).toHaveCount(0)
+  await expect(notices(page)).toHaveCount(0)
+
+  // The start screen's own failure stays there.
+  await page.evaluate(() => {
+    const w = window as unknown as { pywebview: { api: Record<string, unknown> } }
+    w.pywebview.api.start_rehearsal = async () => ({ ok: false, error: "Could not open the interface" })
+  })
+  await startButton(page).click()
   await expect(notices(page, "error")).toHaveCount(1)
 
   // The corner is clear of a footer's buttons only in a wide window at 100%.

@@ -24,6 +24,7 @@ import { PlayerKeys } from "@/components/PlayerKeys"
 import { useAfter } from "@/hooks/useAfter"
 import { useKey } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
+import { useKeysOn } from "@/lib/keys"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import { rise } from "@/lib/motion"
@@ -383,6 +384,10 @@ function Transport({
   useKey("Home", player.restart, !player.loading)
   useKey("m", mark, !!onAddMarker && !player.loading)
   useKey("r", player.toggleLoop, !player.loading)
+  // A button says its key only while Settings › Keys has it on.
+  const playsOnSpace = useKeysOn("space") && spaceKey
+  const playerKeys = useKeysOn("player")
+  const key = (name: string) => (playerKeys ? name : undefined)
   // Play keeps its triangle for the first second of a take opening (B5).
   const slow = useAfter(player.loading, SPINNER_AFTER_MS)
 
@@ -400,7 +405,7 @@ function Transport({
             size="icon-row"
             onClick={player.restart}
             aria-label="To start"
-            aria-keyshortcuts="Home"
+            aria-keyshortcuts={key("Home")}
             disabled={player.loading}
           >
             <SkipBack />
@@ -416,7 +421,7 @@ function Transport({
         size="icon-row"
         onClick={() => player.skip(-SKIP_SECONDS)}
         aria-label={`Back ${SKIP_SECONDS} seconds`}
-        aria-keyshortcuts="ArrowLeft"
+        aria-keyshortcuts={key("ArrowLeft")}
         disabled={player.loading}
       >
         <Undo2 />
@@ -438,7 +443,7 @@ function Transport({
               ? "Pause"
               : "Play"
         }
-        aria-keyshortcuts={spaceKey ? "Space" : undefined}
+        aria-keyshortcuts={playsOnSpace ? "Space" : undefined}
       >
         {slow ? <Spinner after={0} /> : player.playing ? <Pause /> : <Play />}
       </Button>
@@ -448,7 +453,7 @@ function Transport({
         size="icon-row"
         onClick={() => player.skip(SKIP_SECONDS)}
         aria-label={`Forward ${SKIP_SECONDS} seconds`}
-        aria-keyshortcuts="ArrowRight"
+        aria-keyshortcuts={key("ArrowRight")}
         disabled={player.loading}
       >
         <Redo2 />
@@ -468,7 +473,7 @@ function Transport({
         onPressedChange={() => player.toggleLoop()}
         disabled={player.loading}
         aria-label="Repeat"
-        aria-keyshortcuts="R"
+        aria-keyshortcuts={key("R")}
       >
         <Repeat />
         Repeat
@@ -482,7 +487,7 @@ function Transport({
             onClick={mark}
             disabled={player.loading}
             aria-label={nearby !== undefined ? "Edit marker" : "Add marker"}
-            aria-keyshortcuts="M"
+            aria-keyshortcuts={key("M")}
           >
             <Flag />
             {/* One width whichever it says: nothing beside it moves, and the
@@ -498,7 +503,7 @@ function Transport({
           </Button>
         )}
 
-        <PlayerKeys spaceKey={spaceKey} goKeys={goKeys} />
+        <PlayerKeys spaceKey={playsOnSpace} goKeys={goKeys} />
       </div>
     </div>
   )

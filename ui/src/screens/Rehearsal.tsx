@@ -31,6 +31,7 @@ import {
 import { savedLine } from "@/lib/format"
 import { goFor } from "@/lib/goes"
 import { cn } from "@/lib/utils"
+import { useKeysOn } from "@/lib/keys"
 import { rise } from "@/lib/motion"
 import { useWide } from "@/lib/wide"
 import { useRunning, watching } from "@/lib/activity"
@@ -251,6 +252,9 @@ export function Rehearsal({
   // Escape below is what points Space at recording again.
   useSpacebar(inHand ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, inHand)
+  // Off in Settings › Keys, Finish and Record have no chips, and keep no
+  // room for them.
+  const spaceKeys = useKeysOn("space")
   const finish = async () => {
     dismiss(ERROR)
     player.pause()
@@ -518,21 +522,23 @@ export function Rehearsal({
               variant="outline"
               size="footer-aside"
               onClick={finish}
-              aria-keyshortcuts={inHand ? undefined : "Escape"}
+              aria-keyshortcuts={spaceKeys && !inHand ? "Escape" : undefined}
             >
               Finish
               {/* Kept unseen while Esc is the take's, so Finish keeps its
                   width and nothing beside it moves (B4). */}
-              <Kbd aria-hidden className={cn(inHand && "invisible")}>
-                Esc
-              </Kbd>
+              {spaceKeys && (
+                <Kbd aria-hidden className={cn(inHand && "invisible")}>
+                  Esc
+                </Kbd>
+              )}
             </Button>
             <Button
               size="footer"
               variant="destructive"
               onClick={startTake}
               disabled={busy}
-              aria-keyshortcuts={inHand ? undefined : "Space"}
+              aria-keyshortcuts={spaceKeys && !inHand ? "Space" : undefined}
             >
               <Circle className="fill-current" />
               <span>
@@ -551,9 +557,11 @@ export function Rehearsal({
               </span>
               {/* With a take in hand Space plays it, and the key is on Play;
                   the chip keeps its room. */}
-              <Kbd aria-hidden className={cn(inHand && "invisible")}>
-                Space
-              </Kbd>
+              {spaceKeys && (
+                <Kbd aria-hidden className={cn(inHand && "invisible")}>
+                  Space
+                </Kbd>
+              )}
             </Button>
           </div>
         </FooterRow>
@@ -576,7 +584,7 @@ export function Rehearsal({
           onDelete={(take) => void deleteTake(take)}
           onStar={starTake}
           cloudStates={session.cloud_queue}
-          emptyHint="Hit Record or press Space — takes show up here and can be played straight away."
+          emptyHint={`Press Record take${spaceKeys ? " or Space" : ""}. Each take shows up here, ready to play.`}
         />
         )}
 

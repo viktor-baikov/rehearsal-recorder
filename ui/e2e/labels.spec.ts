@@ -1,5 +1,18 @@
-import { callCount, calls, expect, openApp, openHistory, recordTake, startRehearsal, test } from "./app.ts"
-import type { Page } from "@playwright/test"
+import {
+  callCount,
+  calls,
+  colour,
+  EDGE,
+  expect,
+  openApp,
+  openHistory,
+  recordTake,
+  scaled,
+  startRehearsal,
+  style,
+  test,
+} from "./app.ts"
+import type { Locator, Page } from "@playwright/test"
 
 // A mark's label is a name and a colour, the library's own (spec
 // 2026-10-04-labels-design.md). The fuller evening at /rec/old has a Keep
@@ -94,7 +107,162 @@ test("Marks sits between Folders and Sets, with every label and its marks", asyn
     "Do again",
   ])
   await expect(row(page, "Keep this")).toContainText("1 mark")
-  await expect(row(page, "Do again")).toContainText("no marks")
+  await expect(row(page, "Do again")).toContainText("0 marks")
+})
+
+const box = async (el: Locator) => (await el.boundingBox())!
+
+test("the labels are one group, each row on the shared pieces", async ({ page }) => {
+  const list = await openMarks(page)
+  const look = async (theme: string) => {
+    expect(await page.evaluate(() => document.documentElement.classList.contains("dark")), theme).toBe(
+      theme === "dark"
+    )
+    // One group, on the card's fill and with no frame: the list and New label.
+    const group = page.locator("[data-tab-body] [data-settings-group]")
+    await expect(group, theme).toHaveCount(1)
+    await expect(group.getByRole("list", { name: "Labels" })).toBeVisible()
+    await expect(group.getByRole("button", { name: "New label" })).toBeVisible()
+    const fill = await style(group, "background-color", ...EDGE.filter((p) => p.endsWith("width")))
+    expect(fill, theme).toEqual({
+      "background-color": await colour(page, "--card"),
+      "border-top-width": "0px",
+      "border-right-width": "0px",
+      "border-bottom-width": "0px",
+      "border-left-width": "0px",
+    })
+    // The rows split by 1 px lines in the border's colour.
+    const rows = list.locator(":scope > li")
+    await expect(rows).toHaveCount(4)
+    expect(await style(rows.first(), "border-top-width")).toEqual({ "border-top-width": "0px" })
+    for (const r of (await rows.all()).slice(1)) {
+      expect(await style(r, "border-top-width", "border-top-color"), theme).toEqual({
+        "border-top-width": "1px",
+        "border-top-color": await colour(page, "--border"),
+      })
+    }
+
+    for (const name of ["Note", "Keep this", "Went wrong", "Do again"]) {
+      const at = row(page, name)
+      // The grip, the dot and the name are the shared Button, with no fill.
+      for (const what of [`Move ${name}`, `Colour of ${name}`, `Rename ${name}`]) {
+        const b = at.getByRole("button", { name: what, exact: true })
+        expect(await b.evaluate((e) => e.tagName), what).toBe("BUTTON")
+        await expect(b, what).toHaveAttribute("data-variant", "ghost")
+        await expect(b, what).toHaveAttribute("data-size", what.startsWith("Rename") ? "row" : "icon-tiny")
+      }
+      // The grip and the dot 24 px; in the dot's, the shared 8 px dot, in the middle.
+      for (const what of [`Move ${name}`, `Colour of ${name}`]) {
+        const b = await box(at.getByRole("button", { name: what, exact: true }))
+        expect(b.width, what).toBeCloseTo(24, 0)
+        expect(b.height, what).toBeCloseTo(24, 0)
+      }
+      const button = at.getByRole("button", { name: `Colour of ${name}`, exact: true })
+      const dot = button.locator("[data-slot=label-dot]")
+      await expect(dot).toHaveCount(1)
+      const b = await box(button)
+      const d = await box(dot)
+      expect(d.width, name).toBeCloseTo(8, 0)
+      expect(d.height, name).toBeCloseTo(8, 0)
+      expect(d.x + d.width / 2, name).toBeCloseTo(b.x + b.width / 2, 0)
+      expect(d.y + d.height / 2, name).toBeCloseTo(b.y + b.height / 2, 0)
+    }
+    // Counted as everywhere else: "0 marks", not "no marks".
+    await expect(row(page, "Keep this").getByText("1 mark", { exact: true })).toBeVisible()
+    await expect(row(page, "Do again").getByText("0 marks", { exact: true })).toBeVisible()
+    await expect(page.locator("[data-tab-body] [title]")).toHaveCount(0)
+  }
+  await look("dark")
+  await page.getByRole("button", { name: "Appearance", exact: true }).first().click()
+  await page.getByRole("radio", { name: "Light", exact: true }).click()
+  await page.getByRole("button", { name: "Marks", exact: true }).first().click()
+  await expect(list).toBeVisible()
+  await look("light")
+})
+
+test("the colour picker is a pick-one of eight, the label's colour chosen", async ({ page }) => {
+  await openMarks(
+    page,
+    "window.__LABELS__ = [{id:1, name:'Note', colour:'grey'}, {id:2, name:'Riff', colour:'blue'}];"
+  )
+  await page.getByRole("button", { name: "Colour of Riff" }).click()
+  const picker = page.getByRole("radiogroup", { name: "Colour of Riff" })
+  await expect(picker).toBeVisible()
+  const swatches = picker.getByRole("radio")
+  // In the palette's order: orange sixth, where blue was.
+  expect(await swatches.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).toEqual([
+    "Grey",
+    "Red",
+    "Amber",
+    "Green",
+    "Teal",
+    "Orange",
+    "Violet",
+    "Pink",
+  ])
+  // The label's own colour is the one chosen, and the focus is on it.
+  const orange = picker.getByRole("radio", { name: "Orange" })
+  await expect(orange).toHaveAttribute("aria-checked", "true")
+  await expect(orange).toBeFocused()
+  await expect(picker.locator("[role=radio][aria-checked=true]")).toHaveCount(1)
+  // Each 20 px and round, in its colour, four to a row.
+  const boxes = await Promise.all((await swatches.all()).map(box))
+  for (const b of boxes) {
+    expect(b.width).toBeCloseTo(20, 0)
+    expect(b.height).toBeCloseTo(20, 0)
+  }
+  for (const i of [1, 2, 3, 5, 6, 7]) expect(boxes[i].y).toBeCloseTo(boxes[i - 1].y, 0)
+  expect(boxes[4].y).toBeGreaterThan(boxes[0].y + 20)
+  expect(boxes[4].x).toBeCloseTo(boxes[0].x, 0)
+  expect(
+    (await style(orange.locator("[data-slot=label-dot]"), "background-color"))["background-color"]
+  ).toBe(await colour(page, "--label-orange"))
+  expect(
+    await orange.evaluate((e) => parseFloat(getComputedStyle(e).borderTopLeftRadius) >= e.clientWidth / 2)
+  ).toBe(true)
+
+  // The arrows move along it, and Enter takes the one reached.
+  await page.keyboard.press("ArrowRight")
+  await expect(picker.getByRole("radio", { name: "Violet" })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect.poll(async () => (await calls(page, "recolour_label")).at(-1)?.args).toEqual([2, "violet"])
+  await expect(picker).toHaveCount(0)
+  await expect(row(page, "Riff").locator("[data-colour]")).toHaveAttribute("data-colour", "violet")
+})
+
+test("a long label name at 960x680 and 150 % is cut, whole in its tip", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 680 })
+  // In capitals, so the 40 letters a name may have are too wide for the row
+  // in whichever sans-serif the machine draws with: Linux runners differ.
+  const long = "WATCH THE TEMPO IN THE BRIDGE, IT RUSHES"
+  await openMarks(
+    page,
+    scaled(1.5) +
+      `window.__LABELS__ = [{id:1, name:'Note', colour:'grey'}, {id:2, name:${JSON.stringify(long)}, colour:'violet'}];`
+  )
+  const rename = page.getByRole("button", { name: `Rename ${long}` })
+  const name = rename.getByText(long, { exact: true })
+  await expect(name).toHaveText(long)
+  expect(await name.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+  // On one line, as tall as a short name's row.
+  expect((await box(row(page, long))).height).toBeCloseTo((await box(row(page, "Note"))).height, 0)
+  // The shared tip, not the browser's own, on hover and on keyboard focus.
+  const tip = page.locator("[data-whole][data-state$='open']")
+  await expect(page.locator("[data-tab-body] [title]")).toHaveCount(0)
+  await name.hover()
+  await expect(tip).toHaveText(long)
+  await page.mouse.move(0, 0, { steps: 8 })
+  await expect(tip).toHaveCount(0)
+  await page.getByRole("button", { name: `Colour of ${long}` }).focus()
+  await page.keyboard.press("Tab")
+  await expect(rename).toBeFocused()
+  await expect(tip).toHaveText(long)
+  await page.keyboard.press("Tab")
+  await expect(tip).toHaveCount(0)
+  // Its count and Delete keep their room.
+  await expect(row(page, long).getByText("1 mark", { exact: true })).toBeVisible()
+  const tab = page.locator("[data-tab-body]")
+  expect(await tab.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
 })
 
 test("a new label: a name, Enter, and the first colour no label has", async ({ page }) => {
@@ -139,7 +307,7 @@ test("a label recoloured recolours its marks, in the overview and on the wavefor
 }) => {
   await openMarks(page)
   await page.getByRole("button", { name: "Colour of Went wrong" }).click()
-  await page.getByRole("button", { name: "Violet" }).click()
+  await page.getByRole("radio", { name: "Violet" }).click()
   expect((await calls(page, "recolour_label")).at(-1)?.args).toEqual([3, "violet"])
   await expect(row(page, "Went wrong").locator("[data-colour]")).toHaveAttribute("data-colour", "violet")
   // The palette fades out; until it has gone, Escape is still its own.

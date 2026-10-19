@@ -6,6 +6,7 @@ import { PlayButton } from "@/components/ui/play-button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useCut, Whole, WholeTip } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
+import { useKeysOn } from "@/lib/keys"
 import type { Label, MarkHit, MarksGrouping } from "@/lib/api"
 import { formatClock, marksLabel } from "@/lib/format"
 import {
@@ -230,6 +231,8 @@ function MarkRow({
   // The mark is kept off the bar's very ends, where its frame would hide it.
   const along = (sec: number) => (length > 0 ? Math.min(98.5, Math.max(1, (100 * sec) / length)) : 0)
   const played = here && length > 0 ? Math.min(100, Math.max(0, (100 * here.position) / length)) : null
+  // Playing, its ▶ has Space while Settings › Keys has it on.
+  const spaceKeys = useKeysOn("space")
   return (
     <Item
       size="sm"
@@ -257,7 +260,7 @@ function MarkRow({
         })}
         name={`${m.name} from ${formatClock(playFrom(m.at))}`}
         onClick={() => onPlay(m)}
-        aria-keyshortcuts={here ? "Space" : undefined}
+        aria-keyshortcuts={here && spaceKeys ? "Space" : undefined}
       />
 
       <div className="flex min-w-0 flex-col gap-px">

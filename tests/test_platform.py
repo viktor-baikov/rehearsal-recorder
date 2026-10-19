@@ -140,6 +140,8 @@ def main():
         ps.WINDOWS = True
         ok("a long path is called out on Windows",
            "260" in (ps.describe_path_limit("C:/" + "a" * 250) or ""))
+        ok("it says so without a dash",
+           "—" not in ps.describe_path_limit("C:/" + "a" * 250))
         ok("a short one is not",
            ps.describe_path_limit("C:/Music") is None)
     finally:

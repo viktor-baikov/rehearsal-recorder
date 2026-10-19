@@ -36,6 +36,7 @@ import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
 import { byFiles, useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { cn } from "@/lib/utils"
+import { useKeysOn } from "@/lib/keys"
 import { dismiss, notify } from "@/lib/notices"
 import { rise } from "@/lib/motion"
 import { useUpdate } from "@/lib/update"
@@ -731,6 +732,8 @@ export function Setup({
   const inHand = cued !== null
   useSpacebar(inHand ? player.toggle : start, (inHand || canStart) && !makingSet)
   useEscape(uncue, inHand)
+  // Off in Settings › Keys, Start has no chip and keeps no room for one.
+  const spaceKeys = useKeysOn("space")
 
   // Last time's handlers keep their identity while the check reads the
   // levels every 80 ms and this screen is drawn again for each reading:
@@ -1156,7 +1159,7 @@ export function Setup({
                 size="footer"
                 onClick={start}
                 disabled={!canStart}
-                aria-keyshortcuts={inHand ? undefined : "Space"}
+                aria-keyshortcuts={spaceKeys && !inHand ? "Space" : undefined}
               >
                 {/* A rehearsal that takes a second to open turns a spinner
                     in the icon's place (B5): Start keeps its words and its
@@ -1165,9 +1168,11 @@ export function Setup({
                 Start rehearsal
                 {/* Kept unseen while Space is the take's, so Start keeps its
                     width and the set beside it stays where it is (B4). */}
-                <Kbd aria-hidden className={cn(inHand && "invisible")}>
-                  Space
-                </Kbd>
+                {spaceKeys && (
+                  <Kbd aria-hidden className={cn(inHand && "invisible")}>
+                    Space
+                  </Kbd>
+                )}
               </Button>
             </div>
             <NewSetDialog

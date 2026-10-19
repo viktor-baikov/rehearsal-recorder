@@ -14,6 +14,7 @@ import {
 import { Input } from "./input"
 import { Kbd } from "./kbd"
 import type { System } from "@/lib/platform"
+import { SHARE_INTRO } from "@/lib/share"
 
 const meta = {
   title: "UI/Dialog",
@@ -146,10 +147,7 @@ export const OnlyClose: Story = {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Copy “Pałyn 1” to the cloud</DialogTitle>
-          <DialogDescription>
-            The files are copied into your cloud folder — whatever client watches it does the
-            uploading.
-          </DialogDescription>
+          <DialogDescription>{SHARE_INTRO}</DialogDescription>
         </DialogHeader>
         <DialogButtons cancel="Close" />
       </DialogContent>

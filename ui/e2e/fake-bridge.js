@@ -1844,7 +1844,7 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({ok:true, take, cloud:shared}));
   }),
   // api.send_starred: the ★ takes with nothing in the cloud folder go as
-  // What gets published says. A tonight's copy is made at once here; an
+  // What gets sent says. A tonight's copy is made at once here; an
   // older rehearsal's waits in the activity list, as Python's queue has it.
   // __UNSENDABLE__ lists take numbers whose files are gone.
   send_starred: track('send_starred', async (folder) => {
@@ -1877,28 +1877,38 @@ window.__MAKE_API__ = () => ({
 
   // Settings › Under the hood: the machine, the report, and the check of
   // the interface, which a page scripts through __CHECK_RESULT__ ('works',
-  // 'no_sound') and __CHECK_MS__, how long it listens. The MIDI system is
-  // MIDI_SYSTEM, or with __MIDI_ERROR__ none, and why.
-  under_the_hood: track('under_the_hood', async () => ({
-    version:'0.2.0', running_as: window.__BUILT__ ? 'built' : 'source', executable:'python.exe',
-    system:'Windows 11 Pro 10.0.26200, x64',
-    audio:{engine:'PortAudio V19.7.0-devel',
-           systems:[{name:'MME', devices:6}, {name:'ASIO', devices:2},
-                    {name:'Windows WASAPI', devices:4}],
-           recording:{name:'X32 USB', host_api:'ASIO', inputs:16,
-                      samplerate:48000, bit_depth:24},
-           playback:'System output'},
-    midi: window.__MIDI_ERROR__ ? {system:null, ports:[], error:window.__MIDI_ERROR__}
-                                : {system:MIDI_SYSTEM, ports:[], error:null},
-    files:[{key:'settings', path:'C:\\Users\\alex\\.rehearsal-recorder\\config.json',
-            exists:true, size:2100, modified:'2026-09-29T10:00:00'},
-           {key:'history', path:'C:\\Users\\alex\\RehearsalRecordings\\library.sqlite',
-            exists:true, size:98304, modified:'2026-09-29T10:00:00'},
-           {key:'crash_log', path:'C:\\Users\\alex\\.rehearsal-recorder\\crash.log',
-            exists:true, size:5120, modified:'2026-09-29T10:00:00'}],
-    deleting:'system', fallback_trash:'_deleted', libsndfile:'1.2.2',
-    server_url:'http://127.0.0.1:1234',
-    releases_url:'https://github.com/voronizer/rehearsal-recorder/releases'})),
+  // 'silent', 'no_sound') and __CHECK_MS__, how long it listens. The MIDI
+  // system is MIDI_SYSTEM, or with __MIDI_ERROR__ none, and why. Each of
+  // these is read when the page asks, so a test can change it and open the
+  // tab again: __NO_DEVICE__, no interface chosen; __NO_CRASH_LOG__, none
+  // written yet; __NO_ENCODER__, no soundfile.
+  under_the_hood: track('under_the_hood', async () => {
+    await held('under_the_hood');
+    return {
+      version:'0.2.0', running_as: window.__BUILT__ ? 'built' : 'source', executable:'python.exe',
+      system:'Windows 11 Pro 10.0.26200, x64',
+      audio:{engine:'PortAudio V19.7.0-devel',
+             systems:[{name:'MME', devices:6}, {name:'ASIO', devices:2},
+                      {name:'Windows WASAPI', devices:4}],
+             recording: window.__NO_DEVICE__ ? null
+               : {name:'X32 USB', host_api:'ASIO', inputs:16, samplerate:48000, bit_depth:24},
+             playback:'System output'},
+      midi: window.__MIDI_ERROR__ ? {system:null, ports:[], error:window.__MIDI_ERROR__}
+                                  : {system:MIDI_SYSTEM, ports:[], error:null},
+      files:[{key:'settings', path:'C:\\Users\\alex\\.rehearsal-recorder\\config.json',
+              exists:true, size:2100, modified:'2026-09-29T10:00:00'},
+             {key:'history', path:'C:\\Users\\alex\\RehearsalRecordings\\library.sqlite',
+              exists:true, size:98304, modified:'2026-09-29T10:00:00'},
+             window.__NO_CRASH_LOG__
+               ? {key:'crash_log', path:'C:\\Users\\alex\\.rehearsal-recorder\\crash.log',
+                  exists:false, size:null, modified:null}
+               : {key:'crash_log', path:'C:\\Users\\alex\\.rehearsal-recorder\\crash.log',
+                  exists:true, size:5120, modified:'2026-09-29T10:00:00'}],
+      deleting:'system', fallback_trash:'_deleted',
+      libsndfile: window.__NO_ENCODER__ ? null : '1.2.2',
+      server_url:'http://127.0.0.1:1234',
+      releases_url:'https://github.com/voronizer/rehearsal-recorder/releases'};
+  }),
   bug_report: track('bug_report', async () => ({ok:true,
     text:'РЭХА 0.2.0, run from source\nWindows 11 Pro 10.0.26200, x64\n'})),
   show_file: track('show_file', async () => ({ok:true})),
@@ -1923,6 +1933,7 @@ window.__MAKE_API__ = () => ({
     return {ok:true, check_updates: !!on};
   }),
   start_interface_check: track('start_interface_check', async () => {
+    await held('start_interface_check');
     const result = window.__CHECK_RESULT__ || 'works';
     const works = result !== 'no_sound';
     const first = {label:'the settings in force', opened:true, flowing:works,
@@ -1960,7 +1971,7 @@ window.__MAKE_API__ = () => ({
     }
     return {ok:true};
   }),
-  get_settings: async () => ({recordings_dir:'/Users/alex/RehearsalRecordings',
+  get_settings: async () => ({recordings_dir:recordingsNow,
     default_recordings_dir:'/Users/alex/RehearsalRecordings',
     device_index: window.__PLUGGED_IN_LATE__ ? (pluggedIn ? 1 : null)
       : recording.device_index,
@@ -1990,6 +2001,8 @@ window.__MAKE_API__ = () => ({
     fallback_trash: '_deleted',
     path_warning: window.__PATH_WARNING__ || null,
     theme: readCfg().theme, ui_scale: readCfg().ui_scale,
+    // Settings › Keys, as api.get_settings: anything but false is on.
+    space_keys: readCfg().space_keys !== false, player_keys: readCfg().player_keys !== false,
     cloud_dir: cloudDir,
     server_url:'http://127.0.0.1:1234/', config_path:'/Users/alex/.rehearsal-recorder/config.json',
     version:'0.2.0'}),
@@ -2020,6 +2033,11 @@ window.__MAKE_API__ = () => ({
   }),
   save_appearance: track('save_appearance', async (theme, scale) => {
     writeCfg({...readCfg(), theme, ui_scale:scale});
+    return {ok:true};
+  }),
+  save_keys: track('save_keys', async (kind, on) => {
+    if (!['space', 'player'].includes(kind)) return {ok:false, error:'Unknown keys'};
+    writeCfg({...readCfg(), [`${kind}_keys`]: Boolean(on)});
     return {ok:true};
   }),
 });

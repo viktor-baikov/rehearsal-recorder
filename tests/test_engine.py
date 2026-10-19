@@ -5330,7 +5330,7 @@ def main():
         h46._config.pop("device", None)
         nothing = h46.start_interface_check()
         ok("with no interface chosen it says to choose one",
-           nothing.get("ok") is False and "Settings" in (nothing.get("error") or ""))
+           nothing.get("ok") is False and "pick an interface in Audio" in (nothing.get("error") or ""))
     finally:
         _sd.InputStream = real_streams[0]
         if real_streams[1] is not None:
@@ -6437,7 +6437,7 @@ def main():
     sent59 = s59.send_starred(live59)
     ok("the starred takes not in the cloud folder are sent",
        sent59 == {"ok": True, "queued": [1], "failed": []})
-    ok("as Settings' What gets published says",
+    ok("as Settings' What gets sent says",
        [j[1:] for j in s59._cloud_queue._jobs] == [[1, "both"]])
     ok("a take already waiting is not sent again",
        s59.send_starred(live59) == {"ok": True, "queued": [], "failed": []}
@@ -12259,6 +12259,37 @@ def main():
        == ["01 - Take 1.wav", "02 - Take 2.wav", "03 - Take 3.wav"])
     h77.shutdown()
     apimod77.move_to_trash = real_trash71
+
+    print("\n[78] The single keys, kept as the theme is")
+    # Settings › Keys has two switches: Space and Esc, and the player's keys
+    # (the arrows, Home, M, R and ?). Both are on until one is turned off, and
+    # stay as they were left after a restart. Only false turns keys off: a
+    # config edited by hand never takes them away by accident.
+    tmp78 = Path(tempfile.mkdtemp())
+    _, s78 = fresh_api(tmp78)
+
+    def keys78(api):
+        settings = api.get_settings()
+        return settings["space_keys"], settings["player_keys"]
+
+    ok("Space and Esc, and the player's keys, are on in a fresh config",
+       keys78(s78) == (True, True))
+    ok("turning Space and Esc off is kept",
+       s78.save_keys("space", False) == {"ok": True})
+    _, again78 = fresh_api(tmp78)
+    ok("and they are still off after a restart, the player's keys still on",
+       keys78(again78) == (False, True))
+    saved78 = (tmp78 / "config.json").read_text()
+    ok("a kind that is not Space or the player's keys is refused, and changes nothing",
+       again78.save_keys("arrows", False) == {"ok": False, "error": "Unknown keys"}
+       and keys78(again78) == (False, True)
+       and (tmp78 / "config.json").read_text() == saved78)
+    cfg78 = json.loads(saved78)
+    cfg78["space_keys"] = "no"
+    (tmp78 / "config.json").write_text(json.dumps(cfg78))
+    _, odd78 = fresh_api(tmp78)
+    ok("and anything but false written by hand reads as on",
+       keys78(odd78) == (True, True))
 
     print("\n" + "=" * 60)
     if problems:
